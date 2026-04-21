@@ -71,6 +71,6 @@
 
 
 //定义地址信息
-`define PC_START 32'h8000_0000
+`define PC_START 32'h0000_0000
 
 `endif
