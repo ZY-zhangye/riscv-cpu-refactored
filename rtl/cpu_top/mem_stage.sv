@@ -12,6 +12,7 @@ module mem_stage (
     output logic ms_to_ws_valid,
     output logic ms_allowin,
     input logic ws_allowin,
+    output logic ms_valid,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
     //数据前递接口
@@ -19,7 +20,6 @@ module mem_stage (
     output logic mem_regfile_wen,
     output logic mem_reg_fpu_wen,
     output logic [31:0] mem_result,
-    output logic ms_valid,
     //异常信息接口
     input logic exception_flag,
     input logic [`EXE_EXC_BUS-1:0] exe_exc_bus,
@@ -36,7 +36,7 @@ module mem_stage (
     logic ms_ready_go;
     logic es_flush_r;
     logic ms_flush;
-    assign ms_ready_go = 1'b1; //mem阶段没有需要等待的条件，始终准备好进入下一阶段
+    assign ms_ready_go = 1'b1;
     assign ms_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_to_ws_valid = ms_valid && ms_ready_go;
 
@@ -64,9 +64,9 @@ module mem_stage (
             ms_flush = 1'b0;
         end else begin
             if (es_flush_r) begin
-                ms_flush <= 1'b1;
+                ms_flush = 1'b1;
             end else begin
-                ms_flush <= 1'b0;
+                ms_flush = 1'b0;
             end
         end
     end
@@ -95,24 +95,49 @@ module mem_stage (
         csr_data
     } = es_ms_bus_r;
 
-    //读数据选择
+    //读数据选择（显式MUX，减少可变移位逻辑）
     logic [1:0] data_offest;
     logic [7:0] byte_data;
     logic [15:0] half_data;
     logic [31:0] mem_data;
     assign data_offest = exe_result[1:0];
-    assign byte_data = dmem_rdata >> (data_offest * 8);
-    assign half_data = dmem_rdata >> (data_offest[1] * 16);
-    assign mem_data = (load_inst == `LB) ? {{24{byte_data[7]}}, byte_data} :
-                      (load_inst == `LH) ? {{16{half_data[15]}}, half_data} :
-                      (load_inst == `LW) ? dmem_rdata :
-                      (load_inst == `LBU) ? {24'b0, byte_data} :
-                      (load_inst == `LHU) ? {16'b0, half_data} : 32'b0;
+
+    always_comb begin
+        case (data_offest)
+            2'b00: byte_data = dmem_rdata[7:0];
+            2'b01: byte_data = dmem_rdata[15:8];
+            2'b10: byte_data = dmem_rdata[23:16];
+            default: byte_data = dmem_rdata[31:24];
+        endcase
+    end
+
+    always_comb begin
+        case (data_offest[1])
+            1'b0: half_data = dmem_rdata[15:0];
+            default: half_data = dmem_rdata[31:16];
+        endcase
+    end
+
+    always_comb begin
+        case (load_inst)
+            `LB:  mem_data = {{24{byte_data[7]}}, byte_data};
+            `LH:  mem_data = {{16{half_data[15]}}, half_data};
+            `LW:  mem_data = dmem_rdata;
+            `LBU: mem_data = {24'b0, byte_data};
+            `LHU: mem_data = {16'b0, half_data};
+            default: mem_data = 32'b0;
+        endcase
+    end
     
-    //结果选择
-    assign mem_result = (wb_sel == 3'b100) ? exe_result :
-                        (wb_sel == 3'b010) ? mem_data :
-                        (wb_sel == 3'b001) ? mem_pc + 4 : 32'b0;
+    //结果选择（case减少级联三目）
+    always_comb begin
+        case (wb_sel)
+            3'b100: mem_result = exe_result;
+            3'b010: mem_result = mem_data;
+            3'b001: mem_result = mem_pc + 4;
+            default: mem_result = 32'b0;
+        endcase
+    end
     assign mem_dst_addr = rd_addr;
     assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
     assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;

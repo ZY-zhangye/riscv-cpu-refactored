@@ -1,10 +1,10 @@
-@echo off
-REM === Ö¸Áî¼¯¶¨Òå ===
+ï»¿@echo off
+REM === æŒ‡ä»¤é›†å®šä¹‰ ===
 set UI_INSTS=sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti sltu sltiu beq bne blt bge bltu bgeu jal jalr lui auipc lh lhu sh sb lb lbu
 set MI_INSTS=csr scall sbreak ma_fetch
 REM set UM_INSTS=mul mulh mulhu mulhsu
 
-REM === ·ÂÕæÇ°±àÒë ===
+REM === ä»¿çœŸå‰ç¼–è¯‘ ===
 vlog -sv rtl/cpu_top/*.sv rtl/cpu_top/*.svh test/*.sv
 if errorlevel 1 (
     echo Compile failed!
@@ -15,7 +15,7 @@ if not exist results (
 )
 echo.
 
-REM === UI Ö¸Áî¼¯ÅúÁ¿·ÂÕæ ===
+REM === UI æŒ‡ä»¤é›†æ‰¹é‡ä»¿çœŸ ===
 echo Starting simulation for UI instructions...
 for %%i in (%UI_INSTS%) do (
     echo.
@@ -34,7 +34,7 @@ for %%i in (%UI_INSTS%) do (
 )
 echo.
 
-REM === MI Ö¸Áî¼¯ÅúÁ¿·ÂÕæ ===
+REM === MI æŒ‡ä»¤é›†æ‰¹é‡ä»¿çœŸ ===
 echo Starting simulation for MI instructions...
 for %%i in (%MI_INSTS%) do (
     echo.
@@ -53,7 +53,7 @@ for %%i in (%MI_INSTS%) do (
 )
 echo.
 
-REM === UM Ö¸Áî¼¯ÅúÁ¿·ÂÕæ ===
+REM === UM æŒ‡ä»¤é›†æ‰¹é‡ä»¿çœŸ ===
 REM echo Starting simulation for UM instructions...
 REM for %%i in (%UM_INSTS%) do (
 REM     echo.
