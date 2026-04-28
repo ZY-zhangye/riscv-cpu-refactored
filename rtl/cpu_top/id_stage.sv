@@ -236,7 +236,7 @@ module id_stage (
     //系统指令--opcode=1110011
     logic inst_ecall , inst_ebreak , inst_mret , inst_csrrw , inst_csrrs , inst_csrrc , inst_csrrwi , inst_csrrsi , inst_csrrci ;
     assign inst_ecall  = is_system && f3_000 && id_inst[25:20] == 6'b000000;
-    assign inst_ebreak = is_system && f3_000 && id_inst[25:30] == 6'b000001;
+    assign inst_ebreak = is_system && f3_000 && id_inst[25:20] == 6'b000001;
     assign inst_mret   = is_system && f3_000 && f7_0011000;
     assign inst_csrrw  = is_system && f3_001;
     assign inst_csrrs  = is_system && f3_010;
@@ -425,11 +425,13 @@ module id_stage (
 
     //BR_JMP_PACKET打包
     logic [`BR_JMP_PACKET_WIDTH-1:0] br_jmp_packet;
+    logic [31:0] br_jmp_target;
     logic [31:0] br_jmp_imm;
     logic [5:0] br_jmp_opcode;
     assign br_jmp_imm = ({32{IMB_valid}} & imm_b_ext) | ({32{IMJ_valid}} & imm_j_ext) | ({32{IMI_valid && is_jalr}} & imm_i_ext);
     assign br_jmp_opcode = {inst_beq, inst_bne, inst_blt, inst_bge, inst_bltu, inst_bgeu};
-    assign br_jmp_packet = {br_jmp_imm, br_jmp_opcode, is_jal, is_jalr};
+    assign br_jmp_target = id_pc + br_jmp_imm;
+    assign br_jmp_packet = {br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr};
 
     //CTRL_PACKET打包
     logic [`CTRL_PACKET_WIDTH-1:0] ctrl_packet;
@@ -440,8 +442,7 @@ module id_stage (
     logic is_multicycle_inst;    //是否多周期指令
     logic wb_exe_result;
     logic wb_mem_result;
-    logic wb_pc_result;
-    logic [2:0] exe_result_sel;
+    logic [1:0] exe_result_sel;
     assign is_alu_inst = alu_add || alu_sub || alu_and || alu_or || alu_xor || alu_sll || alu_srl || alu_sra || alu_slt || alu_sltu;
     assign is_fpu_inst = inst_fadd_s || inst_fsub_s || inst_fmul_s || inst_fdiv_s || inst_fsqrt_s || inst_fmin_s || inst_fmax_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
                          inst_fcvt_w_s  || inst_fcvt_wu_s || inst_fcvt_s_w  || inst_fcvt_s_wu ||
@@ -463,10 +464,9 @@ module id_stage (
                            inst_flt_s     || inst_fle_s     || inst_feq_s     ||
                            inst_fclass_s  ||
                            ((inst_mul || inst_mulh || inst_mulhsu || inst_mulhu) && `MUL_MULTICYCLE_ENABLE) || inst_div || inst_divu || inst_rem || inst_remu) && `MULTICYCLE_ENABLE;
-    assign wb_exe_result = is_alu_inst || is_fpu_inst || is_mul_inst || is_csr_inst;
+    assign wb_exe_result = is_alu_inst || is_fpu_inst || is_mul_inst || is_csr_inst || is_jal || is_jalr;
     assign wb_mem_result = is_mem_inst;
-    assign wb_pc_result = is_jal || is_jalr;
-    assign exe_result_sel = {wb_exe_result, wb_mem_result, wb_pc_result};
+    assign exe_result_sel = {wb_exe_result, wb_mem_result};
     assign ctrl_packet = {id_pc,exe_result_sel,is_alu_inst, is_fpu_inst, is_mul_inst, is_mem_inst, is_csr_inst, is_br_jmp_inst, ctrl_rd_addr, ctrl_regfile_wen, ctrl_reg_fpu_wen, is_multicycle_inst};
 
     //SRC_PACKET打包

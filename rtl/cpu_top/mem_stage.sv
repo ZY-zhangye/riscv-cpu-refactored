@@ -59,17 +59,7 @@ module mem_stage (
             es_flush_r <= es_flush;
         end
     end
-    always_comb begin
-        if (!rst_n) begin
-            ms_flush = 1'b0;
-        end else begin
-            if (es_flush_r) begin
-                ms_flush = 1'b1;
-            end else begin
-                ms_flush = 1'b0;
-            end
-        end
-    end
+    assign ms_flush = rst_n && es_flush_r;
 
     //解包
     logic [31:0] mem_pc;
@@ -78,7 +68,7 @@ module mem_stage (
     logic [4:0] rd_addr;
     logic regfile_wen;
     logic reg_fpu_wen;
-    logic [2:0] wb_sel;
+    logic [1:0] wb_sel;
     logic csr_wen;
     logic [11:0] csr_addr;
     logic [31:0] csr_data;
@@ -97,51 +87,74 @@ module mem_stage (
 
     //读数据选择（显式MUX，减少可变移位逻辑）
     logic [1:0] data_offest;
-    logic [7:0] byte_data;
-    logic [15:0] half_data;
-    logic [31:0] mem_data;
-    assign data_offest = exe_result[1:0];
+logic [31:0] load_data;
 
-    always_comb begin
-        case (data_offest)
-            2'b00: byte_data = dmem_rdata[7:0];
-            2'b01: byte_data = dmem_rdata[15:8];
-            2'b10: byte_data = dmem_rdata[23:16];
-            default: byte_data = dmem_rdata[31:24];
-        endcase
-    end
+logic load_lb;
+logic load_lh;
+logic load_lw;
+logic load_lbu;
+logic load_lhu;
 
-    always_comb begin
-        case (data_offest[1])
-            1'b0: half_data = dmem_rdata[15:0];
-            default: half_data = dmem_rdata[31:16];
-        endcase
-    end
+assign data_offest = exe_result[1:0];
 
-    always_comb begin
-        case (load_inst)
-            `LB:  mem_data = {{24{byte_data[7]}}, byte_data};
-            `LH:  mem_data = {{16{half_data[15]}}, half_data};
-            `LW:  mem_data = dmem_rdata;
-            `LBU: mem_data = {24'b0, byte_data};
-            `LHU: mem_data = {16'b0, half_data};
-            default: mem_data = 32'b0;
-        endcase
-    end
+assign load_lb  = (load_inst == `LB);
+assign load_lh  = (load_inst == `LH);
+assign load_lw  = (load_inst == `LW);
+assign load_lbu = (load_inst == `LBU);
+assign load_lhu = (load_inst == `LHU);
+
+always_comb begin
+    load_data = 32'b0;
+
+    unique case (1'b1)
+        load_lw: begin
+            load_data = dmem_rdata;
+        end
+
+        load_lb: begin
+            unique case (data_offest)
+                2'b00:  load_data = {{24{dmem_rdata[7]}},  dmem_rdata[7:0]};
+                2'b01:  load_data = {{24{dmem_rdata[15]}}, dmem_rdata[15:8]};
+                2'b10:  load_data = {{24{dmem_rdata[23]}}, dmem_rdata[23:16]};
+                default: load_data = {{24{dmem_rdata[31]}}, dmem_rdata[31:24]};
+            endcase
+        end
+
+        load_lbu: begin
+            unique case (data_offest)
+                2'b00:  load_data = {24'b0, dmem_rdata[7:0]};
+                2'b01:  load_data = {24'b0, dmem_rdata[15:8]};
+                2'b10:  load_data = {24'b0, dmem_rdata[23:16]};
+                default: load_data = {24'b0, dmem_rdata[31:24]};
+            endcase
+        end
+
+        load_lh: begin
+            unique case (data_offest[1])
+                1'b0:    load_data = {{16{dmem_rdata[15]}}, dmem_rdata[15:0]};
+                default: load_data = {{16{dmem_rdata[31]}}, dmem_rdata[31:16]};
+            endcase
+        end
+
+        load_lhu: begin
+            unique case (data_offest[1])
+                1'b0:    load_data = {16'b0, dmem_rdata[15:0]};
+                default: load_data = {16'b0, dmem_rdata[31:16]};
+            endcase
+        end
+
+        default: begin
+            load_data = 32'b0;
+        end
+    endcase
+end
     
     //结果选择（case减少级联三目）
-    always_comb begin
-        case (wb_sel)
-            3'b100: mem_result = exe_result;
-            3'b010: mem_result = mem_data;
-            3'b001: mem_result = mem_pc + 4;
-            default: mem_result = 32'b0;
-        endcase
-    end
+    assign mem_result = wb_sel[1] ? exe_result : load_data;
     assign mem_dst_addr = rd_addr;
     assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
     assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;
-    assign csr_we = csr_wen;
+    assign csr_we = csr_wen & ~ms_flush & ~exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
@@ -151,7 +164,6 @@ module mem_stage (
         mem_regfile_wen,
         mem_reg_fpu_wen
     };
-
     //异常相关信息
     //解包异常信息包
     logic [32:0] br_bus;
@@ -172,10 +184,16 @@ module mem_stage (
     logic exception_lam;
     logic exception_sam;
     assign exception_iam = (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
-    assign exception_lam = ((load_inst == `LW) && (data_offest != 2'b00) ||
-                           (load_inst == `LH || load_inst == `LHU) && (data_offest[0] != 1'b0)) && !ms_flush;
-    assign exception_sam = ((load_inst == `SW) && (data_offest != 2'b00) ||
-                           (load_inst == `SH) && (data_offest[0] != 1'b0)) && !ms_flush;
+    logic is_word_access;
+    logic is_half_access;
+    assign is_word_access = (load_inst == `LW) || (load_inst == `SW);
+    assign is_half_access = (load_inst == `LH) || (load_inst == `LHU) || (load_inst == `SH);
+    assign exception_lam = !ms_flush &&
+                       (((load_inst == `LW) && (data_offest != 2'b00)) ||
+                        (((load_inst == `LH) || (load_inst == `LHU)) && data_offest[0]));
+    assign exception_sam = !ms_flush &&
+                       (((load_inst == `SW) && (data_offest != 2'b00)) ||
+                        ((load_inst == `SH) && data_offest[0]));
     assign exception_code = ms_flush ? `EXC_NONE :
                             exception_iam ? `EXC_IAM :
                             exception_lam ? `EXC_LAM :

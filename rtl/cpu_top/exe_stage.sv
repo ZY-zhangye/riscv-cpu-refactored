@@ -64,7 +64,6 @@ module exe_stage(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ds_to_es_bus_r <= '0;
-            mem_result_reg <= '0;
             exe_result_reg <= '0;
             csr_wdata_reg <= '0;
             ds_flush_r <= 1'b0;
@@ -73,26 +72,23 @@ module exe_stage(
             ds_flush_r <= ds_flush;
             ds_to_es_bus_r <= ds_to_es_bus;
             ds_exc_bus_r <= ds_exc_bus;
-            mem_result_reg <= mem_result;
             exe_result_reg <= exe_result;
             csr_wdata_reg <= csr_wdata;
         end else begin
-            mem_result_reg <= mem_result;
             exe_result_reg <= exe_result;
             csr_wdata_reg <= csr_wdata;
         end
     end
-    always_comb begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
-            es_flush = 1'b0;
+            mem_result_reg <= '0;
+        end else if (ds_to_es_valid && es_allowin) begin
+            mem_result_reg <= mem_result;
         end else begin
-            if (exception_flag || ds_flush_r) begin
-                es_flush <= 1'b1;
-            end else begin
-                es_flush <= 1'b0;
-            end
+            mem_result_reg <= mem_result;
         end
     end
+    assign es_flush = rst_n && (ds_flush_r || exception_flag);
     //一级解包
     logic [`ALU_PACKET_WIDTH-1:0] alu_packet;
     logic [`FPU_PACKET_WIDTH-1:0] fpu_packet;
@@ -135,16 +131,17 @@ module exe_stage(
     assign {csr_rdata, csr_imm, csr_waddr, csr_op, csr_imm_sel, csr_rdata_fwd, csr_wen} = csr_packet;
     //BR_JMP_PACKET解包
     logic [31:0] br_jmp_imm;
+    logic [31:0] br_jmp_target;
     logic [5:0] br_jmp_opcode;
     logic is_jal, is_jalr;
-    assign {br_jmp_imm, br_jmp_opcode, is_jal, is_jalr} = br_jmp_packet;
+    assign {br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr} = br_jmp_packet;
     //CTRL_PACKET解包
     logic is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp;
     logic [4:0] rd_addr;
     logic regfile_wen;
     logic reg_fpu_wen;
     logic is_multicycle;
-    logic [2:0] exe_result_sel;
+    logic [1:0] exe_result_sel;
     logic [31:0] exe_pc;
     assign {exe_pc, exe_result_sel,is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp, rd_addr, regfile_wen, reg_fpu_wen, is_multicycle} = ctrl_packet;
     //SRC_PACKET解包
@@ -157,12 +154,29 @@ module exe_stage(
     //操作数选择（除FPU，其它都在这里完成）
     logic [31:0] src1, src2;
     logic [31:0] csr_data;
+    always_comb begin
+        src1 = 32'b0;
+        unique case (1'b1)
+            src1_fwd[0]: src1 = exe_result_reg;
+            src1_fwd[1]: src1 = mem_result_reg;
+            default: src1 = reg_src1;
+        endcase
+    end
+    always_comb begin
+        src2 = 32'b0;
+        unique case (1'b1)
+            src2_fwd[0]: src2 = exe_result_reg;
+            src2_fwd[1]: src2 = mem_result_reg;
+            default: src2 = reg_src2;
+        endcase
+    end
+    /*
     assign src1 = (src1_fwd == 2'b01) ? exe_result_reg :
                   (src1_fwd == 2'b10) ? mem_result_reg :
                   reg_src1;
     assign src2 = (src2_fwd == 2'b01) ? exe_result_reg :
                   (src2_fwd == 2'b10) ? mem_result_reg :
-                  reg_src2;
+                  reg_src2;*/
     assign csr_data = csr_rdata_fwd ? csr_wdata_reg : csr_rdata;
 
     //ALU计算
@@ -229,23 +243,46 @@ module exe_stage(
     logic inst_lb, inst_sb, inst_lh, inst_sh, inst_lw, inst_sw,inst_lbu, inst_lhu;
     logic [5:0] load_inst;
     assign load_inst = {(inst_lb || inst_sb), (inst_lh || inst_sh), (inst_lw || inst_sw), inst_lbu, inst_lhu, is_store};
-    assign inst_lb = mem_op == 5'b10000 && is_store == 1'b0;
-    assign inst_lh = mem_op == 5'b01000 && is_store == 1'b0;
-    assign inst_lw = mem_op == 5'b00100 && is_store == 1'b0;
-    assign inst_lbu= mem_op == 5'b00010 && is_store == 1'b0;
-    assign inst_lhu= mem_op == 5'b00001 && is_store == 1'b0;
-    assign inst_sb = mem_op == 5'b10000 && is_store == 1'b1;
-    assign inst_sh = mem_op == 5'b01000 && is_store == 1'b1;
-    assign inst_sw = mem_op == 5'b00100 && is_store == 1'b1;
+    assign inst_lb  = mem_op[4] & ~is_store;
+    assign inst_lh  = mem_op[3] & ~is_store;
+    assign inst_lw  = mem_op[2] & ~is_store;
+    assign inst_lbu = mem_op[1] & ~is_store;
+    assign inst_lhu = mem_op[0] & ~is_store;
+
+    assign inst_sb  = mem_op[4] & is_store;
+    assign inst_sh  = mem_op[3] & is_store;
+    assign inst_sw  = mem_op[2] & is_store;
     assign dmem_addr = src1 + mem_imm;
     assign dmem_wdata = (inst_sb) ? {4{src2[7:0]}} :
                        (inst_sh) ? {2{src2[15:0]}} :
                        src2;
-    assign dmem_wen = es_flush ? 4'b0 :
-                      (inst_sb) ? 4'b0001 << dmem_addr[1:0] :
-                      (inst_sh) ? 4'b0011 << dmem_addr[1:0] :
-                      (inst_sw) ? 4'b1111 : 4'b0;
-    assign dmem_en = inst_lb || inst_lh || inst_lw || inst_lbu || inst_lhu || inst_sb || inst_sh || inst_sw;
+    logic [3:0] sb_wen, sh_wen;
+    always_comb begin
+        case (dmem_addr[1:0])
+            2'b00: sb_wen = 4'b0001;
+            2'b01: sb_wen = 4'b0010;
+            2'b10: sb_wen = 4'b0100;
+            default: sb_wen = 4'b1000;
+        endcase
+    end
+    always_comb begin
+        case (dmem_addr[1])
+            1'b0: sh_wen = 4'b0011;
+            default: sh_wen = 4'b1100;
+        endcase
+    end
+    always_comb begin
+        dmem_wen = 4'b0000;
+        if (!es_flush) begin
+            unique case (1'b1)
+                inst_sb: dmem_wen = sb_wen;
+                inst_sh: dmem_wen = sh_wen;
+                inst_sw: dmem_wen = 4'b1111;
+                default: dmem_wen = 4'b0000;
+            endcase
+        end
+    end
+    assign dmem_en = |mem_op && !es_flush;
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
@@ -273,39 +310,53 @@ module exe_stage(
     assign is_bge = br_jmp_opcode[2];
     assign is_bltu= br_jmp_opcode[1];
     assign is_bgeu= br_jmp_opcode[0];
-    logic br_cond;
-    always_comb begin
-        case (1'b1)
-            is_beq: br_cond = (src1 == src2);
-            is_bne: br_cond = (src1 != src2);
-            is_blt: br_cond = ($signed(src1) < $signed(src2));
-            is_bge: br_cond = ($signed(src1) >= $signed(src2));
-            is_bltu: br_cond = (src1 < src2);
-            is_bgeu: br_cond = (src1 >= src2);
-            default: br_cond = 1'b0;
-        endcase
-    end
-    logic [31:0] pc_target;
+    // 1. 预计算减法和标志位 (FPGA 会将其映射到进位链)
+    logic [32:0] sub_res;
+    assign sub_res = {1'b0, src1} - {1'b0, src2};
+
+    logic eq, lt, ltu;
+    assign eq  = (src1 == src2); // 部分综合器对 == 0 优化更好，但直接比较通常也能进位链优化
+    assign ltu = sub_res[32];    // 无符号小于即看减法的借位
+
+    // 有符号小于：如果符号不同，则 src1负数时为真；如果符号相同，看减法结果
+    assign lt  = (src1[31] != src2[31]) ? src1[31] : ltu;
+
+    // 2. 并行选择逻辑 (代替 case(1'b1))
+    // 这种写法在 FPGA 中会被优化为单层 LUT 逻辑
+    logic br_cond_raw;
+    assign br_cond_raw = (is_beq  & eq)
+                       | (is_bne  & !eq)
+                       | (is_blt  & lt)
+                       | (is_bge  & !lt)
+                       | (is_bltu & ltu)
+                       | (is_bgeu & !ltu);
+
+    // 3. 优化 br_taken 的判定路径
+    // 将 br_jmp_opcode 是否有效的判断与 br_cond 合并
+    logic is_branch;
+    assign is_branch = |br_jmp_opcode;
+
+    assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
+
+    // 4. 计算目标地址
+    // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
+    logic [31:0] jalr_sum;
     logic [31:0] pc_jalr;
-    assign pc_target = exe_pc + br_jmp_imm;
-    assign br_target = is_jalr ? pc_jalr : pc_target;
-    assign pc_jalr = (src1 + br_jmp_imm) & ~32'b1; // jalr目标地址最低位强制为0
-    assign br_taken = es_flush ? 1'b0 :
-                      (is_jal && !es_flush) ? 1'b1 :
-                      (is_jalr && !es_flush) ? 1'b1 :
-                      (|br_jmp_opcode && br_cond && !es_flush) ? 1'b1 :
-                      1'b0;
+    assign jalr_sum = src1 + br_jmp_imm;
+    assign pc_jalr = { jalr_sum[31:1], 1'b0 };
+    assign br_target = is_jalr ? pc_jalr : br_jmp_target;
     //结果选择
     always_comb begin
-        if (es_flush) begin
-            exe_result = 32'b0;
-        end else begin
-            if (is_alu) exe_result = alu_result;
-            else if (is_fpu) exe_result = fpu_result;
-            else if (is_mem) exe_result = dmem_addr;
-            else if (is_mul) exe_result = mul_result;
-            else if (is_csr) exe_result = csr_data;
-            else exe_result = 32'b0;
+        exe_result = 32'b0;
+        if (!es_flush) begin
+            unique case (1'b1)
+                is_alu: exe_result = alu_result;
+                is_fpu: exe_result = fpu_result;
+                is_mem: exe_result = dmem_addr;
+                is_mul: exe_result = mul_result;
+                is_csr: exe_result = csr_data;
+                default: exe_result = exe_pc + 4; //默认写回PC+4，方便调试和实现JAL/JALR
+            endcase
         end
     end
 
