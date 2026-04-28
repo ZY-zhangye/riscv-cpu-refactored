@@ -235,9 +235,9 @@ module id_stage (
 
     //系统指令--opcode=1110011
     logic inst_ecall , inst_ebreak , inst_mret , inst_csrrw , inst_csrrs , inst_csrrc , inst_csrrwi , inst_csrrsi , inst_csrrci ;
-    assign inst_ecall  = is_system && f3_000 && imm_i == 12'b0;
-    assign inst_ebreak = is_system && f3_000 && imm_i == 12'b1;
-    assign inst_mret   = is_system && f3_000 && imm_i == 12'b001100000010;
+    assign inst_ecall  = is_system && f3_000 && id_inst[25:20] == 6'b000000;
+    assign inst_ebreak = is_system && f3_000 && id_inst[25:30] == 6'b000001;
+    assign inst_mret   = is_system && f3_000 && f7_0011000;
     assign inst_csrrw  = is_system && f3_001;
     assign inst_csrrs  = is_system && f3_010;
     assign inst_csrrc  = is_system && f3_011;
@@ -330,7 +330,7 @@ module id_stage (
 
     //立即数选择
     logic IMI_valid , IMS_valid , IMB_valid , IMU_valid , IMJ_valid , IMZ_valid;
-    assign IMI_valid = is_load || inst_flw || inst_addi || inst_slti || inst_sltiu || inst_xori || inst_ori || inst_andi || inst_slli || inst_srli || inst_srai || inst_flw || inst_jalr;
+    assign IMI_valid = is_load || inst_addi || inst_slti || inst_sltiu || inst_xori || inst_ori || inst_andi || inst_slli || inst_srli || inst_srai || inst_flw || inst_jalr;
     assign IMS_valid = is_store || inst_fsw;
     assign IMB_valid = is_branch;
     assign IMU_valid = is_lui || is_auipc;
@@ -510,6 +510,14 @@ module id_stage (
     logic exe_load_use_hazard;
     assign need_rs1 = is_op_reg || is_op_imm || is_load || is_store || is_branch || inst_jalr || is_fpu || inst_csrrw || inst_csrrs || inst_csrrc;
     assign need_rs2 = is_op_reg || is_store || is_branch || is_fpu;
+    logic prev_load;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prev_load <= 1'b0;
+        end else if (ds_allowin) begin
+            prev_load <= is_load || inst_flw; //仅当当前指令为加载指令时才更新prev_load信号
+        end
+    end
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
@@ -518,7 +526,7 @@ module id_stage (
             // 统一等待到MEM前递/寄存器写回，避免地址/数据相关指令误用旧值。
             exe_load_use_hazard = ((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr)) ||
                                   (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr))) &&
-                                  es_valid && exe_regfile_wen;
+                                  es_valid && exe_regfile_wen && prev_load;
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;
