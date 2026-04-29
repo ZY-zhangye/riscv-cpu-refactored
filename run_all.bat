@@ -15,7 +15,7 @@ if not exist results (
 )
 echo.
 
-REM === UI instructions simulation ===
+=== UI instructions simulation ===
 echo Starting simulation for UI instructions...
 for %%i in (%UI_INSTS%) do (
     echo.

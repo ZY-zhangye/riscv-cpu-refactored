@@ -1,71 +1,5 @@
 `include "defines.svh"
-`ifdef DEBUG_EN
-module div (
-    input clk,
-    input rst_n,
-    input [31:0] div_src1,
-    input [31:0] div_src2,
-    input div1_valid,
-    input div2_valid,
-    output logic [63:0] div_result,
-    output logic div_valid
-);
 
-    logic [31:0] src1_reg, src2_reg;
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            src1_reg <= 32'b0;
-        end else
-        if (div1_valid) begin
-            src1_reg <= div_src1;
-        end else begin
-            src1_reg <= src1_reg;
-        end
-    end
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            src2_reg <= 32'b0;
-        end else
-        if (div2_valid) begin
-            src2_reg <= div_src2;
-        end else begin
-            src2_reg <= src2_reg;
-        end
-    end
-    logic [1:0] state;
-    always_ff @(posedge clk)begin
-        if (!rst_n) begin
-            state <= 2'b00;
-            div_valid <= 1'b0;
-        end else begin
-            case (state)
-                2'b00: begin
-                    if (div1_valid && div2_valid) begin
-                        state <= 2'b01;
-                    end else begin
-                        state <= 2'b00;
-                    end
-                end
-                2'b01: begin
-                    repeat ($urandom_range(5, 35)) @(posedge clk); // 模拟除法运算的随机周期
-                    state <= 2'b10;
-                end
-                2'b10: begin
-                    div_valid <= 1'b1;
-                    div_result <= {src1_reg % src2_reg, src1_reg / src2_reg}; 
-                    state <= 2'b11;
-                end
-                2'b11: begin
-                    div_valid <= 1'b0; // 输出结果后复位valid信号
-                    state <= 2'b00; // 回到初始状态等待下一次输入
-                end
-            endcase
-        end
-    end
-
-
-endmodule
-`endif
 module mul (
     input logic clk,
     input logic rst_n,
@@ -97,15 +31,28 @@ module mul (
     // --------------------
     logic [31:0] div_src1, div_src2;
     logic [63:0] div_result;
-    logic [63:0] div_result_reg;
     logic        div_0;
     logic        div_1;
     logic [1:0]  div_state;
-    logic        div1_valid, div2_valid;
-    logic        div_valid;
-    logic        div_done;
     logic        div_start;
     logic        mul_op_div;
+    logic        div_done;
+    logic        s1,s2;
+    
+    // AXI流接口信号 - 除数输入
+    logic        s_axis_divisor_tvalid;
+    logic        s_axis_divisor_tready;
+    logic [31:0] s_axis_divisor_tdata;
+    
+    // AXI流接口信号 - 被除数输入
+    logic        s_axis_dividend_tvalid;
+    logic        s_axis_dividend_tready;
+    logic [31:0] s_axis_dividend_tdata;
+    
+    // AXI流接口信号 - 输出结果
+    logic        m_axis_dout_tvalid;
+    logic [63:0] m_axis_dout_tdata;
+    logic [63:0] m_axis_dout_tdata_reg;
 
     assign mul_op_mul = mul_op[3] || mul_op[2];
     assign mul_op_div = mul_op[1] || mul_op[0];
@@ -118,17 +65,25 @@ module mul (
 
     assign div_0 = (div_src2 == 32'b0);
     assign div_1 = src1_signed && src2_signed &&
-                   (div_src1 == 32'h8000_0000) &&
-                   (div_src2 == 32'hffff_ffff);
+                   (mul_src1 == 32'h8000_0000) &&
+                   (mul_src2 == 32'hffff_ffff);
+
+    assign s1 = src1_signed && src2_signed && (mul_src1[31] ^ mul_src2[31]);
+    assign s2 = src1_signed && mul_src1[31];
 
     assign mul_start = is_mul && mul_op_mul && !mul_busy;
     assign mul_done = mul_valid_shift[`MUL_CYCLE-1];
 
     assign div_start = is_multicycle && is_mul && mul_op_div &&
                        (div_state == 2'b00) && !div_0 && !div_1;
-    assign div1_valid = div_start;
-    assign div2_valid = div_start;
-    assign div_done = div_valid || (div_state == 2'b10);
+    
+    // AXI流握手信号 - 仅在两个输入都ready时才valid
+    assign s_axis_divisor_tvalid  = div_start;
+    assign s_axis_dividend_tvalid = div_start;
+    assign s_axis_divisor_tdata   = div_src2;
+    assign s_axis_dividend_tdata  = div_src1;
+    
+    assign div_done = (div_state == 2'b11) || (div_state == 2'b10);
 
     assign mul_stall = is_mul && is_multicycle &&
                        ((mul_op_mul && !mul_done) ||
@@ -161,13 +116,15 @@ module mul (
                 mul_result = mul_result_ext[63:32];
             end
             mul_op[1]: begin
-                mul_result = (src1_signed && src2_signed && (mul_src1[31] ^ mul_src2[31]) && div_state[0]) ?
-                             (~div_result[31:0] + 1'b1) :
+                // 余数输出 (低32位是商，高32位是余数)
+                mul_result = (s1 && div_state == 2'b11) ?
+                             (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
                              div_result[31:0];
             end
             mul_op[0]: begin
-                mul_result = (src1_signed && src2_signed && mul_src1[31] && div_state[0]) ?
-                             (~div_result[63:32] + 1'b1) :
+                // 商的高32位或直接输出余数
+                mul_result = (s2 && div_state == 2'b11) ?
+                             (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
                              div_result[63:32];
             end
             default: begin
@@ -185,21 +142,33 @@ module mul (
         end else begin
             unique case (div_state)
                 2'b00: begin
+                    // 等待除法请求，检查特殊情况
                     if (div_start) begin
+                        if (s_axis_divisor_tready && s_axis_dividend_tready && 
+                        s_axis_divisor_tvalid && s_axis_dividend_tvalid) 
                         div_state <= 2'b01;
                     end else if (is_multicycle && is_mul && mul_op_div && (div_0 || div_1)) begin
                         div_state <= 2'b10;
+                        div_result <= div_0 ? {mul_src1, 32'hffff_ffff} :
+                                       {32'h0000_0000, 32'h8000_0000} ;
                     end else begin
                         div_state <= 2'b00;
                     end
                 end
                 2'b01: begin
-                    if (div_valid) begin
-                        div_state <= 2'b00;
+                    // 等待输出有效信号
+                    if (m_axis_dout_tvalid) begin
+                        div_state <= 2'b11;
+                        m_axis_dout_tdata_reg <= m_axis_dout_tdata; // 捕获结果以供后续周期使用
+                        div_result <= m_axis_dout_tdata; // 直接使用输出结果
                     end
                 end
                 2'b10: begin
+                    // 输出特殊结果后回到初始状态
                     div_state <= 2'b00;
+                end
+                2'b11: begin
+                    div_state <= 2'b00; // 结果已捕获，回到初始状态等待下一次除法请求
                 end
                 default: begin
                     div_state <= 2'b00;
@@ -208,20 +177,23 @@ module mul (
         end
     end
 
-    div div_inst (
-        .clk(clk),
-        .rst_n(rst_n),
-        .div_src1(div_src1),
-        .div_src2(div_src2),
-        .div1_valid(div1_valid),
-        .div2_valid(div2_valid),
-        .div_result(div_result_reg),
-        .div_valid(div_valid)
+
+    divider div_inst (
+        .aclk(clk),
+        .aresetn(rst_n),
+        .s_axis_divisor_tvalid(s_axis_divisor_tvalid),    
+        .s_axis_divisor_tready(s_axis_divisor_tready),    
+        .s_axis_divisor_tdata(s_axis_divisor_tdata),      
+        .s_axis_dividend_tvalid(s_axis_dividend_tvalid),  
+        .s_axis_dividend_tready(s_axis_dividend_tready),  
+        .s_axis_dividend_tdata(s_axis_dividend_tdata),    
+        .m_axis_dout_tvalid(m_axis_dout_tvalid),                 
+        .m_axis_dout_tdata(m_axis_dout_tdata)            
     );
 
-    assign div_result = div_0 ? {mul_src1, 32'hffff_ffff} :
+    /*assign div_result = div_0 ? {mul_src1, 32'hffff_ffff} :
                         div_1 ? {32'h0000_0000, 32'h8000_0000} :
-                        div_result_reg;
+                        m_axis_dout_tdata;*/
 
 
 
