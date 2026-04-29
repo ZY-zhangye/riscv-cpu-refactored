@@ -7,7 +7,7 @@ UI_INSTS=(sw lw add addi sub and andi or ori xor xori
 # 定义【特殊系统指令集】数组 - 包含特权指令/系统调用指令
 MI_INSTS=(csr scall sbreak ma_fetch)*/
 //乘法指令
-// UM_INSTS=(mul mulh mulhu mulhsu)
+// UM_INSTS=(mul mulh mulhu mulhsu div divu rem remu)
 localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.hex";
 
     logic clk;
@@ -56,7 +56,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     end
 
     //imem与dmem设计与实例化
-    logic [31:0] imem [0:5095]; // 1KB指令存储器
+    logic [31:0] imem [0:5095]; // 5KB指令存储器
     logic [31:0] dmem [0:5095]; // 5KB数据存储器
     initial begin
         //加载测试指令到imem
@@ -68,22 +68,27 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             imem_rdata <= 32'b0;
-            dmem_rdata <= 32'b0;
         end else begin
             if (imem_en) begin
-                imem_rdata <= imem[imem_addr[31:2]]; // 以字为单位访问
+                imem_rdata <= imem[imem_addr[23:2]]; // 以字为单位访问
             end
+        end
+    end
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            dmem_rdata <= 32'b0;
+        end else begin
             if (dmem_en) begin
                 if (dmem_wen != 4'b0000) begin
                     // 写操作，根据wen信号选择写入的字节
-                    if (dmem_wen[0]) dmem[dmem_addr[31:2]][7:0] <= dmem_wdata[7:0];
-                    if (dmem_wen[1]) dmem[dmem_addr[31:2]][15:8] <= dmem_wdata[15:8];
-                    if (dmem_wen[2]) dmem[dmem_addr[31:2]][23:16] <= dmem_wdata[23:16];
-                    if (dmem_wen[3]) dmem[dmem_addr[31:2]][31:24] <= dmem_wdata[31:24];
-                end else begin
-                    // 读操作
-                    dmem_rdata <= dmem[dmem_addr[31:2]];
+                    if (dmem_wen[0]) dmem[dmem_addr[23:2]][7:0] <= dmem_wdata[7:0];
+                    if (dmem_wen[1]) dmem[dmem_addr[23:2]][15:8] <= dmem_wdata[15:8];
+                    if (dmem_wen[2]) dmem[dmem_addr[23:2]][23:16] <= dmem_wdata[23:16];
+                    if (dmem_wen[3]) dmem[dmem_addr[23:2]][31:24] <= dmem_wdata[31:24];
                 end
+                dmem_rdata <= dmem[dmem_addr[23:2]];
+            end else begin
+                dmem_rdata <= dmem_rdata; // 保持原值
             end
         end
     end
@@ -112,7 +117,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
 
     always_ff @ (posedge clk) begin
         if (rst_n) begin
-            if (debug_wb_pc == 32'h00000044) begin
+            if (debug_wb_pc == 32'h80000044) begin
                     $display("---------------------------------------------");
                     $display("Time: %0t", $time);
                     $display("Simulation finished.");

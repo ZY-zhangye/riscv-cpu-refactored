@@ -66,6 +66,10 @@ module regfile_csr (
 
     //CSR寄存器读逻辑
     always_comb begin
+        if (csr_raddr == csr_waddr && csr_wen) begin
+            // 如果当前正在写入某个CSR寄存器，并且读地址与写地址相同，则直接返回写入的数据，避免读写冲突
+            csr_rdata = csr_wdata;
+        end else begin
         case (csr_raddr)
             `CSR_MSTATUS: csr_rdata = mstatus;
             `CSR_MISA: csr_rdata = misa;
@@ -82,6 +86,7 @@ module regfile_csr (
             `CSR_MSCRATCH: csr_rdata = mscratch;
             default: csr_rdata = 32'b0;
         endcase
+        end
     end
 
     //异常标志和异常地址逻辑

@@ -75,8 +75,8 @@ module exe_stage(
             exe_result_reg <= exe_result;
             csr_wdata_reg <= csr_wdata;
         end else begin
-            exe_result_reg <= exe_result;
-            csr_wdata_reg <= csr_wdata;
+            exe_result_reg <= exe_result_reg;
+            csr_wdata_reg <= csr_wdata_reg;
         end
     end
     always_ff @(posedge clk) begin
@@ -85,7 +85,7 @@ module exe_stage(
         end else if (ds_to_es_valid && es_allowin) begin
             mem_result_reg <= mem_result;
         end else begin
-            mem_result_reg <= mem_result;
+            mem_result_reg <= mem_result_reg;
         end
     end
     assign es_flush = rst_n && (ds_flush_r || exception_flag);

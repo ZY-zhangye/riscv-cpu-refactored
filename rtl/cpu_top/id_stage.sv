@@ -390,7 +390,7 @@ module id_stage (
     logic [3:0] mul_op;
     logic src1_signed , src2_signed;
     assign src1_signed = inst_mul || inst_mulh || inst_mulhsu || inst_div || inst_rem;
-    assign src2_signed = inst_mul || inst_mulh || inst_mulhsu || inst_div || inst_rem;
+    assign src2_signed = inst_mul || inst_mulh || inst_div || inst_rem;
     assign mul_op = {inst_mul , (inst_mulh || inst_mulhsu || inst_mulhu) ,
                      (inst_div || inst_divu) , (inst_rem || inst_remu)};
     assign mul_packet = {mul_op, src1_signed, src2_signed};

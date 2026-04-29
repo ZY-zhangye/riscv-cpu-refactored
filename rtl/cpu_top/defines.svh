@@ -60,17 +60,19 @@
 `define CSR_MIMPID 12'hF13
 `define CSR_MSCRATCH 12'h340
 
+`define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
+
 //debug端口开启与否，注释掉为关闭
 `define DEBUG_EN 1'b1
 
 
 
 `define NOP_INST 32'h0000_0013
-`define MUL_MULTICYCLE_ENABLE 1'b0   //是否采用多周期乘法运算，1为多周期，0为单周期
-`define MULTICYCLE_ENABLE 1'b0   //是否采用多周期运算（如除法），1为多周期，0为单周期
+`define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
+`define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
 
 
 //定义地址信息
-`define PC_START 32'h0000_0000
+`define PC_START 32'h8000_0000
 
 `endif
