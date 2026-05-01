@@ -25,9 +25,11 @@ module if_stage (
     logic [`ADDR_WIDTH-1:0] fs_out_pc;
     logic [`DATA_WIDTH-1:0] fs_out_inst;
     logic [31:0] fs_pc;
+    logic br_taken_reg;
+    logic [31:0] br_target_reg;
     assign seq_pc = fs_out_pc + 4;
     assign next_pc = exception_flag ? exception_addr :
-                     br_taken ? br_target :
+                     br_taken_reg ? br_target_reg :
                      seq_pc;
     logic fs_valid;
     logic fs_ready_go;
@@ -47,8 +49,17 @@ module if_stage (
             fs_pc <= next_pc;
         end
     end
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            br_taken_reg <= 1'b0;
+            br_target_reg <= 32'b0;
+        end else if (fs_allowin) begin
+            br_taken_reg <= br_taken;
+            br_target_reg <= br_target;
+        end
+    end
     assign pc_out = next_pc;
-    assign fs_out_inst = br_taken ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = (br_taken || br_taken_reg) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc};

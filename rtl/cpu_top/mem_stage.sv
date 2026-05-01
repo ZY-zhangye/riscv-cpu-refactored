@@ -103,54 +103,54 @@ assign load_lw  = (load_inst == `LW);
 assign load_lbu = (load_inst == `LBU);
 assign load_lhu = (load_inst == `LHU);
 
+logic [7:0]  load_byte;
+logic [15:0] load_half;
+
 always_comb begin
-    load_data = 32'b0;
+    unique case (data_offest)
+        2'b00:  load_byte = dmem_rdata[7:0];
+        2'b01:  load_byte = dmem_rdata[15:8];
+        2'b10:  load_byte = dmem_rdata[23:16];
+        default: load_byte = dmem_rdata[31:24];
+    endcase
+end
+
+always_comb begin
+    unique case (data_offest[1])
+        1'b0:    load_half = dmem_rdata[15:0];
+        default: load_half = dmem_rdata[31:16];
+    endcase
+end
+
+always_comb begin
+    load_data = dmem_rdata;
 
     unique case (1'b1)
-        load_lw: begin
-            load_data = dmem_rdata;
-        end
-
         load_lb: begin
-            unique case (data_offest)
-                2'b00:  load_data = {{24{dmem_rdata[7]}},  dmem_rdata[7:0]};
-                2'b01:  load_data = {{24{dmem_rdata[15]}}, dmem_rdata[15:8]};
-                2'b10:  load_data = {{24{dmem_rdata[23]}}, dmem_rdata[23:16]};
-                default: load_data = {{24{dmem_rdata[31]}}, dmem_rdata[31:24]};
-            endcase
+            load_data = {{24{load_byte[7]}}, load_byte};
         end
 
         load_lbu: begin
-            unique case (data_offest)
-                2'b00:  load_data = {24'b0, dmem_rdata[7:0]};
-                2'b01:  load_data = {24'b0, dmem_rdata[15:8]};
-                2'b10:  load_data = {24'b0, dmem_rdata[23:16]};
-                default: load_data = {24'b0, dmem_rdata[31:24]};
-            endcase
+            load_data = {24'b0, load_byte};
         end
 
         load_lh: begin
-            unique case (data_offest[1])
-                1'b0:    load_data = {{16{dmem_rdata[15]}}, dmem_rdata[15:0]};
-                default: load_data = {{16{dmem_rdata[31]}}, dmem_rdata[31:16]};
-            endcase
+            load_data = {{16{load_half[15]}}, load_half};
         end
 
         load_lhu: begin
-            unique case (data_offest[1])
-                1'b0:    load_data = {16'b0, dmem_rdata[15:0]};
-                default: load_data = {16'b0, dmem_rdata[31:16]};
-            endcase
+            load_data = {16'b0, load_half};
         end
 
         default: begin
-            load_data = 32'b0;
+            load_data = dmem_rdata;
         end
     endcase
 end
     
     //结果选择（case减少级联三目）
-    assign mem_result = wb_sel[1] ? exe_result : load_data;
+    assign mem_result = ({32{wb_sel[1]}} & exe_result) |
+                         ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
     assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
     assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;
