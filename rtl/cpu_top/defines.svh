@@ -60,8 +60,26 @@
 `define CSR_MARCHID 12'hF12
 `define CSR_MIMPID 12'hF13
 `define CSR_MSCRATCH 12'h340
+`define CSR_CYCLE 12'hC00
+`define CSR_INSTRET 12'hC02
 
 `define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
+
+//MIMO外设地址
+`define SW_LOW_ADDR  32'h8020_0000
+`define SW_HIGH_ADDR 32'h8020_0004
+`define KEY_ADDR     32'h8020_0010
+`define SEG_ADDR     32'h8020_0020
+`define LED_ADDR     32'h8020_0040
+`define CNT_ADDR     32'h8020_0050
+
+// UART MMIO地址映射（兼容riscv_sim_perf_bench/benchmark.c）
+`define UART_BASE_ADDR   32'h8001_0000
+`define UART_DATA_ADDR   32'h8001_0000
+`define UART_STATUS_ADDR 32'h8001_0004
+`define UART_CTRL_ADDR   32'h8001_0008
+`define UART_BAUD_ADDR   32'h8001_000C
+`define UART_END_ADDR    32'h8001_000F
 
 //debug端口开启与否，注释掉为关闭
 `define DEBUG_EN 1'b1
@@ -74,6 +92,10 @@
 
 
 //定义地址信息
+`ifdef PERF_BENCH
+`define PC_START 32'h0000_0000
+`else
 `define PC_START 32'h8000_0000
+`endif
 
 `endif

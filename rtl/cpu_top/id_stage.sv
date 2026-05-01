@@ -53,7 +53,8 @@ module id_stage (
     logic ds_valid;
     logic ds_ready_go;
     logic load_use_hazard;
-    assign ds_ready_go = !load_use_hazard; 
+    logic raw_hazard;
+    assign ds_ready_go = !(load_use_hazard || raw_hazard); 
     assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
     //握手协议
@@ -532,6 +533,13 @@ module id_stage (
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;
+    assign raw_hazard = ds_valid &&
+                        (((need_rs1 && (rs1_addr != 5'b0)) &&
+                          ((es_valid && exe_regfile_wen && (exe_dest_addr == rs1_addr)) ||
+                           (ms_valid && mem_regfile_wen && (mem_dest_addr == rs1_addr)))) ||
+                         ((need_rs2 && (rs2_addr != 5'b0)) &&
+                          ((es_valid && exe_regfile_wen && (exe_dest_addr == rs2_addr)) ||
+                           (ms_valid && mem_regfile_wen && (mem_dest_addr == rs2_addr)))));
 
 
 endmodule

@@ -92,6 +92,8 @@ module cpu_top (
     logic [31:0] csr_wdata;
     logic [6:0] exception_code;
     logic [31:0] exception_mtval;
+    logic valid_inst;
+    assign valid_inst = br_taken;
 
     //实例化
     if_stage u_if_stage (
@@ -280,6 +282,7 @@ module cpu_top (
         .csr_rdata(csr_data),
         .exception_code(exception_code),
         .exception_mtval(exception_mtval),
+        .br_taken(br_redirect),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
     );
