@@ -110,7 +110,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         end
     end
     initial begin
-        #50000;
+        #10000;
         $display("Simulation timeout");
         $finish;
     end

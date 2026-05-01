@@ -54,7 +54,7 @@ module id_stage (
     logic ds_ready_go;
     logic load_use_hazard;
     logic raw_hazard;
-    assign ds_ready_go = !(load_use_hazard || raw_hazard); 
+    assign ds_ready_go = !load_use_hazard; 
     assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
     //握手协议
@@ -525,21 +525,12 @@ module id_stage (
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
         end else begin
-            // 保守策略：当前指令读取到上一条EXE写寄存器时停顿1拍，
-            // 统一等待到MEM前递/寄存器写回，避免地址/数据相关指令误用旧值。
             exe_load_use_hazard = ((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr)) ||
                                   (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr))) &&
                                   es_valid && exe_regfile_wen && prev_load;
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;
-    assign raw_hazard = ds_valid &&
-                        (((need_rs1 && (rs1_addr != 5'b0)) &&
-                          ((es_valid && exe_regfile_wen && (exe_dest_addr == rs1_addr)) ||
-                           (ms_valid && mem_regfile_wen && (mem_dest_addr == rs1_addr)))) ||
-                         ((need_rs2 && (rs2_addr != 5'b0)) &&
-                          ((es_valid && exe_regfile_wen && (exe_dest_addr == rs2_addr)) ||
-                           (ms_valid && mem_regfile_wen && (mem_dest_addr == rs2_addr)))));
 
 
 endmodule
