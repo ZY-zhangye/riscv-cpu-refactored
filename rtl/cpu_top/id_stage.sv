@@ -96,7 +96,9 @@ module id_stage (
 
     logic [`ADDR_WIDTH-1:0] id_pc;
     logic [`DATA_WIDTH-1:0] id_inst;
-    assign {id_inst, id_pc} = fs_to_ds_bus_r;
+    logic bp_pred_taken;
+    logic [`ADDR_WIDTH-1:0] bp_pred_target;
+    assign {id_inst, id_pc, bp_pred_taken, bp_pred_target} = fs_to_ds_bus_r;
 
     //译码逻辑
     logic [6:0] opcode;
@@ -431,7 +433,7 @@ module id_stage (
     assign br_jmp_imm = ({32{IMB_valid}} & imm_b_ext) | ({32{IMJ_valid}} & imm_j_ext) | ({32{IMI_valid && is_jalr}} & imm_i_ext);
     assign br_jmp_opcode = {inst_beq, inst_bne, inst_blt, inst_bge, inst_bltu, inst_bgeu};
     assign br_jmp_target = id_pc + br_jmp_imm;
-    assign br_jmp_packet = {br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr};
+    assign br_jmp_packet = {bp_pred_taken, bp_pred_target, br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr};
 
     //CTRL_PACKET打包
     logic [`CTRL_PACKET_WIDTH-1:0] ctrl_packet;

@@ -30,6 +30,13 @@ module cpu_top (
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus;
     logic br_taken;
     logic [31:0] br_target;
+    logic br_redirect;
+    logic [31:0] br_redirect_target;
+    logic bp_update_valid;
+    logic [31:0] bp_update_pc;
+    logic bp_update_taken;
+    logic [31:0] bp_update_target;
+    logic bp_update_is_jalr;
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
     logic exception_flag;
     logic [31:0] exception_addr;
@@ -96,8 +103,13 @@ module cpu_top (
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
-        .br_taken(br_taken),
-        .br_target(br_target),
+        .br_taken(br_redirect),
+        .br_target(br_redirect_target),
+        .bp_update_valid(bp_update_valid),
+        .bp_update_pc(bp_update_pc),
+        .bp_update_taken(bp_update_taken),
+        .bp_update_target(bp_update_target),
+        .bp_update_is_jalr(bp_update_is_jalr),
         .fs_exc_bus(fs_exc_bus),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
@@ -139,7 +151,7 @@ module cpu_top (
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
         .ms_valid(ms_valid),
-        .br_taken(br_taken),
+        .br_taken(br_redirect),
         .exception_flag(exception_flag),
         .fs_exc_bus(fs_exc_bus),
         .ds_exc_bus(ds_exc_bus)
@@ -170,6 +182,13 @@ module cpu_top (
         .exception_flag(exception_flag),
         .br_taken(br_taken),
         .br_target(br_target),
+        .br_redirect(br_redirect),
+        .br_redirect_target(br_redirect_target),
+        .bp_update_valid(bp_update_valid),
+        .bp_update_pc(bp_update_pc),
+        .bp_update_taken(bp_update_taken),
+        .bp_update_target(bp_update_target),
+        .bp_update_is_jalr(bp_update_is_jalr),
         .mem_result(mem_result),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus)

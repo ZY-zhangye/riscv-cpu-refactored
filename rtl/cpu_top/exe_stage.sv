@@ -35,7 +35,14 @@ module exe_stage(
     input logic exception_flag,
     //跳转接口
     output logic br_taken,
-    output logic [31:0] br_target
+    output logic [31:0] br_target,
+    output logic br_redirect,
+    output logic [31:0] br_redirect_target,
+    output logic bp_update_valid,
+    output logic [31:0] bp_update_pc,
+    output logic bp_update_taken,
+    output logic [31:0] bp_update_target,
+    output logic bp_update_is_jalr
 );
 
     logic es_ready_go;
@@ -134,7 +141,9 @@ module exe_stage(
     logic [31:0] br_jmp_target;
     logic [5:0] br_jmp_opcode;
     logic is_jal, is_jalr;
-    assign {br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr} = br_jmp_packet;
+    logic bp_pred_taken;
+    logic [31:0] bp_pred_target;
+    assign {bp_pred_taken, bp_pred_target, br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr} = br_jmp_packet;
     //CTRL_PACKET解包
     logic is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp;
     logic [4:0] rd_addr;
@@ -345,6 +354,17 @@ module exe_stage(
     assign jalr_sum = src1 + br_jmp_imm;
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
+
+    assign br_redirect = !es_flush && is_br_jmp &&
+                         ((br_taken != bp_pred_taken) ||
+                          (br_taken && (br_target != bp_pred_target)));
+    assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
+
+    assign bp_update_valid = es_valid && !es_flush && is_br_jmp;
+    assign bp_update_pc = exe_pc;
+    assign bp_update_taken = br_taken;
+    assign bp_update_target = br_target;
+    assign bp_update_is_jalr = is_jalr;
     //结果选择
     always_comb begin
         exe_result = 32'b0;
