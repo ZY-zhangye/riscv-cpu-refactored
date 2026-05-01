@@ -283,6 +283,7 @@ module cpu_top (
         .exception_code(exception_code),
         .exception_mtval(exception_mtval),
         .br_taken(br_redirect),
+        .ms_to_ws_valid(ms_to_ws_valid),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
     );

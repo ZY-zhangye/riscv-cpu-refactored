@@ -13,6 +13,7 @@ module regfile_csr (
     input logic [6:0] exception_code,
     input logic [31:0] exception_mtval,
     input logic br_taken,
+    input logic ms_to_ws_valid,
     output logic exception_flag,
     output logic [31:0] exception_addr
 );
@@ -21,12 +22,13 @@ module regfile_csr (
     logic mret_flag;
     logic prev_exception_flag;
     assign mret_flag = exception_code == 7'b100_0000; //仅当异常代码为MRET指令引起的异常时mret_flag才为1
-    logic [31:0] cycle,br_cnt,exception_cnt;
+    logic [31:0] cycle,br_cnt,exception_cnt,instret;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cycle <= 32'b0;
             br_cnt <= 32'b0;
             exception_cnt <= 32'b0;
+            instret <= 32'b0;
         end else begin
             cycle <= cycle + 1'b1; //每个时钟周期cycle自增
             if (br_taken) begin
@@ -34,6 +36,9 @@ module regfile_csr (
             end
             if (exception_code[5]) begin
                 exception_cnt <= exception_cnt + 1'b1; //每当发生异常时exception_cnt自增
+            end
+            if (ms_to_ws_valid) begin
+                instret <= instret + 1'b1; //每当指令写回阶段有效时instret自增
             end
         end
     end
@@ -102,7 +107,7 @@ module regfile_csr (
             `CSR_MIMPID: csr_rdata = mimpid;
             `CSR_MSCRATCH: csr_rdata = mscratch;
             `CSR_CYCLE: csr_rdata = cycle;
-            `CSR_INSTRET: csr_rdata = cycle - (exception_cnt * 3) - (br_cnt * 3); //假设每条指令都占用一个周期，异常和分支指令不计入指令计数
+            `CSR_INSTRET: csr_rdata = instret - (exception_cnt * 3) - (br_cnt * 3); //假设每条指令都占用一个周期，异常和分支指令不计入指令计数
             default: csr_rdata = 32'b0;
         endcase
         end
