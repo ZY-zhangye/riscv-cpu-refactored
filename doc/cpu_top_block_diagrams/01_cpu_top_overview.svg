@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#243447"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#1e63b6"/>
+    </marker>
+    <style>
+      .bg{fill:#f7f9fc}
+      .title{font:700 30px Arial, sans-serif;fill:#182536}
+      .subtitle{font:16px Arial, sans-serif;fill:#5a6878}
+      .box{fill:#ffffff;stroke:#243447;stroke-width:2;rx:8}
+      .stage{fill:#eaf3ff;stroke:#1e63b6;stroke-width:2;rx:8}
+      .store{fill:#fff5df;stroke:#b77a16;stroke-width:2;rx:8}
+      .csr{fill:#edf7ed;stroke:#3c8d46;stroke-width:2;rx:8}
+      .danger{fill:#fff0f0;stroke:#c34949;stroke-width:2;rx:8}
+      .txt{font:16px Arial, sans-serif;fill:#182536}
+      .small{font:13px Arial, sans-serif;fill:#334255}
+      .tiny{font:12px Arial, sans-serif;fill:#4c5a68}
+      .bus{stroke:#243447;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+      .ctrl{stroke:#1e63b6;stroke-width:2.2;fill:none;marker-end:url(#arrowBlue);stroke-dasharray:8 6}
+      .thin{stroke:#6d7782;stroke-width:1.6;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1500" height="900"/>
+  <text class="title" x="48" y="62">cpu_top.sv Top-Level Block Diagram</text>
+  <text class="subtitle" x="48" y="92">Five-stage RV32 pipeline, register files, CSR/exception block, memory interfaces and prediction redirect loop.</text>
+
+  <rect class="box" x="40" y="130" width="1420" height="690"/>
+  <text class="small" x="62" y="158">module cpu_top</text>
+
+  <rect class="stage" x="95" y="250" width="190" height="130"/>
+  <text class="txt" x="128" y="285">if_stage.sv</text>
+  <text class="tiny" x="124" y="312">PC select</text>
+  <text class="tiny" x="124" y="334">instruction fetch</text>
+  <text class="tiny" x="124" y="356">BTB prediction</text>
+
+  <rect class="stage" x="340" y="250" width="190" height="130"/>
+  <text class="txt" x="372" y="285">id_stage.sv</text>
+  <text class="tiny" x="374" y="312">decode</text>
+  <text class="tiny" x="374" y="334">packet build</text>
+  <text class="tiny" x="374" y="356">hazard/flush</text>
+
+  <rect class="stage" x="585" y="250" width="190" height="130"/>
+  <text class="txt" x="618" y="285">exe_stage.sv</text>
+  <text class="tiny" x="622" y="312">ALU/FPU/MUL</text>
+  <text class="tiny" x="622" y="334">branch resolve</text>
+  <text class="tiny" x="622" y="356">DMEM request</text>
+
+  <rect class="stage" x="830" y="250" width="190" height="130"/>
+  <text class="txt" x="858" y="285">mem_stage.sv</text>
+  <text class="tiny" x="868" y="312">load format</text>
+  <text class="tiny" x="868" y="334">align exception</text>
+  <text class="tiny" x="868" y="356">CSR writeback</text>
+
+  <rect class="stage" x="1075" y="250" width="190" height="130"/>
+  <text class="txt" x="1107" y="285">wb_stage.sv</text>
+  <text class="tiny" x="1118" y="312">retire latch</text>
+  <text class="tiny" x="1118" y="334">GPR/FPR write</text>
+  <text class="tiny" x="1118" y="356">debug output</text>
+
+  <path class="bus" d="M285 315 H340"/>
+  <text class="tiny" x="292" y="300">FS_DS bus</text>
+  <path class="bus" d="M530 315 H585"/>
+  <text class="tiny" x="536" y="300">DS_ES bus</text>
+  <path class="bus" d="M775 315 H830"/>
+  <text class="tiny" x="783" y="300">ES_MS bus</text>
+  <path class="bus" d="M1020 315 H1075"/>
+  <text class="tiny" x="1028" y="300">MS_WS bus</text>
+
+  <rect class="store" x="95" y="470" width="210" height="100"/>
+  <text class="txt" x="127" y="505">regfiles.sv</text>
+  <text class="tiny" x="126" y="532">x0-x31, 2R1W</text>
+  <rect class="store" x="350" y="470" width="210" height="100"/>
+  <text class="txt" x="386" y="505">reg_fpu.sv</text>
+  <text class="tiny" x="376" y="532">f0-f31, 3rd read latched</text>
+  <rect class="csr" x="605" y="470" width="250" height="120"/>
+  <text class="txt" x="644" y="505">regfile_csr.sv</text>
+  <text class="tiny" x="633" y="532">mstatus/mtvec/mepc...</text>
+  <text class="tiny" x="633" y="554">cycle, instret, exception PC</text>
+
+  <path class="thin" d="M435 380 V430 H200 V470"/>
+  <text class="tiny" x="235" y="448">rs1/rs2 read addr</text>
+  <path class="thin" d="M305 510 H340"/>
+  <text class="tiny" x="300" y="497">read data</text>
+  <path class="thin" d="M435 380 V445 H455 V470"/>
+  <text class="tiny" x="456" y="448">FPU rs addr</text>
+  <path class="thin" d="M560 520 H585"/>
+  <text class="tiny" x="560" y="506">FPU data</text>
+  <path class="thin" d="M435 380 V610 H730 V590"/>
+  <text class="tiny" x="508" y="606">CSR read addr/data</text>
+
+  <path class="thin" d="M1170 380 V660 H200 V570"/>
+  <text class="tiny" x="695" y="682">writeback: regfile_wen, rd, wdata</text>
+  <path class="thin" d="M1170 660 H455 V570"/>
+  <path class="thin" d="M925 380 V622 H730 V590"/>
+  <text class="tiny" x="766" y="616">csr_we / exception code</text>
+
+  <rect class="box" x="95" y="675" width="260" height="90"/>
+  <text class="txt" x="126" y="710">Instruction Memory IF</text>
+  <text class="tiny" x="126" y="736">imem_addr, imem_en, imem_rdata</text>
+  <path class="bus" d="M185 675 V380"/>
+  <text class="tiny" x="202" y="650">fetch request/data</text>
+
+  <rect class="box" x="900" y="675" width="280" height="90"/>
+  <text class="txt" x="955" y="710">Data Memory IF</text>
+  <text class="tiny" x="936" y="736">dmem_addr/wen/en/wdata/rdata</text>
+  <path class="bus" d="M680 380 V720 H900"/>
+  <path class="bus" d="M1040 675 V380"/>
+  <text class="tiny" x="724" y="704">load/store request</text>
+  <text class="tiny" x="1054" y="650">load data</text>
+
+  <path class="ctrl" d="M680 250 V185 H190 V250"/>
+  <text class="tiny" x="380" y="174">br_redirect / br_redirect_target</text>
+  <path class="ctrl" d="M680 250 C650 170, 270 170, 190 250"/>
+  <text class="tiny" x="350" y="208">bp_update_*</text>
+  <path class="ctrl" d="M730 470 V430 H190 V250"/>
+  <text class="tiny" x="755" y="436">exception_flag / exception_addr</text>
+
+  <rect class="danger" x="1230" y="470" width="170" height="120"/>
+  <text class="txt" x="1253" y="505">Flush Paths</text>
+  <text class="tiny" x="1252" y="532">branch redirect</text>
+  <text class="tiny" x="1252" y="554">exception</text>
+  <text class="tiny" x="1252" y="576">mret</text>
+  <path class="ctrl" d="M1230 530 H1020"/>
+  <path class="ctrl" d="M1230 550 H775"/>
+  <path class="ctrl" d="M1230 570 H530"/>
+
+  <rect class="box" x="1190" y="675" width="210" height="90"/>
+  <text class="txt" x="1234" y="710">Debug Ports</text>
+  <text class="tiny" x="1218" y="736">DEBUG_EN guarded signals</text>
+  <path class="thin" d="M1170 380 V675"/>
+</svg>

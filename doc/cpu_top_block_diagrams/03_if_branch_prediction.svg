@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="850" viewBox="0 0 1400 850">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#26323f"/>
+    </marker>
+    <style>
+      .bg{fill:#f8fafc}
+      .title{font:700 30px Arial,sans-serif;fill:#172334}
+      .sub{font:14px Arial,sans-serif;fill:#5b6572}
+      .box{fill:#fff;stroke:#26323f;stroke-width:2;rx:8}
+      .stage{fill:#eaf3ff;stroke:#1e63b6;stroke-width:2;rx:8}
+      .pred{fill:#edf7ed;stroke:#3c8d46;stroke-width:2;rx:8}
+      .reg{fill:#fff3d8;stroke:#aa761d;stroke-width:2;rx:8}
+      .flush{fill:#fff0f0;stroke:#c34949;stroke-width:2;rx:8}
+      .txt{font:16px Arial,sans-serif;fill:#172334}
+      .small{font:12px Arial,sans-serif;fill:#334255}
+      .bus{stroke:#26323f;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+      .ctrl{stroke:#1e63b6;stroke-width:2.2;fill:none;marker-end:url(#arrow);stroke-dasharray:8 6}
+      .green{stroke:#3c8d46;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect class="bg" width="1400" height="850"/>
+  <text class="title" x="42" y="58">if_stage.sv Fetch and Branch Prediction</text>
+  <text class="sub" x="42" y="86">Synchronous fetch-friendly PC generation with redirect register and 16-entry direct-mapped target predictor.</text>
+
+  <rect class="box" x="55" y="125" width="1290" height="640"/>
+  <text class="small" x="76" y="154">module if_stage</text>
+
+  <rect class="reg" x="105" y="250" width="165" height="110"/>
+  <text class="txt" x="142" y="286">fs_pc</text>
+  <text class="small" x="133" y="312">PC_START - 4</text>
+  <text class="small" x="127" y="334">updates on fs_allowin</text>
+
+  <rect class="box" x="335" y="210" width="220" height="180"/>
+  <text class="txt" x="380" y="245">PC Select</text>
+  <text class="small" x="370" y="274">1. exception_addr</text>
+  <text class="small" x="370" y="296">2. br_target_reg</text>
+  <text class="small" x="370" y="318">3. bp_pred_target</text>
+  <text class="small" x="370" y="340">4. fs_out_pc + 4</text>
+
+  <rect class="pred" x="650" y="170" width="260" height="230"/>
+  <text class="txt" x="714" y="206">BTB Predictor</text>
+  <text class="small" x="688" y="236">16 entries, index pc[5:2]</text>
+  <text class="small" x="688" y="258">valid / taken / tag / target</text>
+  <text class="small" x="688" y="280">lookup from fs_out_pc</text>
+  <text class="small" x="688" y="302">update from EXE stage</text>
+  <text class="small" x="688" y="324">JALR excluded from update</text>
+
+  <rect class="reg" x="990" y="195" width="180" height="120"/>
+  <text class="txt" x="1019" y="231">redirect regs</text>
+  <text class="small" x="1024" y="258">br_taken_reg</text>
+  <text class="small" x="1024" y="280">br_target_reg</text>
+
+  <rect class="stage" x="335" y="480" width="220" height="120"/>
+  <text class="txt" x="384" y="516">Fetch Output</text>
+  <text class="small" x="371" y="546">pc_out = next_pc</text>
+  <text class="small" x="371" y="568">inst_ren = fs_allowin</text>
+
+  <rect class="flush" x="650" y="500" width="260" height="100"/>
+  <text class="txt" x="700" y="536">NOP Injection</text>
+  <text class="small" x="687" y="566">redirect cycle masks inst_in</text>
+
+  <rect class="reg" x="990" y="455" width="225" height="160"/>
+  <text class="txt" x="1034" y="492">FS to DS Bus</text>
+  <text class="small" x="1030" y="522">instruction</text>
+  <text class="small" x="1030" y="544">pc</text>
+  <text class="small" x="1030" y="566">bp_pred_taken</text>
+  <text class="small" x="1030" y="588">bp_pred_target</text>
+
+  <rect class="box" x="105" y="530" width="165" height="90"/>
+  <text class="txt" x="135" y="565">Handshake</text>
+  <text class="small" x="128" y="592">fs_valid / allowin</text>
+
+  <path class="bus" d="M270 305 H335"/>
+  <text class="small" x="277" y="291">fs_out_pc</text>
+  <path class="bus" d="M555 300 H650"/>
+  <text class="small" x="578" y="285">lookup</text>
+  <path class="green" d="M780 400 V442 H510 V390"/>
+  <text class="small" x="574" y="433">bp_pred_taken / target</text>
+  <path class="ctrl" d="M1170 255 H555"/>
+  <text class="small" x="838" y="246">registered redirect priority</text>
+  <path class="bus" d="M445 390 V480"/>
+  <path class="bus" d="M555 540 H650"/>
+  <path class="bus" d="M910 550 H990"/>
+  <path class="bus" d="M1215 535 H1285"/>
+  <text class="small" x="1235" y="521">fs_to_ds_bus</text>
+
+  <path class="ctrl" d="M1180 125 V195"/>
+  <text class="small" x="1190" y="158">br_taken / br_target</text>
+  <path class="ctrl" d="M910 190 C990 80, 1230 84, 1230 195"/>
+  <text class="small" x="1002" y="104">bp_update_valid/pc/taken/target/is_jalr</text>
+  <path class="ctrl" d="M1290 125 V470 H1215"/>
+  <text class="small" x="1190" y="448">exception redirect</text>
+
+  <rect class="box" x="105" y="675" width="1090" height="48"/>
+  <text class="small" x="130" y="705">Timing note captured in image: IF keeps a registered redirect path before PC selection, matching the timing-oriented extra stage in the current RTL.</text>
+</svg>

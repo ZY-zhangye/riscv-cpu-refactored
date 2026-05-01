@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1550" height="930" viewBox="0 0 1550 930">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#26323f"/>
+    </marker>
+    <style>
+      .bg{fill:#f8fafc}
+      .title{font:700 30px Arial,sans-serif;fill:#172334}
+      .sub{font:14px Arial,sans-serif;fill:#5b6572}
+      .box{fill:#fff;stroke:#26323f;stroke-width:2;rx:8}
+      .stage{fill:#eaf3ff;stroke:#1e63b6;stroke-width:2;rx:8}
+      .unit{fill:#edf7ed;stroke:#3c8d46;stroke-width:2;rx:8}
+      .reg{fill:#fff3d8;stroke:#aa761d;stroke-width:2;rx:8}
+      .warn{fill:#fff0f0;stroke:#c34949;stroke-width:2;rx:8}
+      .txt{font:16px Arial,sans-serif;fill:#172334}
+      .small{font:12px Arial,sans-serif;fill:#334255}
+      .bus{stroke:#26323f;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+      .ctrl{stroke:#1e63b6;stroke-width:2.2;fill:none;marker-end:url(#arrow);stroke-dasharray:8 6}
+      .green{stroke:#3c8d46;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect class="bg" width="1550" height="930"/>
+  <text class="title" x="42" y="58">EXE, MEM and WB Detail</text>
+  <text class="sub" x="42" y="86">Execution resources, memory formatting, CSR commit, exception handling and writeback flow.</text>
+
+  <rect class="stage" x="60" y="145" width="570" height="625"/>
+  <text class="txt" x="275" y="180">exe_stage.sv</text>
+  <rect class="reg" x="90" y="215" width="165" height="85"/>
+  <text class="small" x="126" y="250">DS/ES latch</text>
+  <text class="small" x="116" y="274">packets + ds_exc</text>
+  <rect class="box" x="295" y="205" width="145" height="95"/>
+  <text class="small" x="326" y="240">unpack</text>
+  <text class="small" x="316" y="264">ALU/FPU/MUL</text>
+  <text class="small" x="316" y="286">MEM/CSR/BR</text>
+  <rect class="box" x="470" y="205" width="125" height="95"/>
+  <text class="small" x="499" y="244">operand</text>
+  <text class="small" x="512" y="266">mux</text>
+  <text class="small" x="491" y="288">forward select</text>
+
+  <rect class="unit" x="100" y="360" width="145" height="80"/>
+  <text class="txt" x="137" y="394">ALU</text>
+  <text class="small" x="126" y="420">add/sub/logic</text>
+  <rect class="unit" x="275" y="360" width="145" height="80"/>
+  <text class="txt" x="319" y="394">mul.sv</text>
+  <text class="small" x="301" y="420">mul/div/rem</text>
+  <rect class="unit" x="450" y="360" width="145" height="80"/>
+  <text class="txt" x="493" y="394">fpu.sv</text>
+  <text class="small" x="482" y="420">placeholder zero</text>
+
+  <rect class="unit" x="275" y="485" width="145" height="95"/>
+  <text class="txt" x="305" y="520">divider.sv</text>
+  <text class="small" x="300" y="546">AXI Stream-like</text>
+  <text class="small" x="312" y="566">10-cycle model</text>
+  <path class="green" d="M347 440 V485"/>
+
+  <rect class="box" x="100" y="640" width="180" height="85"/>
+  <text class="small" x="137" y="675">DMEM request</text>
+  <text class="small" x="122" y="699">addr/wdata/byte wen</text>
+  <rect class="box" x="330" y="640" width="245" height="85"/>
+  <text class="small" x="374" y="675">branch and predictor update</text>
+  <text class="small" x="364" y="699">redirect when prediction mismatches</text>
+
+  <rect class="stage" x="690" y="145" width="360" height="625"/>
+  <text class="txt" x="812" y="180">mem_stage.sv</text>
+  <rect class="reg" x="720" y="215" width="150" height="95"/>
+  <text class="small" x="760" y="250">ES/MS latch</text>
+  <text class="small" x="744" y="274">pc/result/load/csr</text>
+  <rect class="box" x="895" y="215" width="125" height="95"/>
+  <text class="small" x="921" y="250">load mux</text>
+  <text class="small" x="916" y="274">LB/LH/LW</text>
+  <rect class="warn" x="735" y="360" width="270" height="95"/>
+  <text class="txt" x="793" y="394">Exception Detect</text>
+  <text class="small" x="766" y="420">IAM / LAM / SAM, mtval source</text>
+  <rect class="box" x="735" y="500" width="270" height="95"/>
+  <text class="txt" x="815" y="534">CSR Commit</text>
+  <text class="small" x="772" y="560">csr_we, csr_waddr, csr_wdata</text>
+  <rect class="reg" x="785" y="645" width="170" height="85"/>
+  <text class="small" x="828" y="680">MS/WS bus</text>
+  <text class="small" x="812" y="704">pc/result/rd/wen</text>
+
+  <rect class="stage" x="1110" y="300" width="260" height="230"/>
+  <text class="txt" x="1190" y="335">wb_stage.sv</text>
+  <rect class="reg" x="1150" y="370" width="180" height="70"/>
+  <text class="small" x="1192" y="410">WS latch</text>
+  <rect class="box" x="1150" y="455" width="180" height="50"/>
+  <text class="small" x="1184" y="486">writeback outputs</text>
+
+  <rect class="box" x="1110" y="625" width="260" height="105"/>
+  <text class="txt" x="1188" y="660">Targets</text>
+  <text class="small" x="1154" y="688">regfiles.sv / reg_fpu.sv</text>
+  <text class="small" x="1154" y="710">DEBUG_EN retire ports</text>
+
+  <path class="bus" d="M255 257 H295"/>
+  <path class="bus" d="M440 252 H470"/>
+  <path class="bus" d="M532 300 V340 H172 V360"/>
+  <path class="bus" d="M532 300 V340 H347 V360"/>
+  <path class="bus" d="M532 300 V340 H522 V360"/>
+  <path class="bus" d="M172 440 V640"/>
+  <path class="bus" d="M347 580 V620 H452 V640"/>
+  <path class="ctrl" d="M452 725 C570 800, 890 810, 1210 530"/>
+  <text class="small" x="650" y="810">br_redirect, bp_update, flush feedback to earlier stages</text>
+  <path class="bus" d="M630 375 H690"/>
+  <text class="small" x="634" y="360">ES_MS bus</text>
+  <path class="bus" d="M870 260 H895"/>
+  <path class="bus" d="M958 310 V360"/>
+  <path class="bus" d="M870 455 V500"/>
+  <path class="bus" d="M870 595 V645"/>
+  <path class="bus" d="M955 687 H1110 V405 H1150"/>
+  <path class="bus" d="M1240 505 V625"/>
+  <path class="bus" d="M190 725 V815 H895 V730"/>
+  <text class="small" x="382" y="839">dmem_addr / dmem_wdata / dmem_wen / dmem_en</text>
+  <path class="bus" d="M995 260 H1070 V815 H895 V730"/>
+  <text class="small" x="1010" y="839">dmem_rdata load return</text>
+  <path class="ctrl" d="M870 500 C800 595, 690 620, 620 725"/>
+  <text class="small" x="642" y="620">exception_code / exception_mtval</text>
+</svg>
