@@ -169,6 +169,93 @@ module id_stage (
     assign f7_0000001 = (funct7 == 7'b0000001);
     assign f7_0011000 = (funct7 == 7'b0011000);
 
+    //Z-bitman指令
+    `ifdef Z_BITMAIN_ENABLE
+    logic is_bitman;
+    logic is_bitman_imm;
+    assign is_bitman = (opcode == 7'b0110011);
+    assign is_bitman_imm = (opcode == 7'b0010011);
+    //定义Z-bitman指令
+    logic inst_sh1add, inst_sh2add, inst_sh3add;
+    logic inst_andn, inst_orn, inst_xnor;
+    logic inst_min, inst_max, inst_minu, inst_maxu;
+    logic inst_sextb, inst_sexth, inst_zexth;
+    logic inst_orcb, inst_rev8, inst_brev8, inst_pack, inst_packh, inst_zip, inst_unzip;
+    logic inst_bclr, inst_bclri, inst_bext, inst_bexti, inst_binv, inst_binvi, inst_bset, inst_bseti;
+    logic inst_bitman_any;
+    logic inst_bitman_imm_inst;
+    logic inst_bitman_rs2_inst;
+    logic [`BITMAN_OP_WIDTH-1:0] bitman_op;
+    logic [`BITMAN_PACKET_WIDTH-1:0] bitman_packet;
+
+    assign inst_sh1add = is_bitman && f3_010 && (id_inst[31:25] == 7'b0010000);
+    assign inst_sh2add = is_bitman && f3_100 && (id_inst[31:25] == 7'b0010000);
+    assign inst_sh3add = is_bitman && f3_110 && (id_inst[31:25] == 7'b0010000);
+
+    assign inst_andn = is_bitman && f3_111 && (id_inst[31:25] == 7'b0100000);
+    assign inst_orn  = is_bitman && f3_110 && (id_inst[31:25] == 7'b0100000);
+    assign inst_xnor = is_bitman && f3_100 && (id_inst[31:25] == 7'b0100000);
+
+    assign inst_max  = is_bitman && f3_110 && (id_inst[31:25] == 7'b0000101);
+    assign inst_maxu = is_bitman && f3_111 && (id_inst[31:25] == 7'b0000101);
+    assign inst_min  = is_bitman && f3_100 && (id_inst[31:25] == 7'b0000101);
+    assign inst_minu = is_bitman && f3_101 && (id_inst[31:25] == 7'b0000101);
+
+    assign inst_sextb = is_bitman_imm && f3_001 && (id_inst[31:20] == 12'h604);
+    assign inst_sexth = is_bitman_imm && f3_001 && (id_inst[31:20] == 12'h605);
+    assign inst_zexth = is_bitman && f3_100 && (id_inst[31:25] == 7'b0000100) && (id_inst[24:20] == 5'b00000);
+
+    assign inst_orcb  = is_bitman_imm && f3_101 && (id_inst[31:20] == 12'h287);
+    assign inst_rev8  = is_bitman_imm && f3_101 && (id_inst[31:20] == 12'h698);
+    assign inst_brev8 = is_bitman_imm && f3_101 && (id_inst[31:20] == 12'h687);
+    assign inst_pack  = is_bitman && f3_100 && (id_inst[31:25] == 7'b0000100) && (id_inst[24:20] != 5'b00000);
+    assign inst_packh = is_bitman && f3_111 && (id_inst[31:25] == 7'b0000100);
+    assign inst_zip   = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0000100) && (id_inst[24:20] == 5'b01111);
+    assign inst_unzip = is_bitman_imm && f3_101 && (id_inst[31:25] == 7'b0000100) && (id_inst[24:20] == 5'b01111);
+
+    assign inst_bclr  = is_bitman && f3_001 && (id_inst[31:25] == 7'b0100100);
+    assign inst_bclri = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0100100);
+    assign inst_bext  = is_bitman && f3_101 && (id_inst[31:25] == 7'b0100100);
+    assign inst_bexti = is_bitman_imm && f3_101 && (id_inst[31:25] == 7'b0100100);
+    assign inst_binv  = is_bitman && f3_001 && (id_inst[31:25] == 7'b0110100);
+    assign inst_binvi = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0110100);
+    assign inst_bset  = is_bitman && f3_001 && (id_inst[31:25] == 7'b0010100);
+    assign inst_bseti = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0010100);
+
+    assign inst_bitman_any = inst_sh1add || inst_sh2add || inst_sh3add ||
+                             inst_andn || inst_orn || inst_xnor ||
+                             inst_min || inst_max || inst_minu || inst_maxu ||
+                             inst_sextb || inst_sexth || inst_zexth ||
+                             inst_orcb || inst_rev8 || inst_brev8 ||
+                             inst_pack || inst_packh || inst_zip || inst_unzip ||
+                             inst_bclr || inst_bclri || inst_bext || inst_bexti ||
+                             inst_binv || inst_binvi || inst_bset || inst_bseti;
+    assign inst_bitman_imm_inst = inst_bclri || inst_bexti || inst_binvi || inst_bseti;
+    assign inst_bitman_rs2_inst = inst_sh1add || inst_sh2add || inst_sh3add ||
+                                  inst_andn || inst_orn || inst_xnor ||
+                                  inst_min || inst_max || inst_minu || inst_maxu ||
+                                  inst_pack || inst_packh ||
+                                  inst_bclr || inst_bext || inst_binv || inst_bset;
+    assign bitman_op = {
+        inst_sh1add, inst_sh2add, inst_sh3add,
+        inst_andn, inst_orn, inst_xnor,
+        inst_min, inst_max, inst_minu, inst_maxu,
+        inst_sextb, inst_sexth, inst_zexth,
+        inst_orcb, inst_rev8, inst_brev8,
+        inst_pack, inst_packh, inst_zip, inst_unzip,
+        inst_bclr, inst_bclri, inst_bext, inst_bexti,
+        inst_binv, inst_binvi, inst_bset, inst_bseti
+    };
+    assign bitman_packet = bitman_op;
+    `else
+    logic inst_bitman_any;
+    logic inst_bitman_imm_inst;
+    logic inst_bitman_rs2_inst;
+    assign inst_bitman_any = 1'b0;
+    assign inst_bitman_imm_inst = 1'b0;
+    assign inst_bitman_rs2_inst = 1'b0;
+    `endif
+
     //加载指令--opcode=0000011
     logic inst_lw , inst_lb , inst_lh , inst_lbu , inst_lhu ;
     assign inst_lw  = is_load && f3_010;
@@ -440,7 +527,7 @@ module id_stage (
 
     //CTRL_PACKET打包
     logic [`CTRL_PACKET_WIDTH-1:0] ctrl_packet;
-    logic is_alu_inst , is_fpu_inst , is_mul_inst , is_mem_inst , is_csr_inst , is_br_jmp_inst;
+    logic is_alu_inst , is_fpu_inst , is_mul_inst , is_mem_inst , is_csr_inst , is_br_jmp_inst , is_bitman_inst;
     logic [4:0] ctrl_rd_addr;
     logic ctrl_regfile_wen;
     logic ctrl_reg_fpu_wen;
@@ -448,6 +535,7 @@ module id_stage (
     logic wb_exe_result;
     logic wb_mem_result;
     logic [1:0] exe_result_sel;
+    assign is_bitman_inst = inst_bitman_any;
     assign is_alu_inst = alu_add || alu_sub || alu_and || alu_or || alu_xor || alu_sll || alu_srl || alu_sra || alu_slt || alu_sltu;
     assign is_fpu_inst = inst_fadd_s || inst_fsub_s || inst_fmul_s || inst_fdiv_s || inst_fsqrt_s || inst_fmin_s || inst_fmax_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
                          inst_fcvt_w_s  || inst_fcvt_wu_s || inst_fcvt_s_w  || inst_fcvt_s_wu ||
@@ -460,7 +548,7 @@ module id_stage (
     assign is_csr_inst = inst_csrrw || inst_csrrs || inst_csrrc || inst_csrrwi || inst_csrrsi || inst_csrrci;
     assign is_br_jmp_inst = is_branch || is_jal || is_jalr;
     assign ctrl_rd_addr = rd_addr;
-    assign ctrl_regfile_wen = is_alu_inst || is_fpu_inst || is_mul_inst || is_load || inst_flw || is_csr_inst || is_jal || is_jalr;
+    assign ctrl_regfile_wen = is_alu_inst || is_fpu_inst || is_mul_inst || is_load || inst_flw || is_csr_inst || is_jal || is_jalr || is_bitman_inst;
     assign ctrl_reg_fpu_wen = is_fpu_inst;
     assign is_multicycle_inst = (inst_fdiv_s || inst_fsqrt_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
                            inst_fcvt_w_s  || inst_fcvt_wu_s || inst_fcvt_s_w  || inst_fcvt_s_wu ||
@@ -469,10 +557,10 @@ module id_stage (
                            inst_flt_s     || inst_fle_s     || inst_feq_s     ||
                            inst_fclass_s  ||
                            ((inst_mul || inst_mulh || inst_mulhsu || inst_mulhu) && `MUL_MULTICYCLE_ENABLE) || inst_div || inst_divu || inst_rem || inst_remu) && `MULTICYCLE_ENABLE;
-    assign wb_exe_result = is_alu_inst || is_fpu_inst || is_mul_inst || is_csr_inst || is_jal || is_jalr;
+    assign wb_exe_result = is_alu_inst || is_fpu_inst || is_mul_inst || is_csr_inst || is_jal || is_jalr || is_bitman_inst;
     assign wb_mem_result = is_mem_inst;
     assign exe_result_sel = {wb_exe_result, wb_mem_result};
-    assign ctrl_packet = {id_pc,exe_result_sel,is_alu_inst, is_fpu_inst, is_mul_inst, is_mem_inst, is_csr_inst, is_br_jmp_inst, ctrl_rd_addr, ctrl_regfile_wen, ctrl_reg_fpu_wen, is_multicycle_inst};
+    assign ctrl_packet = {id_pc,exe_result_sel,is_bitman_inst, is_alu_inst, is_fpu_inst, is_mul_inst, is_mem_inst, is_csr_inst, is_br_jmp_inst, ctrl_rd_addr, ctrl_regfile_wen, ctrl_reg_fpu_wen, is_multicycle_inst};
 
     //SRC_PACKET打包
     logic [`SRC_PACKET_WIDTH-1:0] src_packet;
@@ -482,18 +570,23 @@ module id_stage (
                       (rs1_addr != 5'b0) ?
                       ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
                        (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00;
-    assign src2_fwd = alu_src2_imm_sel ? 2'b00 :
+    assign src2_fwd = (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) ? 2'b00 :
                       (rs2_addr != 5'b0) ?
                       ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
                        (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
     assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
                       inst_auipc ? id_pc : src1;
-    assign reg_src2 = alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2;
+    assign reg_src2 = inst_bitman_imm_inst ? {27'b0, id_inst[24:20]} :
+                      alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2;
     assign src_packet = {reg_src1, reg_src2, src1_fwd, src2_fwd};
 
     //输出到下一级
+    `ifdef Z_BITMAIN_ENABLE
+    assign ds_to_es_bus = {bitman_packet, alu_packet, fpu_packet, mul_packet, mem_packet, csr_packet, br_jmp_packet, ctrl_packet , src_packet};
+    `else
     assign ds_to_es_bus = {alu_packet, fpu_packet, mul_packet, mem_packet, csr_packet, br_jmp_packet, ctrl_packet , src_packet};
+    `endif
 
     //异常处理
     logic [6:0] exc_code;

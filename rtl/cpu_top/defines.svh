@@ -2,6 +2,9 @@
 `define __DEFINES_SVH__
 
 // This file contains all the defines used in the CPU design. It is included in all the files in the design.
+`define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
+`define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
+`define Z_BITMAIN_ENABLE 1'b1   //是否启用Z-bitman指令集扩展，1为启用，0为不启用
 //定义位宽
 `define DATA_WIDTH 32
 `define ADDR_WIDTH 32
@@ -15,10 +18,17 @@
 `define MUL_PACKET_WIDTH (4+1+1)
 `define MEM_PACKET_WIDTH (32+5+1)
 `define CSR_PACKET_WIDTH (32+32+12+3+1+1+1)
-`define CTRL_PACKET_WIDTH (32+2+6+5+3)
 `define BR_JMP_PACKET_WIDTH (32+32+32+6+2+1)
 `define SRC_PACKET_WIDTH (32+32+2+2)
-`define DS_ES_WIDTH (`ALU_PACKET_WIDTH + `FPU_PACKET_WIDTH + `MUL_PACKET_WIDTH + `MEM_PACKET_WIDTH + `CSR_PACKET_WIDTH + `CTRL_PACKET_WIDTH + `BR_JMP_PACKET_WIDTH + `SRC_PACKET_WIDTH)
+`ifdef Z_BITMAIN_ENABLE
+    `define BITMAN_OP_WIDTH 28
+    `define BITMAN_PACKET_WIDTH (`BITMAN_OP_WIDTH)
+    `define CTRL_PACKET_WIDTH (32+2+7+5+3)
+`else
+    `define BITMAN_PACKET_WIDTH 0
+    `define CTRL_PACKET_WIDTH (32+2+6+5+3)
+`endif
+`define DS_ES_WIDTH (`ALU_PACKET_WIDTH + `FPU_PACKET_WIDTH + `MUL_PACKET_WIDTH + `MEM_PACKET_WIDTH + `CSR_PACKET_WIDTH + `CTRL_PACKET_WIDTH + `BR_JMP_PACKET_WIDTH + `SRC_PACKET_WIDTH + `BITMAN_PACKET_WIDTH)
 
 `define ES_MS_WIDTH (32+32+6+5+1+1+2+1+12+32)
 `define ALU_OP_ADD 10'b10_0000_0000
@@ -87,8 +97,6 @@
 
 
 `define NOP_INST 32'h0000_0013
-`define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
-`define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
 
 
 //定义地址信息
