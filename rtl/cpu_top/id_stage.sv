@@ -423,7 +423,9 @@ module id_stage (
     assign csr_op = {(inst_csrrw || inst_csrrwi) , (inst_csrrs || inst_csrrsi) , (inst_csrrc || inst_csrrci)};
     assign csr_imm_sel = inst_csrrwi || inst_csrrsi || inst_csrrci;
     assign csr_rdata_fwd = (exe_csr_wen && (exe_csr_addr == csr_addr)) ? 1'b1 : 1'b0;
-    assign csr_wen = inst_csrrw || inst_csrrs || inst_csrrc || inst_csrrwi || inst_csrrsi || inst_csrrci;
+    assign csr_wen = inst_csrrw || inst_csrrwi ||
+                     ((inst_csrrs || inst_csrrc) && (rs1_addr != 5'b0)) ||
+                     ((inst_csrrsi || inst_csrrci) && (imm_z != 5'b0));
     assign csr_packet = {csr_rdata, csr_imm, csr_waddr, csr_op, csr_imm_sel, csr_rdata_fwd, csr_wen};
 
     //BR_JMP_PACKET打包

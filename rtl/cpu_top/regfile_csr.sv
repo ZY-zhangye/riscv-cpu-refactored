@@ -80,6 +80,8 @@ module regfile_csr (
             mepc <= csr_wdata; //当发生异常时将异常发生的指令地址写入mepc寄存器
             mcause <= {27'b0, exception_code[4:0]}; //将异常代码写入mcause寄存器
             mtval <= exception_mtval; //将异常相关的值写入mtval寄存器
+            mstatus[7] <= mstatus[3]; // trap入口：MPIE保存进入trap前的MIE
+            mstatus[3] <= 1'b0; // trap入口：关闭MIE
         end else if (mret_flag) begin
             mstatus [3] <= mstatus[7]; //将mstatus寄存器中的MIE位恢复到MIE位之前的值
             mstatus [7] <= 1'b1; //将mstatus寄存器中的MIE位设置为1，允许中断

@@ -33,6 +33,8 @@ module my_cpu (
     logic [31:0] dmem_wdata;
 
     logic ram_sel;
+    logic bench_ram_sel;
+    logic official_dram_sel;
     logic uart_sel;
     logic led_sel;
     logic seg_sel;
@@ -55,7 +57,9 @@ module my_cpu (
     logic [31:0] cpu_debug_data;
     `endif
 
-    assign ram_sel = dmem_en && (dmem_addr[31:28] == 4'h6);
+    assign bench_ram_sel = dmem_en && (dmem_addr[31:28] == 4'h6);
+    assign official_dram_sel = dmem_en && (dmem_addr >= 32'h8010_0000) && (dmem_addr <= 32'h8013_FFFF);
+    assign ram_sel = bench_ram_sel || official_dram_sel;
     assign uart_sel = dmem_en && (dmem_addr[31:4] == UART_BASE[31:4]);
     assign led_sel = dmem_en && (dmem_addr == `LED_ADDR);
     assign seg_sel = dmem_en && (dmem_addr == `SEG_ADDR);
