@@ -106,7 +106,7 @@ module if_stage (
     end
 
     assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag), bp_pred_target};

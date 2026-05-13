@@ -128,6 +128,6 @@ module regfile_csr (
     logic mret_jmp_flag;
     assign mret_jmp_flag = mret_flag && prev_exception_flag; //仅当mret_flag为1且之前发生过异常时mret_jmp_flag才为1
     assign exception_flag = exception_code[5] || mret_jmp_flag;
-    assign exception_addr = mret_jmp_flag ? mepc : mtvec; //当mret_jmp_flag为1时异常地址为mepc，否则为mtvec
+    assign exception_addr = mret_jmp_flag ? {mepc[31:2], 2'b0} : mtvec; //当mret_jmp_flag为1时异常地址为mepc，否则为mtvec
 
 endmodule
