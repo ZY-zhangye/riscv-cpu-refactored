@@ -1,0 +1,636 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1780"
+   height="980"
+   viewBox="0 0 1780 980"
+   version="1.1"
+   id="svg57"
+   sodipodi:docname="hazard_forwarding_mechanism.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview57"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.0377551"
+     inkscape:cx="844.12979"
+     inkscape:cy="456.27335"
+     inkscape:window-width="2880"
+     inkscape:window-height="1514"
+     inkscape:window-x="3349"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg57" />
+  <defs
+     id="defs5">
+    <marker
+       id="arr-data"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M0,0 L10,5 L0,10 Z"
+         fill="#2f8cff"
+         id="path1" />
+    </marker>
+    <marker
+       id="arr-fwd"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M0,0 L10,5 L0,10 Z"
+         fill="#00d05a"
+         id="path2" />
+    </marker>
+    <marker
+       id="arr-ctrl"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M0,0 L10,5 L0,10 Z"
+         fill="#ff00d4"
+         id="path3" />
+    </marker>
+    <marker
+       id="arr-stall"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M0,0 L10,5 L0,10 Z"
+         fill="#f6c000"
+         id="path4" />
+    </marker>
+    <marker
+       id="arr-flush"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M0,0 L10,5 L0,10 Z"
+         fill="#ff4b4b"
+         id="path5" />
+    </marker>
+    <style
+       id="style5">
+      text { font-family: &quot;Microsoft YaHei&quot;, &quot;SimHei&quot;, Arial, sans-serif; }
+      .title { fill: #ffffff; font-size: 31px; font-weight: 700; }
+      .sub { fill: #cbd5e1; font-size: 15px; }
+      .block { fill: #dcecff; stroke: #89c7ff; stroke-width: 2; }
+      .pipe { fill: #eef2f7; stroke: #ffffff; stroke-width: 2; }
+      .mux { fill: #dcecff; stroke: #89c7ff; stroke-width: 2; }
+      .alu { fill: #dcecff; stroke: #89c7ff; stroke-width: 2; }
+      .hazard { fill: #fff2cc; stroke: #f6c000; stroke-width: 2; }
+      .t1 { fill: #000000; font-size: 18px; font-weight: 700; }
+      .t2 { fill: #111827; font-size: 13px; }
+      .pipe-t { fill: #000000; font-size: 16px; font-weight: 700; }
+      .lbl-data { fill: #90c8ff; font-size: 13px; font-weight: 700; }
+      .lbl-fwd { fill: #00e66a; font-size: 13px; font-weight: 700; }
+      .lbl-ctrl { fill: #ff52e6; font-size: 13px; font-weight: 700; }
+      .lbl-stall { fill: #f6c000; font-size: 13px; font-weight: 700; }
+      .lbl-flush { fill: #ff6b6b; font-size: 13px; font-weight: 700; }
+      .note { fill: #dbeafe; font-size: 12px; }
+      .data { stroke: #2f8cff; stroke-width: 2.2; fill: none; marker-end: url(#arr-data); }
+      .data-thin { stroke: #2f8cff; stroke-width: 1.7; fill: none; marker-end: url(#arr-data); }
+      .fwd { stroke: #00d05a; stroke-width: 2.1; fill: none; marker-end: url(#arr-fwd); }
+      .ctrl { stroke: #ff00d4; stroke-width: 2.0; fill: none; marker-end: url(#arr-ctrl); }
+      .stall { stroke: #f6c000; stroke-width: 2.0; fill: none; stroke-dasharray: 8 6; marker-end: url(#arr-stall); }
+      .flush { stroke: #ff4b4b; stroke-width: 2.0; fill: none; stroke-dasharray: 8 6; marker-end: url(#arr-flush); }
+    </style>
+  </defs>
+  <rect
+     width="1780"
+     height="980"
+     fill="#000000"
+     id="rect5" />
+  <text
+     x="890"
+     y="44"
+     text-anchor="middle"
+     class="title"
+     id="text5">冒险处理与前递机制示意图</text>
+  <text
+     x="890"
+     y="72"
+     text-anchor="middle"
+     class="sub"
+     id="text6">EXE 阶段 ALU 输入并非只来自 ID/EXE 寄存器，而是由 ForwardA/ForwardB 选择 RegFile 读数、EXE/MEM 结果或 MEM/WB 写回数据</text>
+  <!-- Pipeline registers and source units -->
+  <rect
+     class="block"
+     x="90"
+     y="215"
+     width="220"
+     height="135"
+     id="rect6" />
+  <text
+     x="200"
+     y="252"
+     text-anchor="middle"
+     class="t1"
+     id="text7">RegFile 读数</text>
+  <text
+     x="200"
+     y="282"
+     text-anchor="middle"
+     class="t2"
+     id="text8">rs1_data / rs2_data</text>
+  <text
+     x="200"
+     y="306"
+     text-anchor="middle"
+     class="t2"
+     id="text9">ID 阶段读出</text>
+  <text
+     x="200"
+     y="330"
+     text-anchor="middle"
+     class="t2"
+     id="text10">写回旁路后形成 reg_src1/reg_src2</text>
+  <rect
+     class="pipe"
+     x="380"
+     y="165"
+     width="62"
+     height="505"
+     id="rect10" />
+  <text
+     x="-286.63965"
+     y="415.5"
+     text-anchor="middle"
+     class="pipe-t"
+     transform="rotate(-90)"
+     id="text11">ID/EXE</text>
+  <text
+     x="-435.68359"
+     y="415.88916"
+     text-anchor="middle"
+     class="t2"
+     transform="rotate(-90)"
+     id="text12">reg_src1 / reg_src2 / ForwardA/B</text>
+  <rect
+     class="block"
+     x="900"
+     y="150"
+     width="210"
+     height="95"
+     id="rect12" />
+  <text
+     x="1005"
+     y="185"
+     text-anchor="middle"
+     class="t1"
+     id="text13">EXE/MEM 阶段结果</text>
+  <text
+     x="1005"
+     y="214"
+     text-anchor="middle"
+     class="t2"
+     id="text14">exe_result_reg</text>
+  <rect
+     class="block"
+     x="900"
+     y="665"
+     width="210"
+     height="95"
+     id="rect14" />
+  <text
+     x="1005"
+     y="700"
+     text-anchor="middle"
+     class="t1"
+     id="text15">MEM/WB 阶段结果</text>
+  <text
+     x="1005"
+     y="729"
+     text-anchor="middle"
+     class="t2"
+     id="text16">mem_result_reg</text>
+  <!-- Forward muxes -->
+  <polygon
+     class="mux"
+     points="560,255 635,210 635,385 560,340"
+     id="polygon16" />
+  <text
+     x="598"
+     y="286"
+     text-anchor="middle"
+     class="t1"
+     id="text17">MUX A</text>
+  <text
+     x="598"
+     y="312"
+     text-anchor="middle"
+     class="t2"
+     id="text18">ForwardA</text>
+  <text
+     x="598"
+     y="336"
+     text-anchor="middle"
+     class="t2"
+     id="text19">src1_fwd</text>
+  <polygon
+     class="mux"
+     points="560,525 635,480 635,655 560,610"
+     id="polygon19" />
+  <text
+     x="598"
+     y="556"
+     text-anchor="middle"
+     class="t1"
+     id="text20">MUX B</text>
+  <text
+     x="598"
+     y="582"
+     text-anchor="middle"
+     class="t2"
+     id="text21">ForwardB</text>
+  <text
+     x="598"
+     y="606"
+     text-anchor="middle"
+     class="t2"
+     id="text22">src2_fwd</text>
+  <polygon
+     class="alu"
+     points="735,420 825,360 915,420 825,480"
+     id="polygon22" />
+  <text
+     x="825"
+     y="413"
+     text-anchor="middle"
+     class="t1"
+     id="text23">ALU</text>
+  <text
+     x="825"
+     y="440"
+     text-anchor="middle"
+     class="t2"
+     id="text24">EXE 运算输入</text>
+  <rect
+     class="pipe"
+     x="1190"
+     y="165"
+     width="62"
+     height="505"
+     id="rect24" />
+  <text
+     x="1221"
+     y="390"
+     text-anchor="middle"
+     class="pipe-t"
+     transform="rotate(-90 1221 390)"
+     id="text25">EXE/MEM</text>
+  <rect
+     class="pipe"
+     x="1420"
+     y="165"
+     width="62"
+     height="505"
+     id="rect25" />
+  <text
+     x="1451"
+     y="390"
+     text-anchor="middle"
+     class="pipe-t"
+     transform="rotate(-90 1451 390)"
+     id="text26">MEM/WB</text>
+  <rect
+     class="block"
+     x="1530"
+     y="370"
+     width="170"
+     height="95"
+     id="rect26" />
+  <text
+     x="1615"
+     y="407"
+     text-anchor="middle"
+     class="t1"
+     id="text27">写回数据</text>
+  <text
+     x="1615"
+     y="435"
+     text-anchor="middle"
+     class="t2"
+     id="text28">regfile_wdata</text>
+  <!-- Main data path -->
+  <path
+     class="data"
+     d="M310 282 L380 282"
+     id="path28" />
+  <path
+     class="data"
+     d="M442 282 L560 282"
+     id="path29" />
+  <text
+     x="462"
+     y="265"
+     class="lbl-data"
+     id="text29">reg_src1</text>
+  <path
+     class="data"
+     d="M442 552 L560 552"
+     id="path30" />
+  <text
+     x="462"
+     y="535"
+     class="lbl-data"
+     id="text30">reg_src2</text>
+  <path
+     class="data"
+     d="M635 300 L750 400"
+     id="path31" />
+  <text
+     x="672.4856"
+     y="368.82861"
+     class="lbl-data"
+     id="text31">src1</text>
+  <path
+     class="data"
+     d="M635 570 L750 440"
+     id="path32" />
+  <text
+     x="692.99756"
+     y="518.6123"
+     class="lbl-data"
+     id="text32">src2</text>
+  <path
+     class="data"
+     d="M915 420 L1190 420"
+     id="path33" />
+  <text
+     x="1015"
+     y="407"
+     class="lbl-data"
+     id="text33">exe_result</text>
+  <path
+     class="data"
+     d="M1252 420 L1420 420"
+     id="path34" />
+  <text
+     x="1300"
+     y="407"
+     class="lbl-data"
+     id="text34">mem_result</text>
+  <path
+     class="data"
+     d="M1482 420 L1530 420"
+     id="path35" />
+  <!-- Forwarding sources -->
+  <path
+     class="fwd"
+     d="M1005 245 L1005 300 L635 300"
+     id="path36" />
+  <text
+     x="760"
+     y="286"
+     class="lbl-fwd"
+     id="text36">ForwardA=01：EXE/MEM 结果前递</text>
+  <path
+     class="fwd"
+     d="M1005 245 L1005 570 L635 570"
+     id="path37" />
+  <text
+     x="760"
+     y="588"
+     class="lbl-fwd"
+     id="text37">ForwardB=01：EXE/MEM 结果前递</text>
+  <path
+     class="fwd"
+     d="M1005 665 L1005 340 L635 340"
+     id="path38" />
+  <text
+     x="760"
+     y="356"
+     class="lbl-fwd"
+     id="text38">ForwardA=10：MEM/WB 写回数据前递</text>
+  <path
+     class="fwd"
+     d="M1005 665 L1005 610 L635 610"
+     id="path39" />
+  <text
+     x="760"
+     y="630"
+     class="lbl-fwd"
+     id="text39">ForwardB=10：MEM/WB 写回数据前递</text>
+  <!-- Hazard detection -->
+  <rect
+     class="hazard"
+     x="130"
+     y="705"
+     width="320"
+     height="130"
+     id="rect39" />
+  <text
+     x="290"
+     y="743"
+     text-anchor="middle"
+     class="t1"
+     id="text40">Hazard Detection</text>
+  <text
+     x="290"
+     y="772"
+     text-anchor="middle"
+     class="t2"
+     id="text41">比较 rs1/rs2 与后续级 rd</text>
+  <text
+     x="290"
+     y="796"
+     text-anchor="middle"
+     class="t2"
+     id="text42">检测 load-use 冒险</text>
+  <text
+     x="290"
+     y="820"
+     text-anchor="middle"
+     class="t2"
+     id="text43">生成 stall 与 flush 控制</text>
+  <path
+     class="ctrl"
+     d="M450 745 L560 340"
+     id="path43" />
+  <text
+     x="541.78955"
+     y="434.39935"
+     class="lbl-ctrl"
+     id="text44">src1_fwd / ForwardA</text>
+  <path
+     class="ctrl"
+     d="M450 790 L560 610"
+     id="path44" />
+  <text
+     x="474.99951"
+     y="707.75446"
+     class="lbl-ctrl"
+     id="text45">src2_fwd / ForwardB</text>
+  <path
+     class="stall"
+     d="M290 705 L290 575 L380 575"
+     id="path45" />
+  <text
+     x="145.12988"
+     y="560.75049"
+     class="lbl-stall"
+     id="text46">stall：冻结 IF/ID，阻止冒险指令前进</text>
+  <path
+     class="flush"
+     d="m 450,815 159.94231,0.43604 0.68139,-138.06082 -0.20149,-35.8884"
+     id="path46"
+     sodipodi:nodetypes="cccc" />
+  <text
+     x="455.14282"
+     y="809.40576"
+     class="lbl-flush"
+     id="text47">flush：插入气泡/清除错误路径指令</text>
+  <!-- Condition annotation -->
+  <rect
+     x="1135.9318"
+     y="711.40106"
+     width="554.86682"
+     height="148.21352"
+     fill="#101820"
+     stroke="#475569"
+     stroke-width="1.63316"
+     rx="9.9976006"
+     ry="11.857081"
+     id="rect47" />
+  <text
+     x="1160"
+     y="737"
+     class="note"
+     id="text48">源码对应关系：</text>
+  <text
+     x="1160"
+     y="763"
+     class="note"
+     id="text49">ForwardA ≈ src1_fwd，ForwardB ≈ src2_fwd</text>
+  <text
+     x="1160"
+     y="789"
+     class="note"
+     id="text50">00：使用 ID/EXE 中保存的 reg_src1/reg_src2</text>
+  <text
+     x="1160"
+     y="815"
+     class="note"
+     id="text51">01：使用 EXE/MEM 路径中的 exe_result_reg</text>
+  <text
+     x="1160"
+     y="841"
+     class="note"
+     id="text52">10：使用 MEM/WB 路径中的 mem_result_reg</text>
+  <!-- Source correctness warning -->
+  <rect
+     x="1136.5713"
+     y="893.60889"
+     width="555"
+     height="58"
+     fill="#20140a"
+     stroke="#f6c000"
+     stroke-width="1.4"
+     rx="10"
+     ry="10"
+     id="rect52" />
+  <text
+     x="1160"
+     y="919.7915"
+     class="lbl-stall"
+     id="text53">注意：前递来源是后续流水级已产生或即将写回的结果，不是从 ALU 输入 MUX 再绕回。</text>
+  <!-- Legend -->
+  <rect
+     x="70"
+     y="900"
+     width="1020"
+     height="55"
+     fill="#101820"
+     stroke="#475569"
+     stroke-width="1.5"
+     id="rect53" />
+  <line
+     x1="100"
+     y1="928"
+     x2="170"
+     y2="928"
+     stroke="#2f8cff"
+     stroke-width="2.2"
+     marker-end="url(#arr-data)"
+     id="line53" />
+  <text
+     x="190"
+     y="933"
+     fill="#dbeafe"
+     font-size="13"
+     id="text54">正常数据流</text>
+  <line
+     x1="330"
+     y1="928"
+     x2="400"
+     y2="928"
+     stroke="#00d05a"
+     stroke-width="2.1"
+     marker-end="url(#arr-fwd)"
+     id="line54" />
+  <text
+     x="420"
+     y="933"
+     fill="#dcfce7"
+     font-size="13"
+     id="text55">前递数据流</text>
+  <line
+     x1="565"
+     y1="928"
+     x2="635"
+     y2="928"
+     stroke="#ff00d4"
+     stroke-width="2.0"
+     marker-end="url(#arr-ctrl)"
+     id="line55" />
+  <text
+     x="655"
+     y="933"
+     fill="#fce7f3"
+     font-size="13"
+     id="text56">ForwardA / ForwardB 选择控制</text>
+  <line
+     x1="865"
+     y1="928"
+     x2="935"
+     y2="928"
+     stroke="#f6c000"
+     stroke-width="2.0"
+     stroke-dasharray="8 6"
+     marker-end="url(#arr-stall)"
+     id="line56" />
+  <text
+     x="955"
+     y="933"
+     fill="#fef3c7"
+     font-size="13"
+     id="text57">stall</text>
+</svg>

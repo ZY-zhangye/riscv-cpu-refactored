@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 660">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="106%" height="112%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+    </filter>
+    <filter id="shadow_mux" x="-2%" y="-2%" width="106%" height="112%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.18"/>
+    </filter>
+    <marker id="arrow_blue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1565C0"/>
+    </marker>
+    <marker id="arrow_red" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#C62828"/>
+    </marker>
+    <marker id="arrow_fwd" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#6A1B9A"/>
+    </marker>
+    <marker id="arrow_green" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#2E7D32"/>
+    </marker>
+    <linearGradient id="grad_mux" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFF3E0"/><stop offset="100%" stop-color="#FFE0B2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1120" height="660" fill="#FAFAFA" rx="4"/>
+
+  <text x="560" y="28" text-anchor="middle" font-size="17" font-weight="bold" fill="#263238" font-family="Arial, sans-serif">五级流水线数据通路 — 写回多路选择器展开</text>
+
+  <!-- ===== 五级流水线阶段模块 ===== -->
+  <rect x="35" y="60" width="150" height="72" rx="8" fill="#E3F2FD" stroke="#1976D2" stroke-width="2" filter="url(#shadow)"/>
+  <text x="110" y="88" text-anchor="middle" font-size="14" font-weight="bold" fill="#0D47A1" font-family="Arial, sans-serif">IF 阶段</text>
+  <text x="110" y="108" text-anchor="middle" font-size="9" fill="#1565C0">PC + IMem + IF/ID</text>
+  <text x="110" y="123" text-anchor="middle" font-size="9" fill="#546E7A">取指 / 分支预测</text>
+
+  <rect x="220" y="60" width="150" height="72" rx="8" fill="#E8F5E9" stroke="#388E3C" stroke-width="2" filter="url(#shadow)"/>
+  <text x="295" y="88" text-anchor="middle" font-size="14" font-weight="bold" fill="#1B5E20" font-family="Arial, sans-serif">ID 阶段</text>
+  <text x="295" y="108" text-anchor="middle" font-size="9" fill="#2E7D32">译码 + RegFile读</text>
+  <text x="295" y="123" text-anchor="middle" font-size="9" fill="#546E7A">冒险检测 / 前递判断</text>
+
+  <rect x="405" y="60" width="150" height="72" rx="8" fill="#FFF8E1" stroke="#F57C00" stroke-width="2" filter="url(#shadow)"/>
+  <text x="480" y="88" text-anchor="middle" font-size="14" font-weight="bold" fill="#E65100" font-family="Arial, sans-serif">EX 阶段</text>
+  <text x="480" y="108" text-anchor="middle" font-size="9" fill="#EF6C00">ALU · MUL · CSR · PC+4</text>
+  <text x="480" y="123" text-anchor="middle" font-size="9" fill="#546E7A">分支解析 / 操作数前递</text>
+
+  <rect x="590" y="60" width="150" height="72" rx="8" fill="#FCE4EC" stroke="#D81B60" stroke-width="2" filter="url(#shadow)"/>
+  <text x="665" y="88" text-anchor="middle" font-size="14" font-weight="bold" fill="#880E4F" font-family="Arial, sans-serif">MEM 阶段</text>
+  <text x="665" y="108" text-anchor="middle" font-size="9" fill="#C2185B">DMEM 访问 / 字节选择</text>
+  <text x="665" y="123" text-anchor="middle" font-size="9" fill="#546E7A">非对齐异常检测</text>
+
+  <rect x="775" y="60" width="150" height="72" rx="8" fill="#F3E5F5" stroke="#8E24AA" stroke-width="2" filter="url(#shadow)"/>
+  <text x="850" y="88" text-anchor="middle" font-size="14" font-weight="bold" fill="#4A148C" font-family="Arial, sans-serif">WB 阶段</text>
+  <text x="850" y="108" text-anchor="middle" font-size="9" fill="#7B1FA2">结果选择 + 写回</text>
+  <text x="850" y="123" text-anchor="middle" font-size="9" fill="#546E7A">PC / Debug 输出</text>
+
+  <!-- ===== 级间数据流 ===== -->
+  <path d="M 185 96 L 215 96" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_blue)"/>
+  <text x="200" y="90" text-anchor="middle" font-size="8" fill="#1565C0">inst + pc</text>
+
+  <path d="M 370 96 L 400 96" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_blue)"/>
+  <text x="385" y="90" text-anchor="middle" font-size="8" fill="#1565C0">rs1,rs2,imm,op,rd</text>
+
+  <path d="M 555 96 L 585 96" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_blue)"/>
+  <text x="570" y="90" text-anchor="middle" font-size="8" fill="#1565C0">exe_result,load_info</text>
+
+  <path d="M 740 96 L 770 96" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_blue)"/>
+  <text x="755" y="90" text-anchor="middle" font-size="8" fill="#1565C0">wb_result,rd,wen</text>
+
+  <!-- ===== 前递路径 ===== -->
+  <path d="M 480 132 L 480 165 L 295 165 L 295 132" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="5,4" fill="none" marker-end="url(#arrow_fwd)"/>
+  <text x="387" y="160" text-anchor="middle" font-size="8" fill="#6A1B9A">exe → id 前递</text>
+
+  <path d="M 665 132 L 665 180 L 295 180 L 295 132" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="5,4" fill="none" marker-end="url(#arrow_fwd)"/>
+  <text x="480" y="175" text-anchor="middle" font-size="8" fill="#6A1B9A">mem → id 前递</text>
+
+  <!-- ===== RegFile ===== -->
+  <rect x="230" y="200" width="120" height="62" rx="8" fill="#ECEFF1" stroke="#607D8B" stroke-width="2" filter="url(#shadow)"/>
+  <text x="290" y="225" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">RegFile</text>
+  <text x="290" y="244" text-anchor="middle" font-size="9" fill="#546E7A">GPR + FPU</text>
+  <text x="290" y="256" text-anchor="middle" font-size="8" fill="#90A4AE">32x32 x2</text>
+
+  <path d="M 295 132 L 295 200" stroke="#2E7D32" stroke-width="2" fill="none" marker-end="url(#arrow_green)"/>
+  <text x="305" y="170" font-size="8" fill="#2E7D32">raddr</text>
+
+  <path d="M 280 200 L 280 132" stroke="#2E7D32" stroke-width="2" fill="none" marker-end="url(#arrow_green)"/>
+  <text x="270" y="170" font-size="8" fill="#2E7D32">rdata</text>
+
+  <!-- ===== DMEM ===== -->
+  <rect x="600" y="200" width="130" height="45" rx="8" fill="#FFF9C4" stroke="#F9A825" stroke-width="2" filter="url(#shadow)"/>
+  <text x="665" y="220" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">Data Memory</text>
+  <text x="665" y="237" text-anchor="middle" font-size="9" fill="#546E7A">DMEM (BRAM+MMIO)</text>
+
+  <path d="M 555 100 L 570 100 L 570 215 L 600 215" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_blue)"/>
+  <path d="M 660 222 L 660 132" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_blue)"/>
+  <text x="672" y="180" font-size="8" fill="#1565C0">rdata</text>
+
+  <!-- ===== WB MUX ===== -->
+  <rect x="400" y="340" width="350" height="90" rx="10" fill="url(#grad_mux)" stroke="#E65100" stroke-width="3" filter="url(#shadow_mux)"/>
+  <text x="575" y="368" text-anchor="middle" font-size="14" font-weight="bold" fill="#E65100" font-family="Arial, sans-serif">写回多路选择器 (WB MUX)</text>
+  <text x="575" y="390" text-anchor="middle" font-size="10" fill="#BF360C">选择信号: wb_sel + exe_result_sel</text>
+  <text x="575" y="410" text-anchor="middle" font-size="9" fill="#546E7A">从 5 个数据来源中选择最终写回结果</text>
+
+  <path d="M 680 385 L 800 385 L 800 132" stroke="#C62828" stroke-width="3" fill="none" marker-end="url(#arrow_red)"/>
+  <text x="740" y="378" font-size="9" fill="#C62828">wb_result (写回数据)</text>
+
+  <!-- ==== 5 个 MUX 输入 ==== -->
+  <!-- 1: ALU -->
+  <path d="M 480 132 L 480 300 L 440 300 L 440 340" stroke="#1565C0" stroke-width="2.5" fill="none" marker-end="url(#arrow_blue)"/>
+  <rect x="385" y="294" width="110" height="18" rx="4" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1"/>
+  <text x="440" y="307" text-anchor="middle" font-size="10" font-weight="bold" fill="#0D47A1" font-family="Arial, sans-serif">① ALU 结果</text>
+  <text x="388" y="335" font-size="8" fill="#546E7A">(加减/逻辑/移位/比较)</text>
+
+  <!-- 2: Load data -->
+  <path d="M 665 245 L 665 285 L 520 285 L 520 340" stroke="#1565C0" stroke-width="2.5" fill="none" marker-end="url(#arrow_blue)"/>
+  <rect x="463" y="279" width="115" height="18" rx="4" fill="#FCE4EC" stroke="#F48FB1" stroke-width="1"/>
+  <text x="520" y="292" text-anchor="middle" font-size="10" font-weight="bold" fill="#880E4F" font-family="Arial, sans-serif">② 访存读数据</text>
+  <text x="460" y="325" font-size="8" fill="#546E7A">(LB/LH/LW/LBU/LHU)</text>
+
+  <!-- 3: PC+4 -->
+  <path d="M 405 120 L 380 120 L 380 310 L 585 310 L 585 340" stroke="#1565C0" stroke-width="2.5" fill="none" marker-end="url(#arrow_blue)"/>
+  <rect x="530" y="304" width="110" height="18" rx="4" fill="#E8F5E9" stroke="#A5D6A7" stroke-width="1"/>
+  <text x="585" y="317" text-anchor="middle" font-size="10" font-weight="bold" fill="#1B5E20" font-family="Arial, sans-serif">③ PC + 4</text>
+  <text x="555" y="340" font-size="8" fill="#546E7A">(JAL/JALR 返回地址)</text>
+
+  <!-- 4: CSR -->
+  <path d="M 555 100 L 555 140 L 650 140 L 650 300 L 660 300 L 660 340" stroke="#1565C0" stroke-width="2.5" fill="none" marker-end="url(#arrow_blue)"/>
+  <rect x="603" y="294" width="115" height="18" rx="4" fill="#FFF8E1" stroke="#FFCC80" stroke-width="1"/>
+  <text x="660" y="307" text-anchor="middle" font-size="10" font-weight="bold" fill="#E65100" font-family="Arial, sans-serif">④ CSR 读数据</text>
+  <text x="605" y="335" font-size="8" fill="#546E7A">(CSRRW/CSRRS/CSRRC)</text>
+
+  <!-- 5: MUL/DIV -->
+  <path d="M 480 132 L 480 165 L 740 165 L 740 340" stroke="#1565C0" stroke-width="2.5" fill="none" marker-end="url(#arrow_blue)"/>
+  <rect x="683" y="279" width="115" height="18" rx="4" fill="#F3E5F5" stroke="#CE93D8" stroke-width="1"/>
+  <text x="740" y="292" text-anchor="middle" font-size="10" font-weight="bold" fill="#4A148C" font-family="Arial, sans-serif">⑤ 乘除法结果</text>
+  <text x="685" y="325" font-size="8" fill="#546E7A">(MUL/DIV/REM)</text>
+
+  <!-- ===== RegFile 写端口 ===== -->
+  <rect x="790" y="200" width="90" height="40" rx="6" fill="#ECEFF1" stroke="#607D8B" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="835" y="218" text-anchor="middle" font-size="10" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">RegFile</text>
+  <text x="835" y="233" text-anchor="middle" font-size="8" fill="#546E7A">写端口</text>
+
+  <path d="M 750 385 L 835 385 L 835 240" stroke="#C62828" stroke-width="2.5" fill="none" marker-end="url(#arrow_red)"/>
+  <text x="842" y="315" font-size="9" fill="#C62828" transform="rotate(90,842,315)">wen, waddr, wdata</text>
+
+  <path d="M 790 220 L 350 220" stroke="#C62828" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_red)"/>
+
+  <!-- ===== 底部图例 ===== -->
+  <rect x="35" y="480" width="770" height="62" rx="8" fill="#FFF" stroke="#B0BEC5" stroke-width="0.8"/>
+  <text x="50" y="502" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">图例说明</text>
+
+  <line x1="50" y1="520" x2="90" y2="520" stroke="#1565C0" stroke-width="2.5" marker-end="url(#arrow_blue)"/>
+  <text x="100" y="524" font-size="10" fill="#37474F">前向数据流</text>
+
+  <line x1="200" y1="520" x2="240" y2="520" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow_fwd)"/>
+  <text x="250" y="524" font-size="10" fill="#37474F">前递路径</text>
+
+  <line x1="350" y1="520" x2="390" y2="520" stroke="#C62828" stroke-width="2.5" marker-end="url(#arrow_red)"/>
+  <text x="400" y="524" font-size="10" fill="#37474F">写回路径</text>
+
+  <line x1="500" y1="520" x2="540" y2="520" stroke="#2E7D32" stroke-width="2" marker-end="url(#arrow_green)"/>
+  <text x="550" y="524" font-size="10" fill="#37474F">寄存器读取</text>
+
+  <text x="50" y="540" font-size="9" fill="#78909C">流水线寄存器链: IF/ID → ID/EX → EX/MEM → MEM/WB，数据在时钟上升沿锁存并传递</text>
+
+  <!-- 阶段颜色图例 -->
+  <rect x="830" y="480" width="250" height="62" rx="8" fill="#FFF" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="842" y="494" width="36" height="14" rx="3" fill="#BBDEFB" stroke="#1976D2" stroke-width="0.5"/>
+  <text x="882" y="505" font-size="9" fill="#37474F">IF</text>
+  <rect x="905" y="494" width="36" height="14" rx="3" fill="#C8E6C9" stroke="#388E3C" stroke-width="0.5"/>
+  <text x="945" y="505" font-size="9" fill="#37474F">ID</text>
+  <rect x="968" y="494" width="36" height="14" rx="3" fill="#FFE0B2" stroke="#F57C00" stroke-width="0.5"/>
+  <text x="1008" y="505" font-size="9" fill="#37474F">EX</text>
+  <rect x="842" y="514" width="36" height="14" rx="3" fill="#F8BBD0" stroke="#D81B60" stroke-width="0.5"/>
+  <text x="882" y="525" font-size="9" fill="#37474F">MEM</text>
+  <rect x="905" y="514" width="36" height="14" rx="3" fill="#E1BEE7" stroke="#8E24AA" stroke-width="0.5"/>
+  <text x="945" y="525" font-size="9" fill="#37474F">WB</text>
+  <text x="1010" y="525" font-size="9" fill="#546E7A">= 流水线阶段</text>
+
+</svg>

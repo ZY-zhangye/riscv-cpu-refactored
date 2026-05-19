@@ -38,6 +38,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         .dmem_wen(dmem_wen),
         .dmem_en(dmem_en),
         .dmem_wdata(dmem_wdata),
+        .plic_irq(1'b0),
         .debug_wb_pc(debug_wb_pc),
         .debug_wb_rf_addr(debug_wb_rf_addr),
         .debug_wb_rf_data(debug_wb_rf_data),

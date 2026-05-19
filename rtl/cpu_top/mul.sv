@@ -116,16 +116,28 @@ module mul (
                 mul_result = mul_result_ext[63:32];
             end
             mul_op[1]: begin
-                // 余数输出 (低32位是商，高32位是余数)
+                // DIV: DEBUG仿真divider输出{remainder, quotient}，工程IP输出{quotient, remainder}
+`ifdef DEBUG_EN
                 mul_result = (s1 && div_state == 2'b11) ?
                              (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
                              div_result[31:0];
+`else
+                mul_result = (s1 && div_state == 2'b11) ?
+                             (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
+                             div_result[63:32];
+`endif
             end
             mul_op[0]: begin
-                // 商的高32位或直接输出余数
+                // REM: DEBUG仿真divider输出{remainder, quotient}，工程IP输出{quotient, remainder}
+`ifdef DEBUG_EN
                 mul_result = (s2 && div_state == 2'b11) ?
                              (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
                              div_result[63:32];
+`else
+                mul_result = (s2 && div_state == 2'b11) ?
+                             (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
+                             div_result[31:0];
+`endif
             end
             default: begin
                 mul_result = 32'b0;
@@ -133,8 +145,18 @@ module mul (
         endcase
     end
 
-    // 当前为逻辑占位，后续直接替换成乘法 IP 核调用即可。
+`ifdef DEBUG_EN
+    // DEBUG仿真使用组合乘法，避免依赖Vivado multiplier IP。
     assign mul_result_ext = mul_src1_ext * mul_src2_ext;
+`else
+    multiplier mul_inst (
+        .CLK(clk),
+        .A(mul_src1_ext),
+        .B(mul_src2_ext),
+        .P(mul_result_ext),
+        .CE(is_mul)
+    );
+`endif
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -149,8 +171,13 @@ module mul (
                         div_state <= 2'b01;
                     end else if (is_multicycle && is_mul && mul_op_div && (div_0 || div_1)) begin
                         div_state <= 2'b10;
+`ifdef DEBUG_EN
                         div_result <= div_0 ? {mul_src1, 32'hffff_ffff} :
                                        {32'h0000_0000, 32'h8000_0000} ;
+`else
+                        div_result <= div_0 ? {32'hffff_ffff, mul_src1} :
+                                       {32'h8000_0000, 32'h0000_0000} ;
+`endif
                     end else begin
                         div_state <= 2'b00;
                     end
@@ -180,7 +207,9 @@ module mul (
 
     divider div_inst (
         .aclk(clk),
+`ifdef DEBUG_EN
         .aresetn(rst_n),
+`endif
         .s_axis_divisor_tvalid(s_axis_divisor_tvalid),    
         .s_axis_divisor_tready(s_axis_divisor_tready),    
         .s_axis_divisor_tdata(s_axis_divisor_tdata),      

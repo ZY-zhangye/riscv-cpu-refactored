@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <defs>
+    <marker id="arrow_data" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1565C0"/>
+    </marker>
+    <marker id="arrow_ctrl" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#E65100"/>
+    </marker>
+    <marker id="arrow_fwd" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#6A1B9A"/>
+    </marker>
+    <marker id="arrow_wb" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#C62828"/>
+    </marker>
+    <marker id="arrow_read" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#2E7D32"/>
+    </marker>
+    <marker id="arrow_exc" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#D32F2F"/>
+    </marker>
+    <filter id="shadow" x="-4%" y="-4%" width="110%" height="120%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <linearGradient id="grad_if" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BBDEFB"/><stop offset="100%" stop-color="#90CAF9"/>
+    </linearGradient>
+    <linearGradient id="grad_id" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C8E6C9"/><stop offset="100%" stop-color="#A5D6A7"/>
+    </linearGradient>
+    <linearGradient id="grad_ex" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE0B2"/><stop offset="100%" stop-color="#FFCC80"/>
+    </linearGradient>
+    <linearGradient id="grad_mem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8BBD0"/><stop offset="100%" stop-color="#F48FB1"/>
+    </linearGradient>
+    <linearGradient id="grad_wb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E1BEE7"/><stop offset="100%" stop-color="#CE93D8"/>
+    </linearGradient>
+    <linearGradient id="grad_rf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ECEFF1"/><stop offset="100%" stop-color="#CFD8DC"/>
+    </linearGradient>
+    <linearGradient id="grad_mem_ext" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFF9C4"/><stop offset="100%" stop-color="#FFF176"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="720" fill="#FAFAFA" rx="4"/>
+
+  <text x="640" y="28" text-anchor="middle" font-size="19" font-weight="bold" fill="#263238" font-family="Arial, sans-serif">cpu_top 模块架构 — RISC-V RV32 五级流水线</text>
+  <line x1="200" y1="36" x2="1080" y2="36" stroke="#B0BEC5" stroke-width="1"/>
+
+  <!-- ===== IF 阶段区域 ===== -->
+  <rect x="20" y="48" width="255" height="237" rx="12" fill="#E3F2FD" fill-opacity="0.4" stroke="#90CAF9" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="20" y="48" width="255" height="30" rx="12" fill="#BBDEFB" fill-opacity="0.8"/>
+  <rect x="20" y="64" width="255" height="14" fill="#BBDEFB" fill-opacity="0.8"/>
+  <text x="147" y="69" text-anchor="middle" font-size="12" font-weight="bold" fill="#0D47A1" font-family="Arial, sans-serif">取指阶段 · IF</text>
+
+  <!-- ===== ID 阶段区域 ===== -->
+  <rect x="275" y="48" width="225" height="237" rx="12" fill="#E8F5E9" fill-opacity="0.45" stroke="#A5D6A7" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="275" y="48" width="225" height="30" rx="12" fill="#C8E6C9" fill-opacity="0.8"/>
+  <rect x="275" y="64" width="225" height="14" fill="#C8E6C9" fill-opacity="0.8"/>
+  <text x="387" y="69" text-anchor="middle" font-size="12" font-weight="bold" fill="#1B5E20" font-family="Arial, sans-serif">译码阶段 · ID</text>
+
+  <!-- ===== EX 阶段区域 ===== -->
+  <rect x="500" y="48" width="210" height="295" rx="12" fill="#FFF8E1" fill-opacity="0.45" stroke="#FFCC80" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="500" y="48" width="210" height="30" rx="12" fill="#FFE0B2" fill-opacity="0.8"/>
+  <rect x="500" y="64" width="210" height="14" fill="#FFE0B2" fill-opacity="0.8"/>
+  <text x="605" y="69" text-anchor="middle" font-size="12" font-weight="bold" fill="#E65100" font-family="Arial, sans-serif">执行阶段 · EX</text>
+
+  <!-- ===== MEM 阶段区域 ===== -->
+  <rect x="710" y="48" width="215" height="237" rx="12" fill="#FCE4EC" fill-opacity="0.45" stroke="#F48FB1" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="710" y="48" width="215" height="30" rx="12" fill="#F8BBD0" fill-opacity="0.8"/>
+  <rect x="710" y="64" width="215" height="14" fill="#F8BBD0" fill-opacity="0.8"/>
+  <text x="817" y="69" text-anchor="middle" font-size="12" font-weight="bold" fill="#880E4F" font-family="Arial, sans-serif">访存阶段 · MEM</text>
+
+  <!-- ===== WB 阶段区域 ===== -->
+  <rect x="925" y="48" width="220" height="237" rx="12" fill="#F3E5F5" fill-opacity="0.45" stroke="#CE93D8" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="925" y="48" width="220" height="30" rx="12" fill="#E1BEE7" fill-opacity="0.8"/>
+  <rect x="925" y="64" width="220" height="14" fill="#E1BEE7" fill-opacity="0.8"/>
+  <text x="1035" y="69" text-anchor="middle" font-size="12" font-weight="bold" fill="#4A148C" font-family="Arial, sans-serif">写回阶段 · WB</text>
+
+  <!-- ===== 寄存器文件区域 ===== -->
+  <rect x="175" y="460" width="750" height="125" rx="12" fill="#ECEFF1" fill-opacity="0.5" stroke="#B0BEC5" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="175" y="460" width="750" height="30" rx="12" fill="#CFD8DC" fill-opacity="0.9"/>
+  <rect x="175" y="476" width="750" height="14" fill="#CFD8DC" fill-opacity="0.9"/>
+  <text x="550" y="481" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">寄存器文件 · Register Files</text>
+
+  <!-- ===== 连接线 ===== -->
+  <!-- IMEM ↔ IF -->
+  <path d="M 125 170 L 125 120" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="30" y="152" font-size="9" fill="#1565C0" transform="rotate(-90,30,152)">addr, en</text>
+  <path d="M 180 120 L 180 170" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="190" y="152" font-size="9" fill="#1565C0" transform="rotate(90,190,152)">rdata</text>
+
+  <!-- EX → DMEM → MEM -->
+  <path d="M 640 170 L 640 130 L 770 130 L 770 120" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="670" y="123" font-size="9" fill="#1565C0">addr, wen, en, wdata</text>
+  <path d="M 810 120 L 810 170" stroke="#1565C0" stroke-width="2" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="820" y="148" font-size="9" fill="#1565C0">rdata</text>
+
+  <!-- 级间总线 -->
+  <path d="M 240 220 L 275 220" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="257" y="212" text-anchor="middle" font-size="9" fill="#1565C0">fs_to_ds</text>
+  <text x="257" y="238" text-anchor="middle" font-size="8" fill="#78909C">(inst+pc+bp)</text>
+
+  <path d="M 460 220 L 500 220" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="480" y="212" text-anchor="middle" font-size="9" fill="#1565C0">ds_to_es</text>
+  <text x="480" y="238" text-anchor="middle" font-size="8" fill="#78909C">(9-packets)</text>
+
+  <path d="M 685 220 L 710 220" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="697" y="212" text-anchor="middle" font-size="9" fill="#1565C0">es_to_ms</text>
+  <text x="697" y="238" text-anchor="middle" font-size="8" fill="#78909C">(result+load)</text>
+
+  <path d="M 910 220 L 925 220" stroke="#1565C0" stroke-width="3" fill="none" marker-end="url(#arrow_data)"/>
+  <text x="917" y="212" text-anchor="middle" font-size="9" fill="#1565C0">ms_to_ws</text>
+  <text x="917" y="238" text-anchor="middle" font-size="8" fill="#78909C">(wb_data+dest)</text>
+
+  <!-- 握手信号 -->
+  <path d="M 275 260 L 240 260" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="258" y="275" text-anchor="middle" font-size="7" fill="#E65100">ds_allowin</text>
+  <path d="M 500 260 L 460 260" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="480" y="275" text-anchor="middle" font-size="7" fill="#E65100">es_allowin</text>
+  <path d="M 710 260 L 685 260" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="698" y="275" text-anchor="middle" font-size="7" fill="#E65100">ms_allowin</text>
+  <path d="M 925 260 L 910 260" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="918" y="275" text-anchor="middle" font-size="7" fill="#E65100">ws_allowin</text>
+
+  <!-- 寄存器读取 -->
+  <path d="M 250 490 L 250 380 L 320 380 L 320 270" stroke="#2E7D32" stroke-width="2" fill="none" marker-end="url(#arrow_read)"/>
+  <text x="242" y="440" font-size="9" fill="#2E7D32" transform="rotate(-90,242,440)">rs1, rs2</text>
+  <path d="M 495 490 L 495 395 L 390 395 L 390 270" stroke="#2E7D32" stroke-width="2" fill="none" marker-end="url(#arrow_read)"/>
+  <text x="487" y="448" font-size="9" fill="#2E7D32" transform="rotate(-90,487,448)">rs1/2/3_fpu</text>
+  <path d="M 750 490 L 750 405 L 435 405 L 435 270" stroke="#2E7D32" stroke-width="2" fill="none" marker-end="url(#arrow_read)"/>
+  <text x="742" y="452" font-size="9" fill="#2E7D32" transform="rotate(-90,742,452)">csr_rdata</text>
+
+  <!-- 寄存器写入 -->
+  <path d="M 1035 270 L 1035 380 L 355 380 L 355 490" stroke="#C62828" stroke-width="2" stroke-dasharray="6,3" fill="none" marker-end="url(#arrow_wb)"/>
+  <text x="1043" y="342" font-size="9" fill="#C62828" transform="rotate(90,1043,342)">wen, waddr, wdata</text>
+  <path d="M 1035 270 L 1035 380 L 595 380 L 595 490" stroke="#C62828" stroke-width="2" stroke-dasharray="6,3" fill="none" marker-end="url(#arrow_wb)"/>
+  <text x="1043" y="442" font-size="9" fill="#C62828" transform="rotate(90,1043,442)">fpu_wen</text>
+  <path d="M 805 270 L 805 490" stroke="#C62828" stroke-width="2" stroke-dasharray="6,3" fill="none" marker-end="url(#arrow_wb)"/>
+  <text x="813" y="388" font-size="9" fill="#C62828" transform="rotate(90,813,388)">csr_we, waddr, wdata</text>
+
+  <!-- 前递地址 -->
+  <path d="M 595 270 L 595 315 L 345 315 L 345 270" stroke="#6A1B9A" stroke-width="1.8" stroke-dasharray="5,4" fill="none" marker-end="url(#arrow_fwd)"/>
+  <text x="470" y="309" text-anchor="middle" font-size="8" fill="#6A1B9A">exe_dest_addr, regfile_wen (前递)</text>
+  <path d="M 820 270 L 820 315 L 405 315 L 405 270" stroke="#6A1B9A" stroke-width="1.8" stroke-dasharray="5,4" fill="none" marker-end="url(#arrow_fwd)"/>
+  <text x="612" y="309" text-anchor="middle" font-size="8" fill="#6A1B9A">mem_dest_addr, regfile_wen (前递)</text>
+
+  <!-- 分支 / 异常反馈 -->
+  <path d="M 595 170 L 595 100 L 147 100 L 147 170" stroke="#E65100" stroke-width="2" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="371" y="94" text-anchor="middle" font-size="9" fill="#E65100">br_redirect, br_target</text>
+  <path d="M 595 170 L 595 85 L 147 85 L 147 170" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="371" y="79" text-anchor="middle" font-size="8" fill="#E65100">bp_update (BHT)</text>
+
+  <!-- 异常路径 -->
+  <path d="M 700 520 L 20 520 L 20 220" stroke="#D32F2F" stroke-width="2" stroke-dasharray="5,3" fill="none" marker-end="url(#arrow_exc)"/>
+  <text x="12" y="390" font-size="9" fill="#D32F2F" transform="rotate(-90,12,390)">exception_flag, addr</text>
+  <path d="M 870 270 L 870 490" stroke="#D32F2F" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrow_exc)"/>
+  <text x="882" y="388" font-size="8" fill="#D32F2F" transform="rotate(90,882,388)">exc_code, mtval</text>
+
+  <!-- Debug -->
+  <path d="M 1085 170 L 1085 120" stroke="#78909C" stroke-width="1.5" fill="none" marker-end="url(#arrow_ctrl)"/>
+  <text x="1093" y="115" font-size="8" fill="#78909C">debug_wb_*</text>
+
+  <!-- ===== 模块 ===== -->
+  <!-- 外部存储器 -->
+  <rect x="75" y="90" width="145" height="45" rx="8" fill="url(#grad_mem_ext)" stroke="#F9A825" stroke-width="2" filter="url(#shadow)"/>
+  <text x="147" y="110" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">指令存储器</text>
+  <text x="147" y="126" text-anchor="middle" font-size="9" fill="#546E7A">imem (BRAM)</text>
+
+  <rect x="775" y="90" width="145" height="45" rx="8" fill="url(#grad_mem_ext)" stroke="#F9A825" stroke-width="2" filter="url(#shadow)"/>
+  <text x="847" y="110" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">数据存储器</text>
+  <text x="847" y="126" text-anchor="middle" font-size="9" fill="#546E7A">dmem (BRAM+MMIO)</text>
+
+  <rect x="1040" y="90" width="130" height="45" rx="8" fill="#E0E0E0" stroke="#9E9E9E" stroke-width="2" filter="url(#shadow)"/>
+  <text x="1105" y="110" text-anchor="middle" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">Debug 接口</text>
+  <text x="1105" y="126" text-anchor="middle" font-size="9" fill="#546E7A">debug_wb_*</text>
+
+  <!-- IF Stage -->
+  <rect x="55" y="170" width="185" height="95" rx="8" fill="url(#grad_if)" stroke="#1976D2" stroke-width="2" filter="url(#shadow)"/>
+  <text x="147" y="196" text-anchor="middle" font-size="14" font-weight="bold" fill="#0D47A1" font-family="Arial, sans-serif">IF Stage</text>
+  <text x="147" y="214" text-anchor="middle" font-size="10" fill="#1565C0">取指阶段</text>
+  <text x="147" y="232" text-anchor="middle" font-size="9" fill="#546E7A">分支预测器 (BHT)</text>
+  <text x="147" y="250" text-anchor="middle" font-size="9" fill="#546E7A">PC 生成 / NOP 插入</text>
+
+  <!-- ID Stage -->
+  <rect x="280" y="170" width="180" height="95" rx="8" fill="url(#grad_id)" stroke="#388E3C" stroke-width="2" filter="url(#shadow)"/>
+  <text x="370" y="196" text-anchor="middle" font-size="14" font-weight="bold" fill="#1B5E20" font-family="Arial, sans-serif">ID Stage</text>
+  <text x="370" y="214" text-anchor="middle" font-size="10" fill="#2E7D32">译码阶段</text>
+  <text x="370" y="232" text-anchor="middle" font-size="9" fill="#546E7A">全指令译码</text>
+  <text x="370" y="250" text-anchor="middle" font-size="9" fill="#546E7A">冒险检测 / 前递判断</text>
+
+  <!-- EX Stage -->
+  <rect x="505" y="170" width="180" height="95" rx="8" fill="url(#grad_ex)" stroke="#F57C00" stroke-width="2" filter="url(#shadow)"/>
+  <text x="595" y="196" text-anchor="middle" font-size="14" font-weight="bold" fill="#E65100" font-family="Arial, sans-serif">EX Stage</text>
+  <text x="595" y="214" text-anchor="middle" font-size="10" fill="#EF6C00">执行阶段</text>
+  <text x="595" y="232" text-anchor="middle" font-size="9" fill="#546E7A">ALU / MUL / DIV / FPU</text>
+  <text x="595" y="250" text-anchor="middle" font-size="9" fill="#546E7A">Z-bitman / 分支解析</text>
+
+  <!-- MEM Stage -->
+  <rect x="730" y="170" width="180" height="95" rx="8" fill="url(#grad_mem)" stroke="#D81B60" stroke-width="2" filter="url(#shadow)"/>
+  <text x="820" y="196" text-anchor="middle" font-size="14" font-weight="bold" fill="#880E4F" font-family="Arial, sans-serif">MEM Stage</text>
+  <text x="820" y="214" text-anchor="middle" font-size="10" fill="#C2185B">访存阶段</text>
+  <text x="820" y="232" text-anchor="middle" font-size="9" fill="#546E7A">字节/半字选择</text>
+  <text x="820" y="250" text-anchor="middle" font-size="9" fill="#546E7A">非对齐异常检测</text>
+
+  <!-- WB Stage -->
+  <rect x="955" y="170" width="180" height="95" rx="8" fill="url(#grad_wb)" stroke="#8E24AA" stroke-width="2" filter="url(#shadow)"/>
+  <text x="1045" y="196" text-anchor="middle" font-size="14" font-weight="bold" fill="#4A148C" font-family="Arial, sans-serif">WB Stage</text>
+  <text x="1045" y="214" text-anchor="middle" font-size="10" fill="#7B1FA2">写回阶段</text>
+  <text x="1045" y="232" text-anchor="middle" font-size="9" fill="#546E7A">结果写回</text>
+  <text x="1045" y="250" text-anchor="middle" font-size="9" fill="#546E7A">Debug 输出</text>
+
+  <!-- EX 内部标注 -->
+  <rect x="505" y="290" width="180" height="42" rx="6" fill="#FFF8E1" stroke="#FFB300" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="595" y="307" text-anchor="middle" font-size="9" fill="#E65100" font-family="Arial, sans-serif">内含: ALU · MUL · DIV · FPU</text>
+  <text x="595" y="322" text-anchor="middle" font-size="9" fill="#E65100" font-family="Arial, sans-serif">Z-bitman · 分支解析 · 操作数前递</text>
+  <line x1="595" y1="265" x2="595" y2="290" stroke="#FFB300" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <!-- 寄存器文件 -->
+  <rect x="195" y="497" width="200" height="72" rx="8" fill="url(#grad_rf)" stroke="#607D8B" stroke-width="2" filter="url(#shadow)"/>
+  <text x="295" y="525" text-anchor="middle" font-size="13" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">regfiles</text>
+  <text x="295" y="543" text-anchor="middle" font-size="9" fill="#546E7A">通用寄存器堆 (32x32)</text>
+  <text x="295" y="558" text-anchor="middle" font-size="9" fill="#546E7A">2 读端口 / 1 写端口</text>
+
+  <rect x="440" y="497" width="200" height="72" rx="8" fill="url(#grad_rf)" stroke="#607D8B" stroke-width="2" filter="url(#shadow)"/>
+  <text x="540" y="525" text-anchor="middle" font-size="13" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">reg_fpu</text>
+  <text x="540" y="543" text-anchor="middle" font-size="9" fill="#546E7A">浮点寄存器堆 (32x32)</text>
+  <text x="540" y="558" text-anchor="middle" font-size="9" fill="#546E7A">3 读端口 / 1 写端口</text>
+
+  <rect x="685" y="497" width="200" height="72" rx="8" fill="url(#grad_rf)" stroke="#607D8B" stroke-width="2" filter="url(#shadow)"/>
+  <text x="785" y="525" text-anchor="middle" font-size="13" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">regfile_csr</text>
+  <text x="785" y="543" text-anchor="middle" font-size="9" fill="#546E7A">CSR 寄存器</text>
+  <text x="785" y="558" text-anchor="middle" font-size="9" fill="#546E7A">mstatus/mepc/mcause/...</text>
+
+  <!-- 图例 -->
+  <rect x="945" y="497" width="175" height="72" rx="6" fill="#FFF" stroke="#B0BEC5" stroke-width="1" filter="url(#shadow)"/>
+  <text x="1032" y="515" text-anchor="middle" font-size="11" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">图例</text>
+  <line x1="958" y1="527" x2="990" y2="527" stroke="#1565C0" stroke-width="2.5" marker-end="url(#arrow_data)"/>
+  <text x="998" y="531" font-size="9" fill="#37474F">前向数据流</text>
+  <line x1="958" y1="546" x2="990" y2="546" stroke="#C62828" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow_wb)"/>
+  <text x="998" y="550" font-size="9" fill="#37474F">写回 / 前递</text>
+  <line x1="958" y1="564" x2="990" y2="564" stroke="#E65100" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow_ctrl)"/>
+  <text x="998" y="568" font-size="9" fill="#37474F">控制 / 握手</text>
+
+  <!-- 总线汇总 -->
+  <rect x="20" y="615" width="1190" height="88" rx="8" fill="#FFF" stroke="#B0BEC5" stroke-width="0.8"/>
+  <text x="40" y="638" font-size="12" font-weight="bold" fill="#37474F" font-family="Arial, sans-serif">关键总线汇总</text>
+  <text x="40" y="660" font-size="9" fill="#1565C0">fs_to_ds  = {inst[31:0], pc[31:0], bp_taken, bp_target}  </text>
+  <text x="40" y="675" font-size="9" fill="#1565C0">ds_to_es  = {alu, fpu, mul, mem, csr, br_jmp, ctrl, src [+bitman]}  </text>
+  <text x="40" y="690" font-size="9" fill="#1565C0">es_to_ms  = {exe_pc, exe_result, load_inst, rd_addr, regfile_wen, ...}  </text>
+  <text x="700" y="660" font-size="9" fill="#1565C0">ms_to_ws  = {wb_pc, wb_result, rd_addr, regfile_wen, fpu_wen}</text>
+  <text x="700" y="675" font-size="9" fill="#E65100">握手: ds_allowin → es_allowin → ms_allowin → ws_allowin (反向流动)</text>
+  <text x="700" y="690" font-size="9" fill="#D32F2F">异常: regfile_csr → IF (exception_flag/addr) · MEM → CSR (exc_code/mtval)</text>
+</svg>

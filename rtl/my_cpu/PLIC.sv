@@ -17,20 +17,20 @@ module PLIC (
 
 
     // PLIC内部寄存器定义
-    logic [31:0] priority_regs [`PLIC_NUM_INTERRUPTS-1:0]; // 优先级寄存器
+    logic [`PRIORITY_WIDTH-1:0] priority_regs [`PLIC_NUM_INTERRUPTS-1:0]; // 优先级寄存器
     logic [`PLIC_NUM_INTERRUPTS-1:0] pending_regs; // 待处理寄存器
     logic [`PLIC_NUM_INTERRUPTS-1:0] enable_regs; // 使能寄存器
-    logic [31:0] threshold_reg; // 阈值寄存器
+    logic [`PRIORITY_WIDTH-1:0] threshold_reg; // 阈值寄存器
     logic [`PLIC_NUM_INTERRUPTS-1:0] in_service_regs; // 处理中寄存器
 
-    logic [31:0] claim_priority;
+    logic [`PRIORITY_WIDTH-1:0] claim_priority;
     logic [`ID_WIDTH-1:0] claim_id;
     logic claim_valid;
 
     // 处理中的中断、阈值和优先级比较拆成独立组合逻辑
     always_comb begin
         integer i;
-        claim_priority = 32'd0;
+        claim_priority = '0;
         claim_id = '0;
         claim_valid = 1'b0;
 
@@ -55,12 +55,12 @@ module PLIC (
             if ((addr >= `PLIC_PRIORITY_BASE_ADDR) &&
                 (addr < (`PLIC_PRIORITY_BASE_ADDR + (`PLIC_NUM_INTERRUPTS * 4)))) begin
                 idx = (addr - `PLIC_PRIORITY_BASE_ADDR) >> 2;
-                read_reg = priority_regs[idx];
+                read_reg = {{(32-`PRIORITY_WIDTH){1'b0}}, priority_regs[idx]};
             end else begin
                 case (addr)
                     `PLIC_PENDING_BASE_ADDR:     read_reg = {{(32-`PLIC_NUM_INTERRUPTS){1'b0}}, pending_regs};
                     `PLIC_ENABLE_BASE_ADDR:      read_reg = {{(32-`PLIC_NUM_INTERRUPTS){1'b0}}, enable_regs};
-                    `PLIC_THRESHOLD_BASE_ADDR:   read_reg = threshold_reg;
+                    `PLIC_THRESHOLD_BASE_ADDR:   read_reg = {{(32-`PRIORITY_WIDTH){1'b0}}, threshold_reg};
                     `PLIC_IN_SERVICE_BASE_ADDR:  read_reg = in_service_regs;
                     default:                     read_reg = 32'hDEAD_BEEF; // 无效地址返回特定值
                 endcase
@@ -75,12 +75,12 @@ module PLIC (
                 (addr < (`PLIC_PRIORITY_BASE_ADDR + (`PLIC_NUM_INTERRUPTS * 4)))) begin
                 idx = (addr - `PLIC_PRIORITY_BASE_ADDR) >> 2;
                 if (idx != 0) begin
-                    priority_regs[idx] <= data;
+                    priority_regs[idx] <= data[`PRIORITY_WIDTH-1:0];
                 end
             end else begin
                 case (addr)
                     `PLIC_ENABLE_BASE_ADDR:     enable_regs <= {data[`PLIC_NUM_INTERRUPTS-1:1], 1'b0};
-                    `PLIC_THRESHOLD_BASE_ADDR:  threshold_reg <= data;
+                    `PLIC_THRESHOLD_BASE_ADDR:  threshold_reg <= data[`PRIORITY_WIDTH-1:0];
                     default:                    ;
                 endcase
             end
@@ -96,11 +96,11 @@ module PLIC (
 
         if (!rst_n) begin
             for (i = 0; i < `PLIC_NUM_INTERRUPTS; i++) begin
-                priority_regs[i] <= 32'd0;
+                priority_regs[i] <= '0;
             end
             pending_regs <= '0;
             enable_regs <= '0;
-            threshold_reg <= 32'd0;
+            threshold_reg <= '0;
             in_service_regs <= 32'd0;
             plic_rdata <= 32'd0;
         end else begin
@@ -124,7 +124,9 @@ module PLIC (
 
             if (plic_sel && plic_we) begin
                 if (plic_addr == `PLIC_CLAIM_BASE_ADDR) begin
-                    if (plic_wdata[3:0] != '0 && plic_wdata[`ID_WIDTH-1:0] < `PLIC_NUM_INTERRUPTS) begin
+                    if ((plic_wdata[`ID_WIDTH-1:0] != '0) &&
+                        (plic_wdata[`ID_WIDTH-1:0] < `PLIC_NUM_INTERRUPTS) &&
+                        in_service_regs[plic_wdata[`ID_WIDTH-1:0]]) begin
                         release_mask[plic_wdata[`ID_WIDTH-1:0]] = 1'b1;
                     end
                 end else begin

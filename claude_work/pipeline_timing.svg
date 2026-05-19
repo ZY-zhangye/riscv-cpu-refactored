@@ -1,0 +1,1192 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1060 560"
+   version="1.1"
+   id="svg75"
+   sodipodi:docname="pipeline_timing.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:export-filename="流水线执行时序图.png"
+   inkscape:export-xdpi="900"
+   inkscape:export-ydpi="900"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview75"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="41.093005"
+     inkscape:cx="1064.8041"
+     inkscape:cy="14.272502"
+     inkscape:window-width="2240"
+     inkscape:window-height="1294"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg75" />
+  <defs
+     id="defs2">
+    <filter
+       id="shadow"
+       x="-0.0096153846"
+       y="-0.019736842"
+       width="1.0192308"
+       height="1.0394737">
+      <feDropShadow
+         dx="1"
+         dy="2"
+         stdDeviation="2"
+         flood-opacity="0.12" />
+    </filter>
+    <marker
+       id="arrow_black"
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#37474F"
+         id="polygon1" />
+    </marker>
+    <marker
+       id="arrow_gray"
+       markerWidth="8"
+       markerHeight="6"
+       refX="8"
+       refY="3"
+       orient="auto">
+      <polygon
+         points="0 0, 8 3, 0 6"
+         fill="#90A4AE"
+         id="polygon2" />
+    </marker>
+  </defs>
+  <rect
+     style="fill:#ffffff;stroke:#ffffff;stroke-width:7.56734"
+     id="rect1"
+     width="1057.5879"
+     height="557.60529"
+     x="0.90892184"
+     y="1.5172979"
+     rx="3.8122332" />
+  <!-- 背景 -->
+  <!-- 标题 -->
+  <text
+     x="530"
+     y="32"
+     text-anchor="middle"
+     font-size="18"
+     font-weight="bold"
+     fill="#263238"
+     font-family="Arial, sans-serif"
+     id="text2">五级流水线时序示意图</text>
+  <text
+     x="527.66382"
+     y="57.840412"
+     text-anchor="middle"
+     font-size="12px"
+     fill="#78909c"
+     font-family="Arial, sans-serif"
+     id="text3">（理想流水线，无冒险 / 无停顿）</text>
+  <!-- ===== 时钟周期标签 ===== -->
+  <text
+     x="167.66383"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text4">CC1</text>
+  <text
+     x="252.66383"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text5">CC2</text>
+  <text
+     x="337.66385"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text6">CC3</text>
+  <text
+     x="422.66385"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text7">CC4</text>
+  <text
+     x="507.66385"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text8">CC5</text>
+  <text
+     x="592.66382"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text9">CC6</text>
+  <text
+     x="677.66382"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text10">CC7</text>
+  <text
+     x="762.66382"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text11">CC8</text>
+  <text
+     x="847.66382"
+     y="119.71479"
+     text-anchor="middle"
+     font-size="13px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text12">CC9</text>
+  <!-- 时间箭头 -->
+  <line
+     x1="137.66383"
+     y1="131.71478"
+     x2="877.66382"
+     y2="131.71478"
+     stroke="#37474f"
+     stroke-width="1.5"
+     marker-end="url(#arrow_black)"
+     id="line12" />
+  <text
+     x="887.66382"
+     y="135.71478"
+     font-size="11px"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text13">时间 →</text>
+  <!-- ===== 垂直网格线 ===== -->
+  <line
+     x1="124.66383"
+     y1="99.71479"
+     x2="124.66383"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line13" />
+  <line
+     x1="209.66383"
+     y1="99.71479"
+     x2="209.66383"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line14" />
+  <line
+     x1="294.66385"
+     y1="99.71479"
+     x2="294.66385"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line15" />
+  <line
+     x1="379.66385"
+     y1="99.71479"
+     x2="379.66385"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line16" />
+  <line
+     x1="464.66385"
+     y1="99.71479"
+     x2="464.66385"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line17" />
+  <line
+     x1="549.66382"
+     y1="99.71479"
+     x2="549.66382"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line18" />
+  <line
+     x1="634.66382"
+     y1="99.71479"
+     x2="634.66382"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line19" />
+  <line
+     x1="719.66382"
+     y1="99.71479"
+     x2="719.66382"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line20" />
+  <line
+     x1="804.66382"
+     y1="99.71479"
+     x2="804.66382"
+     y2="439.71478"
+     stroke="#eceff1"
+     stroke-width="1"
+     id="line21" />
+  <!-- ===== 指令标签 ===== -->
+  <text
+     x="92.663834"
+     y="157.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text21">指令 1</text>
+  <text
+     x="92.663834"
+     y="212.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text22">指令 2</text>
+  <text
+     x="92.663834"
+     y="267.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text23">指令 3</text>
+  <text
+     x="92.663834"
+     y="322.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text24">指令 4</text>
+  <text
+     x="92.663834"
+     y="377.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text25">指令 5</text>
+  <text
+     x="92.663834"
+     y="432.71478"
+     text-anchor="end"
+     font-size="12px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text26">指令 6</text>
+  <!-- ===== 流水线方块 ===== -->
+  <!-- 指令 1 -->
+  <rect
+     x="129.66383"
+     y="139.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect26" />
+  <text
+     x="168.66383"
+     y="163.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text27">IF</text>
+  <rect
+     x="214.66383"
+     y="139.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect27" />
+  <text
+     x="253.66383"
+     y="163.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text28">ID</text>
+  <rect
+     x="299.66385"
+     y="139.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect28" />
+  <text
+     x="338.66385"
+     y="163.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text29">EX</text>
+  <rect
+     x="384.66385"
+     y="139.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect29" />
+  <text
+     x="423.66385"
+     y="163.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text30">MEM</text>
+  <rect
+     x="469.66385"
+     y="139.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect30" />
+  <text
+     x="508.66385"
+     y="163.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text31">WB</text>
+  <!-- 指令 2 -->
+  <rect
+     x="214.66383"
+     y="194.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect31" />
+  <text
+     x="253.66383"
+     y="218.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text32">IF</text>
+  <rect
+     x="299.66385"
+     y="194.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect32" />
+  <text
+     x="338.66385"
+     y="218.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text33">ID</text>
+  <rect
+     x="384.66385"
+     y="194.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect33" />
+  <text
+     x="423.66385"
+     y="218.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text34">EX</text>
+  <rect
+     x="469.66385"
+     y="194.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect34" />
+  <text
+     x="508.66385"
+     y="218.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text35">MEM</text>
+  <rect
+     x="554.66382"
+     y="194.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect35" />
+  <text
+     x="593.66382"
+     y="218.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text36">WB</text>
+  <!-- 指令 3 -->
+  <rect
+     x="299.66385"
+     y="249.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect36" />
+  <text
+     x="338.66385"
+     y="273.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text37">IF</text>
+  <rect
+     x="384.66385"
+     y="249.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect37" />
+  <text
+     x="423.66385"
+     y="273.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text38">ID</text>
+  <rect
+     x="469.66385"
+     y="249.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect38" />
+  <text
+     x="508.66385"
+     y="273.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text39">EX</text>
+  <rect
+     x="554.66382"
+     y="249.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect39" />
+  <text
+     x="593.66382"
+     y="273.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text40">MEM</text>
+  <rect
+     x="639.66382"
+     y="249.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect40" />
+  <text
+     x="678.66382"
+     y="273.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text41">WB</text>
+  <!-- 指令 4 -->
+  <rect
+     x="384.66385"
+     y="304.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect41" />
+  <text
+     x="423.66385"
+     y="328.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text42">IF</text>
+  <rect
+     x="469.66385"
+     y="304.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect42" />
+  <text
+     x="508.66385"
+     y="328.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text43">ID</text>
+  <rect
+     x="554.66382"
+     y="304.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect43" />
+  <text
+     x="593.66382"
+     y="328.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text44">EX</text>
+  <rect
+     x="639.66382"
+     y="304.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect44" />
+  <text
+     x="678.66382"
+     y="328.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text45">MEM</text>
+  <rect
+     x="724.66382"
+     y="304.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect45" />
+  <text
+     x="763.66382"
+     y="328.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text46">WB</text>
+  <!-- 指令 5 -->
+  <rect
+     x="469.66385"
+     y="359.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect46" />
+  <text
+     x="508.66385"
+     y="383.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text47">IF</text>
+  <rect
+     x="554.66382"
+     y="359.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect47" />
+  <text
+     x="593.66382"
+     y="383.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text48">ID</text>
+  <rect
+     x="639.66382"
+     y="359.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect48" />
+  <text
+     x="678.66382"
+     y="383.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text49">EX</text>
+  <rect
+     x="724.66382"
+     y="359.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect49" />
+  <text
+     x="763.66382"
+     y="383.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text50">MEM</text>
+  <rect
+     x="809.66382"
+     y="359.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect50" />
+  <text
+     x="848.66382"
+     y="383.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text51">WB</text>
+  <!-- 指令 6 -->
+  <rect
+     x="554.66382"
+     y="414.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect51" />
+  <text
+     x="593.66382"
+     y="438.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text52">IF</text>
+  <rect
+     x="639.66382"
+     y="414.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect52" />
+  <text
+     x="678.66382"
+     y="438.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text53">ID</text>
+  <rect
+     x="724.66382"
+     y="414.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect53" />
+  <text
+     x="763.66382"
+     y="438.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text54">EX</text>
+  <rect
+     x="809.66382"
+     y="414.71478"
+     width="78"
+     height="38"
+     rx="6"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1.5"
+     filter="url(#shadow)"
+     id="rect54" />
+  <text
+     x="848.66382"
+     y="438.71478"
+     text-anchor="middle"
+     font-size="12px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text55">MEM</text>
+  <!-- 指令 6 的 WB 在 CC10，超出画布不需要画 -->
+  <!-- ===== 分区标注 ===== -->
+  <!-- 流水线填充区域 -->
+  <rect
+     x="122.91171"
+     y="78.689308"
+     width="340"
+     height="14"
+     rx="4"
+     fill="#ffecb3"
+     fill-opacity="0.7"
+     id="rect55" />
+  <text
+     x="295.83194"
+     y="89.689316"
+     text-anchor="middle"
+     font-size="10px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text56">← 流水线填充 (Pipeline Fill) →</text>
+  <!-- 满负荷区域标注 -->
+  <rect
+     x="466.22128"
+     y="79.078674"
+     width="85"
+     height="14"
+     rx="4"
+     fill="#c8e6c9"
+     fill-opacity="0.8"
+     id="rect56" />
+  <text
+     x="509.22128"
+     y="90.078674"
+     text-anchor="middle"
+     font-size="10px"
+     font-weight="bold"
+     fill="#2e7d32"
+     font-family="Arial, sans-serif"
+     id="text57">满负荷</text>
+  <!-- 流水线排空区域 -->
+  <rect
+     x="634.27448"
+     y="77.521233"
+     width="255"
+     height="14"
+     rx="4"
+     fill="#ffecb3"
+     fill-opacity="0.7"
+     id="rect57" />
+  <text
+     x="762.27448"
+     y="88.521233"
+     text-anchor="middle"
+     font-size="10px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text58">← 流水线排空 (Pipeline Drain) →</text>
+  <!-- 斜向箭头：展示一条指令的完整生命周期 -->
+  <path
+     d="m 168.66384,177.71479 v 12 l 342.334,-0.0945 0.32256,-17.31699"
+     stroke="#455a64"
+     stroke-width="1.2"
+     fill="none"
+     stroke-dasharray="3, 3"
+     marker-end="url(#arrow_gray)"
+     id="path58"
+     sodipodi:nodetypes="cccc" />
+  <text
+     x="280.6727"
+     y="183.172"
+     font-size="9px"
+     fill="#607d8b"
+     font-family="Arial, sans-serif"
+     id="text59">← 单条指令生命周期 (5 周期) →</text>
+  <!-- ===== 底部阶段图例 ===== -->
+  <rect
+     x="124.66383"
+     y="479.71478"
+     width="78"
+     height="24"
+     rx="5"
+     fill="#bbdefb"
+     stroke="#1976d2"
+     stroke-width="1"
+     id="rect59" />
+  <text
+     x="163.66383"
+     y="496.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#0d47a1"
+     font-family="Arial, sans-serif"
+     id="text60">IF</text>
+  <rect
+     x="214.66383"
+     y="479.71478"
+     width="78"
+     height="24"
+     rx="5"
+     fill="#c8e6c9"
+     stroke="#388e3c"
+     stroke-width="1"
+     id="rect60" />
+  <text
+     x="253.66383"
+     y="496.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#1b5e20"
+     font-family="Arial, sans-serif"
+     id="text61">ID</text>
+  <rect
+     x="304.66385"
+     y="479.71478"
+     width="78"
+     height="24"
+     rx="5"
+     fill="#ffe0b2"
+     stroke="#f57c00"
+     stroke-width="1"
+     id="rect61" />
+  <text
+     x="343.66385"
+     y="496.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#e65100"
+     font-family="Arial, sans-serif"
+     id="text62">EX</text>
+  <rect
+     x="394.66385"
+     y="479.71478"
+     width="78"
+     height="24"
+     rx="5"
+     fill="#f8bbd0"
+     stroke="#d81b60"
+     stroke-width="1"
+     id="rect62" />
+  <text
+     x="433.66385"
+     y="496.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#880e4f"
+     font-family="Arial, sans-serif"
+     id="text63">MEM</text>
+  <rect
+     x="484.66385"
+     y="479.71478"
+     width="78"
+     height="24"
+     rx="5"
+     fill="#e1bee7"
+     stroke="#8e24aa"
+     stroke-width="1"
+     id="rect63" />
+  <text
+     x="523.66382"
+     y="496.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#4a148c"
+     font-family="Arial, sans-serif"
+     id="text64">WB</text>
+  <!-- 图例文字 -->
+  <text
+     x="572.66382"
+     y="497.71478"
+     font-size="12px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text65">= 取指 · 译码 · 执行 · 访存 · 写回</text>
+  <!-- ===== 右侧关键说明 ===== -->
+  <rect
+     x="907.66382"
+     y="139.71478"
+     width="135"
+     height="150"
+     rx="8"
+     fill="#ffffff"
+     stroke="#b0bec5"
+     stroke-width="1"
+     filter="url(#shadow)"
+     id="rect65" />
+  <text
+     x="974.66382"
+     y="161.71478"
+     text-anchor="middle"
+     font-size="11px"
+     font-weight="bold"
+     fill="#37474f"
+     font-family="Arial, sans-serif"
+     id="text66">关键特性</text>
+  <line
+     x1="922.66382"
+     y1="169.71478"
+     x2="1027.6638"
+     y2="169.71478"
+     stroke="#e0e0e0"
+     stroke-width="0.5"
+     id="line66" />
+  <text
+     x="917.66382"
+     y="187.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text67">• 每周期发射 1 条</text>
+  <text
+     x="917.66382"
+     y="202.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text68">• 每周期完成 1 条</text>
+  <text
+     x="917.66382"
+     y="217.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text69">• CPI → 1 (稳态)</text>
+  <text
+     x="917.66382"
+     y="232.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text70">• 吞吐率 5×</text>
+  <text
+     x="917.66382"
+     y="247.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text71">(vs 多周期)</text>
+  <text
+     x="917.66382"
+     y="267.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text72">• 延迟仍为 5 周期</text>
+  <text
+     x="917.66382"
+     y="282.71478"
+     font-size="9px"
+     fill="#546e7a"
+     font-family="Arial, sans-serif"
+     id="text73">(单条指令)</text>
+  <!-- ===== 垂直标注：阶段并行 ===== -->
+  <path
+     d="m 507.81133,132.00584 v 325"
+     stroke="#90a4ae"
+     stroke-width="1"
+     stroke-dasharray="2, 4"
+     id="path73" />
+  <text
+     x="482.46619"
+     y="402.58105"
+     font-size="9px"
+     fill="#90a4ae"
+     font-family="Arial, sans-serif"
+     id="text74">同一时钟周期</text>
+  <text
+     x="481.36493"
+     y="419.18875"
+     font-size="9px"
+     fill="#90a4ae"
+     font-family="Arial, sans-serif"
+     id="text75">5 条指令并行</text>
+</svg>

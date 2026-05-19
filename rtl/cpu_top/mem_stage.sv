@@ -23,6 +23,9 @@ module mem_stage (
     //异常信息接口
     input logic exception_flag,
     input logic [`EXE_EXC_BUS-1:0] exe_exc_bus,
+    //plic接口
+    input logic plic_irq,
+    input logic external_irq_enable,
     //CSR接口
     output logic csr_we,
     output logic [11:0] csr_waddr,
@@ -183,6 +186,8 @@ end
     logic exception_iam;
     logic exception_lam;
     logic exception_sam;
+    logic sync_exception;
+    logic take_irq;
     assign exception_iam = (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
     logic is_word_access;
     logic is_half_access;
@@ -194,14 +199,18 @@ end
     assign exception_sam = !ms_flush &&
                        (((load_inst == `SW) && (data_offest != 2'b00)) ||
                         ((load_inst == `SH) && data_offest[0]));
+    assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];
+    assign take_irq = ms_valid && !ms_flush && !sync_exception && plic_irq && external_irq_enable;
     assign exception_code = ms_flush ? `EXC_NONE :
                             exception_iam ? `EXC_IAM :
                             exception_lam ? `EXC_LAM :
                             exception_sam ? `EXC_SAM :
+                            take_irq ? `PLIC_IRQ_BIT :
                             exc_code;
     assign exception_mtval = ms_flush ? 32'b0 :
                             exception_iam ? br_target :
                             (exception_lam || exception_sam) ? exe_result :
+                            take_irq ? 32'b0 :
                             exc_mtval;
 
 endmodule

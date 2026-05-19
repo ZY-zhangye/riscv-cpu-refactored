@@ -16,7 +16,7 @@ set MODE=%~1
 if "%MODE%"=="" set MODE=all
 
 REM === compilation ===
-vlog -sv rtl/cpu_top/*.sv rtl/cpu_top/*.svh test/*.sv
+vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.svh rtl/my_cpu/*.sv test/*.sv
 if errorlevel 1 (
     echo Compile failed!
     exit /b 1
@@ -168,7 +168,7 @@ for %%i in (%TEST_LIST%) do (
         exit /b 1
     )
     copy /Y "hex\riscv-tests\%TEST_PREFIX%-%%i.hex" "hex\riscv-tests\rv32-p-riscv.hex" >nul
-    vsim -c -do "run -all; quit -force" tb_cpu_top > "results\%RESULT_PREFIX%_%%i.txt"
+    vsim -c -do "run -all; quit -force" tb_my_cpu > "results\%RESULT_PREFIX%_%%i.txt"
     findstr /C:"Test passed." "results\%RESULT_PREFIX%_%%i.txt" >nul
     if errorlevel 1 (
         powershell -Command "Write-Host '[FAILED] %TEST_PREFIX%-%%i' -ForegroundColor Red"

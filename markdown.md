@@ -1,0 +1,1 @@
+vlog rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.sv rtl/my_cpu/*.svh test/*.sv

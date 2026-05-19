@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="980" viewBox="0 0 1800 980">
+  <defs>
+    <marker id="arrow-black" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111827"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#047857"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6d28d9"/>
+    </marker>
+    <style>
+      text { font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif; fill: #111827; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #475569; }
+      .stage-title { font-size: 21px; font-weight: 700; }
+      .stage-body { font-size: 14px; fill: #334155; }
+      .small-title { font-size: 17px; font-weight: 700; }
+      .small-body { font-size: 13px; fill: #334155; }
+      .bus-label { font-size: 14px; font-weight: 700; fill: #111827; }
+      .ctrl-label { font-size: 13px; fill: #2563eb; }
+      .red-label { font-size: 13px; fill: #b91c1c; }
+      .green-label { font-size: 13px; fill: #047857; }
+      .purple-label { font-size: 13px; fill: #6d28d9; }
+      .box { stroke: #1f2937; stroke-width: 1.6; rx: 12; ry: 12; }
+      .subbox { stroke: #64748b; stroke-width: 1.1; rx: 8; ry: 8; }
+      .bus { stroke: #111827; stroke-width: 7; fill: none; marker-end: url(#arrow-black); }
+      .thin { stroke-width: 2.2; fill: none; }
+      .dash { stroke-dasharray: 9 7; }
+      .dot { stroke-dasharray: 3 6; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1800" height="980" fill="#ffffff"/>
+
+  <text x="900" y="46" text-anchor="middle" class="title">cpu_top 五级流水线结构级总体框图</text>
+  <text x="900" y="74" text-anchor="middle" class="subtitle">主数据通路横向展开，级间 packet 合并为粗总线；控制流、前递流、异常/重定向流使用不同线型表示</text>
+
+  <!-- Pipeline stages -->
+  <rect class="box" x="95" y="190" width="230" height="150" fill="#e8f3ff"/>
+  <text x="210" y="225" text-anchor="middle" class="stage-title">IF 取指阶段</text>
+  <text x="210" y="255" text-anchor="middle" class="stage-body">PC / Next PC</text>
+  <text x="210" y="280" text-anchor="middle" class="stage-body">指令请求与取指打一拍</text>
+  <text x="210" y="305" text-anchor="middle" class="stage-body">BTB 分支预测查询</text>
+
+  <rect class="box" x="405" y="190" width="250" height="150" fill="#eefbf3"/>
+  <text x="530" y="225" text-anchor="middle" class="stage-title">ID 译码阶段</text>
+  <text x="530" y="255" text-anchor="middle" class="stage-body">指令译码 / 立即数生成</text>
+  <text x="530" y="280" text-anchor="middle" class="stage-body">控制包与源操作数打包</text>
+  <text x="530" y="305" text-anchor="middle" class="stage-body">前递选择 / load-use 检测</text>
+
+  <rect class="box" x="740" y="165" width="320" height="200" fill="#fff6e5"/>
+  <text x="900" y="200" text-anchor="middle" class="stage-title">EXE 执行阶段</text>
+  <rect class="subbox" x="770" y="225" width="82" height="42" fill="#ffffff"/>
+  <text x="811" y="252" text-anchor="middle" class="small-body">ALU</text>
+  <rect class="subbox" x="870" y="225" width="95" height="42" fill="#ffffff"/>
+  <text x="917" y="252" text-anchor="middle" class="small-body">MUL/DIV</text>
+  <rect class="subbox" x="985" y="225" width="50" height="42" fill="#ffffff"/>
+  <text x="1010" y="252" text-anchor="middle" class="small-body">FPU</text>
+  <rect class="subbox" x="770" y="285" width="118" height="42" fill="#ffffff"/>
+  <text x="829" y="312" text-anchor="middle" class="small-body">Z-bitman</text>
+  <rect class="subbox" x="905" y="285" width="130" height="42" fill="#ffffff"/>
+  <text x="970" y="312" text-anchor="middle" class="small-body">Branch / LSU</text>
+  <text x="900" y="348" text-anchor="middle" class="stage-body">结果选择、CSR 写数据、访存地址生成</text>
+
+  <rect class="box" x="1135" y="190" width="250" height="150" fill="#f7edff"/>
+  <text x="1260" y="225" text-anchor="middle" class="stage-title">MEM 访存阶段</text>
+  <text x="1260" y="255" text-anchor="middle" class="stage-body">Load 数据对齐与扩展</text>
+  <text x="1260" y="280" text-anchor="middle" class="stage-body">地址非对齐异常检测</text>
+  <text x="1260" y="305" text-anchor="middle" class="stage-body">CSR 最终写口输出</text>
+
+  <rect class="box" x="1480" y="190" width="230" height="150" fill="#fff0f3"/>
+  <text x="1595" y="225" text-anchor="middle" class="stage-title">WB 写回阶段</text>
+  <text x="1595" y="255" text-anchor="middle" class="stage-body">EXE/MEM 结果选择</text>
+  <text x="1595" y="280" text-anchor="middle" class="stage-body">整数/浮点寄存器写回</text>
+  <text x="1595" y="305" text-anchor="middle" class="stage-body">Debug 写回信息</text>
+
+  <!-- Main pipeline buses -->
+  <path class="bus" d="M 325 265 L 397 265"/>
+  <text x="361" y="239" text-anchor="middle" class="bus-label">fs_to_ds_bus</text>
+  <text x="361" y="363" text-anchor="middle" class="stage-body">inst / pc / bp_packet</text>
+
+  <path class="bus" d="M 655 265 L 732 265"/>
+  <text x="693" y="239" text-anchor="middle" class="bus-label">ds_to_es_bus</text>
+  <text x="695" y="386" text-anchor="middle" class="stage-body">ALU/FPU/MUL/MEM/CSR/BR/CTRL/SRC/BITMAN packets</text>
+
+  <path class="bus" d="M 1060 265 L 1127 265"/>
+  <text x="1094" y="239" text-anchor="middle" class="bus-label">es_to_ms_bus</text>
+  <text x="1096" y="363" text-anchor="middle" class="stage-body">pc / result / load / rd / csr</text>
+
+  <path class="bus" d="M 1385 265 L 1472 265"/>
+  <text x="1430" y="239" text-anchor="middle" class="bus-label">ms_to_ws_bus</text>
+  <text x="1430" y="363" text-anchor="middle" class="stage-body">pc / wb_result / rd / wen</text>
+
+  <!-- Interfaces and state units -->
+  <rect class="box" x="65" y="500" width="290" height="105" fill="#eef6ff"/>
+  <text x="210" y="532" text-anchor="middle" class="small-title">指令存储器接口</text>
+  <text x="210" y="560" text-anchor="middle" class="small-body">imem_addr / imem_en</text>
+  <text x="210" y="582" text-anchor="middle" class="small-body">imem_rdata</text>
+
+  <rect class="box" x="1030" y="500" width="350" height="105" fill="#f2f0ff"/>
+  <text x="1205" y="532" text-anchor="middle" class="small-title">数据存储器接口</text>
+  <text x="1205" y="560" text-anchor="middle" class="small-body">dmem_addr / dmem_wen / dmem_en</text>
+  <text x="1205" y="582" text-anchor="middle" class="small-body">dmem_wdata / dmem_rdata</text>
+
+  <rect class="box" x="385" y="500" width="270" height="112" fill="#f5fff3"/>
+  <text x="520" y="532" text-anchor="middle" class="small-title">整数寄存器堆</text>
+  <text x="520" y="560" text-anchor="middle" class="small-body">regfiles.sv</text>
+  <text x="520" y="582" text-anchor="middle" class="small-body">rs1/rs2 读，rd 写</text>
+
+  <rect class="box" x="705" y="500" width="270" height="112" fill="#f5fff3"/>
+  <text x="840" y="532" text-anchor="middle" class="small-title">浮点寄存器堆</text>
+  <text x="840" y="560" text-anchor="middle" class="small-body">reg_fpu.sv</text>
+  <text x="840" y="582" text-anchor="middle" class="small-body">rs1/rs2/rs3 读，rd 写</text>
+
+  <rect class="box" x="430" y="705" width="430" height="125" fill="#fff8e8"/>
+  <text x="645" y="738" text-anchor="middle" class="small-title">CSR 与异常控制</text>
+  <text x="645" y="766" text-anchor="middle" class="small-body">regfile_csr.sv</text>
+  <text x="645" y="788" text-anchor="middle" class="small-body">mstatus / mtvec / mepc / mcause / mtval</text>
+  <text x="645" y="810" text-anchor="middle" class="small-body">exception_flag / exception_addr / mret</text>
+
+  <!-- Memory interface flows -->
+  <path class="thin" d="M 210 500 C 210 430 210 395 210 340" stroke="#475569" marker-end="url(#arrow-black)"/>
+  <path class="thin" d="M 255 340 C 255 395 255 430 255 500" stroke="#475569" marker-end="url(#arrow-black)"/>
+  <text x="96" y="455" class="stage-body">取指地址/读数据</text>
+
+  <path class="thin" d="M 970 365 C 1030 425 1085 455 1160 500" stroke="#6d28d9" marker-end="url(#arrow-purple)"/>
+  <text x="1042" y="442" class="purple-label">访存请求</text>
+  <path class="thin" d="M 1245 500 C 1260 440 1260 390 1260 340" stroke="#6d28d9" marker-end="url(#arrow-purple)"/>
+  <text x="1268" y="438" class="purple-label">load 数据</text>
+
+  <!-- Register and CSR flows -->
+  <path class="thin" d="M 520 500 C 515 430 520 390 520 340" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <path class="thin" d="M 560 340 C 575 400 575 455 560 500" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="392" y="452" class="green-label">rs1/rs2 读</text>
+
+  <path class="thin" d="M 1595 340 C 1540 650 720 670 560 612" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="1040" y="674" class="green-label">写回整数寄存器</text>
+
+  <path class="thin" d="M 840 500 C 840 430 840 395 840 365" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <path class="thin" d="M 865 365 C 890 420 890 455 865 500" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="730" y="452" class="green-label">FPU 源操作数</text>
+
+  <path class="thin" d="M 1545 340 C 1500 700 1030 685 860 612" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="1230" y="704" class="green-label">写回浮点寄存器</text>
+
+  <path class="thin" d="M 600 340 C 620 465 640 610 645 705" stroke="#c2410c" marker-end="url(#arrow-black)"/>
+  <text x="640" y="655" class="stage-body">CSR 读地址</text>
+  <path class="thin" d="M 690 705 C 690 600 660 460 620 340" stroke="#c2410c" marker-end="url(#arrow-black)"/>
+  <text x="704" y="655" class="stage-body">CSR 读数据</text>
+  <path class="thin" d="M 1260 340 C 1210 720 965 770 860 770" stroke="#c2410c" marker-end="url(#arrow-black)"/>
+  <text x="1005" y="760" class="stage-body">CSR 写口 / 异常码</text>
+
+  <!-- Control and feedback flows -->
+  <path class="thin dash" d="M 180 172 C 360 105 620 105 835 150" stroke="#2563eb" marker-end="url(#arrow-blue)"/>
+  <path class="thin dash" d="M 970 150 C 1190 105 1480 110 1610 172" stroke="#2563eb" marker-end="url(#arrow-blue)"/>
+  <text x="900" y="118" text-anchor="middle" class="ctrl-label">valid / allowin 握手控制链</text>
+
+  <path class="thin dash" d="M 940 165 C 920 90 250 90 220 190" stroke="#b91c1c" marker-end="url(#arrow-red)"/>
+  <text x="550" y="106" text-anchor="middle" class="red-label">分支重定向 br_redirect / br_redirect_target</text>
+
+  <path class="thin dot" d="M 985 165 C 980 126 315 128 265 190" stroke="#d97706" marker-end="url(#arrow-black)"/>
+  <text x="655" y="146" text-anchor="middle" class="stage-body">BTB 更新 bp_update</text>
+
+  <path class="thin dash" d="M 430 765 C 200 735 115 465 152 340" stroke="#b91c1c" marker-end="url(#arrow-red)"/>
+  <text x="178" y="716" class="red-label">异常 / mret 重定向到 IF</text>
+
+  <path class="thin dash" d="M 430 790 C 340 640 360 430 445 340" stroke="#b91c1c" marker-end="url(#arrow-red)"/>
+  <text x="260" y="620" class="red-label">flush ID</text>
+  <path class="thin dash" d="M 800 705 C 940 635 990 500 1008 365" stroke="#b91c1c" marker-end="url(#arrow-red)"/>
+  <text x="960" y="620" class="red-label">flush EXE/MEM</text>
+
+  <path class="thin dot" d="M 1010 365 C 950 440 755 445 610 340" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="715" y="418" class="green-label">EXE 前递元信息</text>
+  <path class="thin dot" d="M 1260 340 C 1140 430 780 465 615 340" stroke="#047857" marker-end="url(#arrow-green)"/>
+  <text x="1010" y="468" class="green-label">MEM 结果/写回元信息前递</text>
+
+  <!-- Legend -->
+  <rect x="1120" y="720" width="560" height="145" rx="10" ry="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.3"/>
+  <text x="1145" y="750" class="small-title">图例</text>
+  <line x1="1145" y1="778" x2="1230" y2="778" stroke="#111827" stroke-width="7" marker-end="url(#arrow-black)"/>
+  <text x="1250" y="783" class="small-body">级间 packet 主数据总线</text>
+  <line x1="1145" y1="810" x2="1230" y2="810" stroke="#2563eb" stroke-width="2.2" stroke-dasharray="9 7" marker-end="url(#arrow-blue)"/>
+  <text x="1250" y="815" class="small-body">握手/流水控制</text>
+  <line x1="1145" y1="842" x2="1230" y2="842" stroke="#b91c1c" stroke-width="2.2" stroke-dasharray="9 7" marker-end="url(#arrow-red)"/>
+  <text x="1250" y="847" class="small-body">flush、异常和重定向</text>
+  <line x1="1420" y1="810" x2="1505" y2="810" stroke="#047857" stroke-width="2.2" stroke-dasharray="3 6" marker-end="url(#arrow-green)"/>
+  <text x="1525" y="815" class="small-body">前递与寄存器读写</text>
+  <line x1="1420" y1="842" x2="1505" y2="842" stroke="#6d28d9" stroke-width="2.2" marker-end="url(#arrow-purple)"/>
+  <text x="1525" y="847" class="small-body">数据存储器访问</text>
+</svg>

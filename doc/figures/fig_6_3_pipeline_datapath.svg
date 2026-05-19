@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1080" viewBox="0 0 1900 1080">
+  <defs>
+    <marker id="arrow-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111827"/>
+    </marker>
+    <marker id="arrow-ctrl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+    <marker id="arrow-reg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#047857"/>
+    </marker>
+    <marker id="arrow-mem" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6d28d9"/>
+    </marker>
+    <style>
+      text { font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif; fill: #111827; }
+      .title { font-size: 31px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #475569; }
+      .stage-name { font-size: 17px; font-weight: 700; fill: #64748b; }
+      .unit-title { font-size: 19px; font-weight: 700; }
+      .unit-body { font-size: 13px; fill: #334155; }
+      .label { font-size: 13px; fill: #334155; }
+      .data-label { font-size: 13px; font-weight: 700; fill: #111827; }
+      .ctrl-label { font-size: 13px; fill: #b91c1c; }
+      .reg-label { font-size: 13px; fill: #047857; }
+      .mem-label { font-size: 13px; fill: #6d28d9; }
+      .unit { stroke: #1f2937; stroke-width: 1.6; rx: 10; ry: 10; }
+      .pipe-reg { stroke: #334155; stroke-width: 1.8; rx: 7; ry: 7; }
+      .mux { stroke: #1f2937; stroke-width: 1.6; }
+      .data { stroke: #111827; stroke-width: 3.3; fill: none; marker-end: url(#arrow-data); }
+      .thin-data { stroke: #111827; stroke-width: 2.1; fill: none; marker-end: url(#arrow-data); }
+      .reg-flow { stroke: #047857; stroke-width: 2.1; fill: none; marker-end: url(#arrow-reg); }
+      .mem-flow { stroke: #6d28d9; stroke-width: 2.1; fill: none; marker-end: url(#arrow-mem); }
+      .ctrl-flow { stroke: #b91c1c; stroke-width: 2.2; fill: none; stroke-dasharray: 9 7; marker-end: url(#arrow-ctrl); }
+      .stage-bg { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1.0; stroke-dasharray: 8 8; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1900" height="1080" fill="#ffffff"/>
+  <text x="950" y="46" text-anchor="middle" class="title">图 6-3 五级流水线数据通路图</text>
+  <text x="950" y="74" text-anchor="middle" class="subtitle">以 CPU 指令执行过程为主线，展示取指、译码、执行、访存和写回阶段中的关键数据流与控制流</text>
+
+  <!-- Stage backgrounds -->
+  <rect class="stage-bg" x="55" y="110" width="315" height="830"/>
+  <rect class="stage-bg" x="390" y="110" width="360" height="830"/>
+  <rect class="stage-bg" x="770" y="110" width="430" height="830"/>
+  <rect class="stage-bg" x="1220" y="110" width="290" height="830"/>
+  <rect class="stage-bg" x="1530" y="110" width="315" height="830"/>
+
+  <text x="212" y="138" text-anchor="middle" class="stage-name">IF 取指</text>
+  <text x="570" y="138" text-anchor="middle" class="stage-name">ID 译码</text>
+  <text x="985" y="138" text-anchor="middle" class="stage-name">EXE 执行</text>
+  <text x="1365" y="138" text-anchor="middle" class="stage-name">MEM 访存</text>
+  <text x="1688" y="138" text-anchor="middle" class="stage-name">WB 写回</text>
+
+  <!-- IF datapath -->
+  <polygon class="mux" points="80,235 130,205 130,325 80,295" fill="#fff7ed"/>
+  <text x="105" y="258" text-anchor="middle" class="unit-title">PC</text>
+  <text x="105" y="280" text-anchor="middle" class="unit-body">选择器</text>
+
+  <rect class="unit" x="165" y="220" width="105" height="90" fill="#e8f3ff"/>
+  <text x="217" y="255" text-anchor="middle" class="unit-title">PC</text>
+  <text x="217" y="280" text-anchor="middle" class="unit-body">寄存器</text>
+
+  <rect class="unit" x="165" y="390" width="150" height="105" fill="#eef6ff"/>
+  <text x="240" y="426" text-anchor="middle" class="unit-title">指令存储器</text>
+  <text x="240" y="453" text-anchor="middle" class="unit-body">imem_addr</text>
+  <text x="240" y="475" text-anchor="middle" class="unit-body">imem_rdata</text>
+
+  <rect class="pipe-reg" x="340" y="190" width="55" height="365" fill="#f1f5f9"/>
+  <text x="368" y="335" text-anchor="middle" class="unit-title" transform="rotate(-90 368 335)">IF/ID</text>
+  <text x="368" y="392" text-anchor="middle" class="unit-body" transform="rotate(-90 368 392)">inst / pc</text>
+
+  <!-- ID datapath -->
+  <rect class="unit" x="435" y="190" width="160" height="110" fill="#eefbf3"/>
+  <text x="515" y="228" text-anchor="middle" class="unit-title">指令译码</text>
+  <text x="515" y="255" text-anchor="middle" class="unit-body">opcode / funct</text>
+  <text x="515" y="277" text-anchor="middle" class="unit-body">控制信号生成</text>
+
+  <rect class="unit" x="435" y="345" width="160" height="92" fill="#eefbf3"/>
+  <text x="515" y="379" text-anchor="middle" class="unit-title">立即数生成</text>
+  <text x="515" y="405" text-anchor="middle" class="unit-body">I/S/B/U/J/Z</text>
+
+  <rect class="unit" x="465" y="565" width="220" height="125" fill="#f5fff3"/>
+  <text x="575" y="600" text-anchor="middle" class="unit-title">寄存器堆</text>
+  <text x="575" y="628" text-anchor="middle" class="unit-body">rs1 / rs2 读端口</text>
+  <text x="575" y="650" text-anchor="middle" class="unit-body">rd 写端口</text>
+
+  <rect class="unit" x="608" y="190" width="118" height="90" fill="#fefce8"/>
+  <text x="667" y="225" text-anchor="middle" class="unit-title">CSR 读</text>
+  <text x="667" y="252" text-anchor="middle" class="unit-body">csr_data</text>
+
+  <rect class="pipe-reg" x="730" y="175" width="60" height="545" fill="#f1f5f9"/>
+  <text x="760" y="420" text-anchor="middle" class="unit-title" transform="rotate(-90 760 420)">ID/EXE</text>
+  <text x="760" y="485" text-anchor="middle" class="unit-body" transform="rotate(-90 760 485)">src / imm / ctrl</text>
+
+  <!-- EXE datapath -->
+  <polygon class="mux" points="820,525 870,495 870,615 820,585" fill="#f0fdf4"/>
+  <text x="846" y="548" text-anchor="middle" class="unit-title">源</text>
+  <text x="846" y="570" text-anchor="middle" class="unit-body">MUX</text>
+
+  <rect class="unit" x="905" y="205" width="135" height="78" fill="#fff6e5"/>
+  <text x="973" y="238" text-anchor="middle" class="unit-title">ALU</text>
+  <text x="973" y="263" text-anchor="middle" class="unit-body">算术/逻辑</text>
+
+  <rect class="unit" x="905" y="315" width="135" height="78" fill="#fff6e5"/>
+  <text x="973" y="348" text-anchor="middle" class="unit-title">MUL / DIV</text>
+  <text x="973" y="373" text-anchor="middle" class="unit-body">乘除法结果</text>
+
+  <rect class="unit" x="905" y="425" width="135" height="78" fill="#fff6e5"/>
+  <text x="973" y="458" text-anchor="middle" class="unit-title">Z-bitman</text>
+  <text x="973" y="483" text-anchor="middle" class="unit-body">位操作扩展</text>
+
+  <rect class="unit" x="905" y="535" width="135" height="78" fill="#fff6e5"/>
+  <text x="973" y="568" text-anchor="middle" class="unit-title">地址生成</text>
+  <text x="973" y="593" text-anchor="middle" class="unit-body">rs1 + imm</text>
+
+  <rect class="unit" x="905" y="645" width="135" height="78" fill="#fff6e5"/>
+  <text x="973" y="678" text-anchor="middle" class="unit-title">分支比较</text>
+  <text x="973" y="703" text-anchor="middle" class="unit-body">目标地址计算</text>
+
+  <rect class="unit" x="1068" y="205" width="105" height="300" fill="#fff7ed"/>
+  <text x="1120" y="333" text-anchor="middle" class="unit-title">执行结果</text>
+  <text x="1120" y="360" text-anchor="middle" class="unit-body">选择</text>
+
+  <rect class="pipe-reg" x="1185" y="175" width="60" height="545" fill="#f1f5f9"/>
+  <text x="1215" y="420" text-anchor="middle" class="unit-title" transform="rotate(-90 1215 420)">EXE/MEM</text>
+  <text x="1215" y="500" text-anchor="middle" class="unit-body" transform="rotate(-90 1215 500)">result / mem / csr</text>
+
+  <!-- MEM datapath -->
+  <rect class="unit" x="1270" y="350" width="170" height="120" fill="#f2f0ff"/>
+  <text x="1355" y="388" text-anchor="middle" class="unit-title">数据存储器</text>
+  <text x="1355" y="416" text-anchor="middle" class="unit-body">load / store</text>
+  <text x="1355" y="438" text-anchor="middle" class="unit-body">dmem_rdata</text>
+
+  <rect class="unit" x="1270" y="535" width="170" height="95" fill="#f7edff"/>
+  <text x="1355" y="570" text-anchor="middle" class="unit-title">访存后处理</text>
+  <text x="1355" y="596" text-anchor="middle" class="unit-body">字节选择 / 符号扩展</text>
+
+  <rect class="unit" x="1270" y="690" width="170" height="82" fill="#fff8e8"/>
+  <text x="1355" y="722" text-anchor="middle" class="unit-title">异常检测</text>
+  <text x="1355" y="747" text-anchor="middle" class="unit-body">地址非对齐</text>
+
+  <rect class="pipe-reg" x="1465" y="175" width="60" height="545" fill="#f1f5f9"/>
+  <text x="1495" y="420" text-anchor="middle" class="unit-title" transform="rotate(-90 1495 420)">MEM/WB</text>
+  <text x="1495" y="495" text-anchor="middle" class="unit-body" transform="rotate(-90 1495 495)">result / rd / wen</text>
+
+  <!-- WB datapath -->
+  <polygon class="mux" points="1580,285 1665,235 1665,445 1580,395" fill="#fff0f3"/>
+  <text x="1623" y="325" text-anchor="middle" class="unit-title">写回</text>
+  <text x="1623" y="350" text-anchor="middle" class="unit-title">MUX</text>
+  <text x="1623" y="378" text-anchor="middle" class="unit-body">选择写回数据</text>
+
+  <rect class="unit" x="1715" y="295" width="115" height="90" fill="#fff0f3"/>
+  <text x="1773" y="330" text-anchor="middle" class="unit-title">WB 数据</text>
+  <text x="1773" y="356" text-anchor="middle" class="unit-body">rd / wen</text>
+
+  <!-- Main execution flow -->
+  <path class="data" d="M 130 265 L 165 265"/>
+  <path class="data" d="M 217 310 L 217 390"/>
+  <text x="230" y="352" class="data-label">PC</text>
+  <path class="data" d="M 315 443 L 340 443"/>
+  <text x="302" y="430" text-anchor="end" class="data-label">instruction</text>
+  <path class="data" d="M 395 245 L 435 245"/>
+  <path class="thin-data" d="M 395 390 L 435 390"/>
+  <path class="reg-flow" d="M 515 300 L 515 565"/>
+  <text x="528" y="333" class="reg-label">rs1/rs2/rd</text>
+  <path class="reg-flow" d="M 685 625 L 730 625"/>
+  <text x="708" y="648" text-anchor="middle" class="reg-label">rs1/rs2 data</text>
+  <path class="thin-data" d="M 595 390 L 730 390"/>
+  <text x="662" y="377" text-anchor="middle" class="data-label">imm</text>
+  <path class="thin-data" d="M 595 245 L 730 245"/>
+  <text x="665" y="232" text-anchor="middle" class="data-label">control</text>
+
+  <path class="data" d="M 790 555 L 820 555"/>
+  <path class="data" d="M 870 555 L 890 555 L 890 244 L 905 244"/>
+  <path class="thin-data" d="M 890 555 L 890 354 L 905 354"/>
+  <path class="thin-data" d="M 890 555 L 890 464 L 905 464"/>
+  <path class="thin-data" d="M 870 555 L 905 574"/>
+  <path class="thin-data" d="M 870 555 L 890 555 L 890 684 L 905 684"/>
+
+  <path class="thin-data" d="M 1040 244 L 1068 244"/>
+  <path class="thin-data" d="M 1040 354 L 1054 354 L 1054 318 L 1068 318"/>
+  <path class="thin-data" d="M 1040 464 L 1054 464 L 1054 392 L 1068 392"/>
+  <path class="thin-data" d="M 1040 574 L 1054 574 L 1054 466 L 1068 466"/>
+  <path class="data" d="M 1173 355 L 1185 355"/>
+
+  <path class="mem-flow" d="M 1040 574 L 1105 574 L 1105 410 L 1270 410"/>
+  <text x="1148" y="397" class="mem-label">访存地址/写数据</text>
+  <path class="mem-flow" d="M 1440 410 L 1465 410"/>
+  <path class="thin-data" d="M 1440 583 L 1465 583"/>
+  <path class="thin-data" d="M 1245 355 L 1270 355 L 1270 583"/>
+  <text x="1252" y="342" class="data-label">EXE result</text>
+
+  <path class="data" d="M 1525 340 L 1580 340"/>
+  <path class="data" d="M 1665 340 L 1715 340"/>
+
+  <!-- WB MUX inputs -->
+  <text x="1560" y="242" text-anchor="end" class="label">ALU / MUL / DIV 结果</text>
+  <line x1="1565" y1="245" x2="1580" y2="245" stroke="#111827" stroke-width="2"/>
+  <text x="1560" y="282" text-anchor="end" class="label">访存读数据</text>
+  <line x1="1565" y1="285" x2="1580" y2="285" stroke="#111827" stroke-width="2"/>
+  <text x="1560" y="322" text-anchor="end" class="label">PC + 4</text>
+  <line x1="1565" y1="325" x2="1580" y2="325" stroke="#111827" stroke-width="2"/>
+  <text x="1560" y="362" text-anchor="end" class="label">CSR 读数据</text>
+  <line x1="1565" y1="365" x2="1580" y2="365" stroke="#111827" stroke-width="2"/>
+  <text x="1560" y="402" text-anchor="end" class="label">访存地址/其它结果</text>
+  <line x1="1565" y1="405" x2="1580" y2="405" stroke="#111827" stroke-width="2"/>
+
+  <!-- Write back loop -->
+  <path class="reg-flow" d="M 1773 385 L 1773 900 L 575 900 L 575 690"/>
+  <text x="1045" y="925" text-anchor="middle" class="reg-label">regfile_wdata / regfile_waddr / regfile_wen</text>
+
+  <!-- CSR and exception paths -->
+  <path class="thin-data" d="M 608 235 L 595 235"/>
+  <path class="thin-data" d="M 667 280 L 667 525 L 730 525"/>
+  <text x="674" y="318" class="label">CSR read data</text>
+
+  <path class="thin-data" d="M 1120 505 L 1120 730 L 1270 730"/>
+  <text x="1128" y="720" class="label">CSR 写数据/异常信息</text>
+  <path class="ctrl-flow" d="M 1355 772 L 1355 855 L 105 855 L 105 325"/>
+  <text x="540" y="880" text-anchor="middle" class="ctrl-label">异常入口 / mret 返回：exception_addr 反馈到 PC 选择器</text>
+
+  <!-- Branch and PC select path -->
+  <path class="ctrl-flow" d="M 1040 684 L 1090 684 L 1090 820 L 105 820 L 105 325"/>
+  <text x="720" y="805" text-anchor="middle" class="ctrl-label">分支比较 / 跳转目标计算 → PC 选择器</text>
+  <path class="thin-data" d="M 270 265 L 300 265 L 300 210 L 80 210 L 80 235"/>
+  <text x="292" y="197" class="label">PC + 4 顺序地址</text>
+
+  <!-- Forwarding paths -->
+  <path class="reg-flow" d="M 1173 315 L 1173 760 L 845 760 L 845 615"/>
+  <text x="910" y="748" class="reg-label">EXE 前递</text>
+  <path class="reg-flow" d="M 1440 583 L 1440 790 L 835 790 L 835 615"/>
+  <text x="1110" y="815" class="reg-label">MEM/WB 前递</text>
+
+  <!-- Legend -->
+  <rect x="80" y="955" width="1740" height="75" rx="10" ry="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+  <line x1="115" y1="990" x2="195" y2="990" stroke="#111827" stroke-width="3.3" marker-end="url(#arrow-data)"/>
+  <text x="215" y="995" class="label">主数据流</text>
+  <line x1="350" y1="990" x2="430" y2="990" stroke="#047857" stroke-width="2.1" marker-end="url(#arrow-reg)"/>
+  <text x="450" y="995" class="label">寄存器读写与前递</text>
+  <line x1="655" y1="990" x2="735" y2="990" stroke="#6d28d9" stroke-width="2.1" marker-end="url(#arrow-mem)"/>
+  <text x="755" y="995" class="label">访存数据流</text>
+  <line x1="945" y1="990" x2="1025" y2="990" stroke="#b91c1c" stroke-width="2.2" stroke-dasharray="9 7" marker-end="url(#arrow-ctrl)"/>
+  <text x="1045" y="995" class="label">分支、异常与 PC 重定向控制流</text>
+  <rect x="1370" y="972" width="42" height="36" fill="#f1f5f9" stroke="#334155" stroke-width="1.5" rx="5" ry="5"/>
+  <text x="1425" y="995" class="label">流水寄存器</text>
+</svg>

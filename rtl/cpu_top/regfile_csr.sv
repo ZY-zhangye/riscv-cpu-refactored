@@ -15,13 +15,16 @@ module regfile_csr (
     input logic br_taken,
     input logic ms_to_ws_valid,
     output logic exception_flag,
-    output logic [31:0] exception_addr
+    output logic [31:0] exception_addr,
+    output logic external_irq_enable
 );
 
     logic [31:0] mstatus, misa, mtvec, mepc, mcause, mhartid, mie, mip, mtval, mvendorid, marchid, mimpid, mscratch;
     logic mret_flag;
+    logic external_irq_flag;
     logic prev_exception_flag;
     assign mret_flag = exception_code == 7'b100_0000; //仅当异常代码为MRET指令引起的异常时mret_flag才为1
+    assign external_irq_flag = exception_code == `PLIC_IRQ_BIT;
     logic [31:0] cycle,br_cnt,exception_cnt,instret;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -78,8 +81,8 @@ module regfile_csr (
             endcase
         end else if (exception_code[5]) begin
             mepc <= csr_wdata; //当发生异常时将异常发生的指令地址写入mepc寄存器
-            mcause <= {27'b0, exception_code[4:0]}; //将异常代码写入mcause寄存器
-            mtval <= exception_mtval; //将异常相关的值写入mtval寄存器
+            mcause <= external_irq_flag ? {1'b1, 31'd11} : {27'b0, exception_code[4:0]}; //外部中断按RISC-V语义置mcause[31]
+            mtval <= external_irq_flag ? 32'b0 : exception_mtval; //中断不携带mtval
             mstatus[7] <= mstatus[3]; // trap入口：MPIE保存进入trap前的MIE
             mstatus[3] <= 1'b0; // trap入口：关闭MIE
         end else if (mret_flag) begin
@@ -127,6 +130,7 @@ module regfile_csr (
     end
     logic mret_jmp_flag;
     assign mret_jmp_flag = mret_flag && prev_exception_flag; //仅当mret_flag为1且之前发生过异常时mret_jmp_flag才为1
+    assign external_irq_enable = mstatus[3] && mie[11]; //MIE与MEIE同时有效时才响应PLIC外部中断
     assign exception_flag = exception_code[5] || mret_jmp_flag;
     assign exception_addr = mret_jmp_flag ? {mepc[31:2], 2'b0} : mtvec; //当mret_jmp_flag为1时异常地址为mepc，否则为mtvec
 

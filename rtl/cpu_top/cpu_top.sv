@@ -11,7 +11,9 @@ module cpu_top (
     output logic [31:0] dmem_addr,
     output logic [3:0] dmem_wen,
     output logic dmem_en,
-    output logic [31:0] dmem_wdata
+    output logic [31:0] dmem_wdata,
+    //plic接口
+    input logic plic_irq
     //debug接口
     `ifdef DEBUG_EN
     ,
@@ -40,6 +42,7 @@ module cpu_top (
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
     logic exception_flag;
     logic [31:0] exception_addr;
+    logic external_irq_enable;
 
     //连接id模块
     logic [4:0] rs1_addr;
@@ -214,6 +217,8 @@ module cpu_top (
         .ms_valid(ms_valid),
         .exception_flag(exception_flag),
         .exe_exc_bus(exe_exc_bus),
+        .plic_irq(plic_irq),
+        .external_irq_enable(external_irq_enable),
         .csr_we(csr_we),
         .csr_waddr(csr_waddr),
         .csr_wdata(csr_wdata),
@@ -285,7 +290,8 @@ module cpu_top (
         .br_taken(br_redirect),
         .ms_to_ws_valid(ms_to_ws_valid),
         .exception_flag(exception_flag),
-        .exception_addr(exception_addr)
+        .exception_addr(exception_addr),
+        .external_irq_enable(external_irq_enable)
     );
 
 
