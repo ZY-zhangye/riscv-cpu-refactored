@@ -5,7 +5,9 @@
 module tb_my_cpu;
     localparam string MEM_ADDR = "hex/riscv-tests/rv32-p-riscv.hex";
     localparam int CLK_PERIOD_NS = 10;
-    localparam int TIMEOUT_NS = 10000;
+    localparam int TIMEOUT_NS = 100000;
+    localparam logic [31:0] TEST_DONE_PC = 32'h8000_001c;
+    localparam logic [31:0] TEST_TRAP_PC = 32'h8000_0004;
 
     logic clk;
     logic clk_uart;
@@ -94,7 +96,8 @@ module tb_my_cpu;
     end
 
     always_ff @(posedge clk) begin
-        if (rst_n && (debug_wb_pc == 32'h8000_0044)) begin
+        if (rst_n && (debug_data == 32'h0000_0001) &&
+            ((debug_wb_pc == TEST_DONE_PC) || (debug_inst_pc == TEST_TRAP_PC))) begin
             $display("---------------------------------------------");
             $display("Time: %0t", $time);
             $display("Simulation finished.");

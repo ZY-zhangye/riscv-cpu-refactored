@@ -26,7 +26,7 @@ module wb_stage (
     logic ws_ready_go;
     logic ws_valid;
     assign ws_ready_go = 1'b1;
-    assign ws_allowin = !ws_valid || ws_ready_go && ms_to_ws_valid;
+    assign ws_allowin = !ws_valid || ws_ready_go;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ws_valid <= 1'b0;
@@ -51,16 +51,16 @@ module wb_stage (
     logic wb_regfile_wen;
     logic wb_fpu_regfile_wen;
     assign {wb_pc, wb_result, wb_dst_addr, wb_regfile_wen, wb_fpu_regfile_wen} = ms_ws_bus_r;
-    assign regfile_wen = wb_regfile_wen;
-    assign reg_fpu_wen = wb_fpu_regfile_wen;
+    assign regfile_wen = ws_valid && wb_regfile_wen;
+    assign reg_fpu_wen = ws_valid && wb_fpu_regfile_wen;
     assign regfile_addr = wb_dst_addr;
     assign regfile_wdata = wb_result;
     `ifdef DEBUG_EN
     assign debug_wb_pc = wb_pc;
     assign debug_wb_rf_addr = wb_dst_addr;
     assign debug_wb_rf_data = wb_result;
-    assign debug_wb_rf_wen = wb_regfile_wen;
-    assign debug_wb_fpu_rf_wen = wb_fpu_regfile_wen;
+    assign debug_wb_rf_wen = ws_valid && wb_regfile_wen;
+    assign debug_wb_fpu_rf_wen = ws_valid && wb_fpu_regfile_wen;
     `endif
 
 endmodule

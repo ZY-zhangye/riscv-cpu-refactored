@@ -382,7 +382,7 @@ module exe_stage(
     end
     always_comb begin
         dmem_wen = 4'b0000;
-        if (!es_flush) begin
+        if (es_valid && !es_flush) begin
             unique case (1'b1)
                 inst_sb: dmem_wen = sb_wen;
                 inst_sh: dmem_wen = sh_wen;
@@ -391,7 +391,7 @@ module exe_stage(
             endcase
         end
     end
-    assign dmem_en = |mem_op && !es_flush;
+    assign dmem_en = es_valid && |mem_op && !es_flush;
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
@@ -401,7 +401,7 @@ module exe_stage(
     assign inst_csrrwi = csr_op == 3'b100 && csr_imm_sel == 1'b1;
     assign inst_csrrsi = csr_op == 3'b010 && csr_imm_sel == 1'b1;
     assign inst_csrrci = csr_op == 3'b001 && csr_imm_sel == 1'b1;
-    assign exe_csr_wen = csr_wen;
+    assign exe_csr_wen = es_valid && csr_wen && !es_flush;
     assign exe_csr_addr = csr_waddr;
     assign csr_wdata = inst_csrrw ? src1 :
                        inst_csrrs ? (csr_data | src1) :
@@ -445,7 +445,7 @@ module exe_stage(
     logic is_branch;
     assign is_branch = |br_jmp_opcode;
 
-    assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
+    assign br_taken = (es_valid && !es_flush) ? (is_jal | is_jalr | (is_branch & br_cond_raw)) : 1'b0;
 
     // 4. 计算目标地址
     // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
@@ -455,7 +455,7 @@ module exe_stage(
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
-    assign br_redirect = !es_flush && is_br_jmp &&
+    assign br_redirect = es_valid && !es_flush && is_br_jmp &&
                          ((br_taken != bp_pred_taken) ||
                           (br_taken && (br_target != bp_pred_target)));
     assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
@@ -483,8 +483,8 @@ module exe_stage(
 
     //数据前递接口
     assign exe_dest_addr = rd_addr;
-    assign exe_regfile_wen = regfile_wen && !es_flush;
-    assign exe_reg_fpu_wen = reg_fpu_wen && !es_flush;
+    assign exe_regfile_wen = es_valid && regfile_wen && !es_flush;
+    assign exe_reg_fpu_wen = es_valid && reg_fpu_wen && !es_flush;
 
     //输出到下一级
     assign es_to_ms_bus = {

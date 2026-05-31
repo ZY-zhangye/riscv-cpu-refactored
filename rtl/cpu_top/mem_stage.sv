@@ -155,9 +155,9 @@ end
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
-    assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
-    assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;
-    assign csr_we = csr_wen & ~ms_flush & ~exception_code[5];
+    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush && !exception_flag;
+    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush && !exception_flag;
+    assign csr_we = ms_valid && csr_wen & ~ms_flush & ~exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
@@ -188,26 +188,26 @@ end
     logic exception_sam;
     logic sync_exception;
     logic take_irq;
-    assign exception_iam = (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
+    assign exception_iam = ms_valid && (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
     logic is_word_access;
     logic is_half_access;
     assign is_word_access = (load_inst == `LW) || (load_inst == `SW);
     assign is_half_access = (load_inst == `LH) || (load_inst == `LHU) || (load_inst == `SH);
-    assign exception_lam = !ms_flush &&
+    assign exception_lam = ms_valid && !ms_flush &&
                        (((load_inst == `LW) && (data_offest != 2'b00)) ||
                         (((load_inst == `LH) || (load_inst == `LHU)) && data_offest[0]));
-    assign exception_sam = !ms_flush &&
+    assign exception_sam = ms_valid && !ms_flush &&
                        (((load_inst == `SW) && (data_offest != 2'b00)) ||
                         ((load_inst == `SH) && data_offest[0]));
     assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];
     assign take_irq = ms_valid && !ms_flush && !sync_exception && plic_irq && external_irq_enable;
-    assign exception_code = ms_flush ? `EXC_NONE :
+    assign exception_code = (!ms_valid || ms_flush) ? `EXC_NONE :
                             exception_iam ? `EXC_IAM :
                             exception_lam ? `EXC_LAM :
                             exception_sam ? `EXC_SAM :
                             take_irq ? `PLIC_IRQ_BIT :
                             exc_code;
-    assign exception_mtval = ms_flush ? 32'b0 :
+    assign exception_mtval = (!ms_valid || ms_flush) ? 32'b0 :
                             exception_iam ? br_target :
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :

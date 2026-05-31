@@ -613,7 +613,7 @@ module id_stage (
         if (!rst_n) begin
             prev_load <= 1'b0;
         end else if (ds_allowin) begin
-            prev_load <= is_load || inst_flw; //仅当当前指令为加载指令时才更新prev_load信号
+            prev_load <= ds_valid && (is_load || inst_flw); //仅当有效加载指令进入EX阶段时才更新prev_load信号
         end
     end
     always_comb begin

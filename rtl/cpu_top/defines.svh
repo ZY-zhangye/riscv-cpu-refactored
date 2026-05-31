@@ -99,6 +99,11 @@
 
 `define NOP_INST 32'h0000_0013
 
+//指令cache参数
+`define ICACHE_SIZE 1024    //指令cache大小，单位为字节
+`define ICACHE_LINE_SIZE 16 //指令cache行大小，单位为字节
+
+
 
 //定义地址信息
 `ifdef PERF_BENCH

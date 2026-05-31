@@ -3,7 +3,7 @@ module cpu_top (
     input logic clk,
     input logic rst_n,
     //指令存储器接口
-    input logic [31:0] imem_rdata,
+    input logic [`ICACHE_LINE_SIZE*8-1:0] imem_rdata,
     output logic [31:0] imem_addr,
     output logic imem_en,
     //数据存储器接口
@@ -17,6 +17,7 @@ module cpu_top (
     //debug接口
     `ifdef DEBUG_EN
     ,
+    output logic [31:0] debug_inst_pc,
     output logic [31:0] debug_wb_pc,
     output logic [4:0] debug_wb_rf_addr,
     output logic [31:0] debug_wb_rf_data,
@@ -43,6 +44,13 @@ module cpu_top (
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
+
+    //取指缓存接口
+    logic [31:0] if_pc_out;
+    logic if_inst_ren;
+    logic if_inst_ready;
+    logic [31:0] if_inst_in;
+    logic if_inst_valid;
 
     //连接id模块
     logic [4:0] rs1_addr;
@@ -102,9 +110,11 @@ module cpu_top (
     if_stage u_if_stage (
         .clk(clk),
         .rst_n(rst_n),
-        .pc_out(imem_addr),
-        .inst_ren(imem_en),
-        .inst_in(imem_rdata),
+        .pc_out(if_pc_out),
+        .inst_ren(if_inst_ren),
+        .inst_ready(if_inst_ready),
+        .inst_in(if_inst_in),
+        .inst_valid(if_inst_valid),
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
@@ -119,6 +129,23 @@ module cpu_top (
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
     );
+
+    icache u_icache (
+        .clk(clk),
+        .rst_n(rst_n),
+        .imem_rdata(imem_rdata),
+        .imem_addr(imem_addr),
+        .imem_en(imem_en),
+        .if_en(if_inst_ren),
+        .if_ready(if_inst_ready),
+        .if_addr(if_pc_out),
+        .if_rdata(if_inst_in),
+        .if_valid(if_inst_valid)
+    );
+
+    `ifdef DEBUG_EN
+    assign debug_inst_pc = if_pc_out;
+    `endif
 
     id_stage u_id_stage (
         .clk(clk),

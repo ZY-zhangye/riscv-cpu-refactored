@@ -9,10 +9,13 @@ MI_INSTS=(csr scall sbreak ma_fetch)*/
 //乘法指令
 // UM_INSTS=(mul mulh mulhu mulhsu div divu rem remu)
 localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.hex";
+localparam int TIMEOUT_NS = 100000;
+localparam logic [31:0] TEST_DONE_PC = 32'h8000_001c;
+localparam logic [31:0] TEST_TRAP_PC = 32'h8000_0004;
 
     logic clk;
     logic rst_n;
-    logic [31:0] imem_rdata;
+    logic [127:0] imem_rdata;
     logic [31:0] imem_addr;
     logic imem_en;
     logic [31:0] dmem_rdata;
@@ -68,10 +71,13 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     //连接imem和dmem
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            imem_rdata <= 32'b0;
+            imem_rdata <= 128'b0;
         end else begin
             if (imem_en) begin
-                imem_rdata <= imem[imem_addr[23:2]]; // 以字为单位访问
+                imem_rdata <= {imem[imem_addr[23:2] + 3],
+                               imem[imem_addr[23:2] + 2],
+                               imem[imem_addr[23:2] + 1],
+                               imem[imem_addr[23:2]]};
             end
         end
     end
@@ -111,14 +117,15 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         end
     end
     initial begin
-        #10000;
+        #TIMEOUT_NS;
         $display("Simulation timeout");
         $finish;
     end
 
     always_ff @ (posedge clk) begin
         if (rst_n) begin
-            if (debug_wb_pc == 32'h80000044) begin
+            if ((debug_data == 32'h0000_0001) &&
+                ((debug_wb_pc == TEST_DONE_PC) || ((imem_addr - 4) == TEST_TRAP_PC))) begin
                     $display("---------------------------------------------");
                     $display("Time: %0t", $time);
                     $display("Simulation finished.");

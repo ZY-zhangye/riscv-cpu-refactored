@@ -1,11 +1,14 @@
 `include "defines.svh"
+
 module if_stage (
     input logic clk,
     input logic rst_n,
     //取指端口
     output logic [`ADDR_WIDTH-1:0] pc_out,
     output logic inst_ren,
+    input logic inst_ready,
     input logic [`DATA_WIDTH-1:0] inst_in,
+    input logic inst_valid,
     //与译码阶段的数据接口
     input logic ds_allowin,
     output logic fs_to_ds_valid,
@@ -26,13 +29,26 @@ module if_stage (
     input logic [`ADDR_WIDTH-1:0] exception_addr
 );
 
-    logic [`ADDR_WIDTH-1:0] seq_pc;
-    logic [`ADDR_WIDTH-1:0] next_pc;
-    logic [`ADDR_WIDTH-1:0] fs_out_pc;
-    logic [`DATA_WIDTH-1:0] fs_out_inst;
-    logic [31:0] fs_pc;
-    logic br_taken_reg;
-    logic [31:0] br_target_reg;
+    logic [`ADDR_WIDTH-1:0] fetch_pc;
+    logic [`ADDR_WIDTH-1:0] fetch_seq_pc;
+    logic [`ADDR_WIDTH-1:0] fetch_next_pc;
+
+    logic req_valid;
+    logic [`ADDR_WIDTH-1:0] req_pc;
+    logic req_pred_taken;
+    logic [`ADDR_WIDTH-1:0] req_pred_target;
+
+    logic fs_valid;
+    logic [`ADDR_WIDTH-1:0] fs_pc;
+    logic [`DATA_WIDTH-1:0] fs_inst;
+    logic fs_pred_taken;
+    logic [`ADDR_WIDTH-1:0] fs_pred_target;
+
+    logic skid_valid;
+    logic [`ADDR_WIDTH-1:0] skid_pc;
+    logic [`DATA_WIDTH-1:0] skid_inst;
+    logic skid_pred_taken;
+    logic [`ADDR_WIDTH-1:0] skid_pred_target;
 
     localparam BP_INDEX_WIDTH = 4;
     localparam BP_ENTRIES = 1 << BP_INDEX_WIDTH;
@@ -49,42 +65,88 @@ module if_stage (
     logic bp_pred_taken;
     logic [`ADDR_WIDTH-1:0] bp_pred_target;
 
-    assign bp_lookup_index = fs_out_pc[BP_INDEX_WIDTH+1:2];
-    assign bp_lookup_tag = fs_out_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
+    assign bp_lookup_index = fetch_pc[BP_INDEX_WIDTH+1:2];
+    assign bp_lookup_tag = fetch_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
     assign bp_hit = bp_valid[bp_lookup_index] && (bp_tag[bp_lookup_index] == bp_lookup_tag);
     assign bp_pred_taken = bp_hit && bp_taken[bp_lookup_index];
     assign bp_pred_target = bp_target[bp_lookup_index];
 
-    assign seq_pc = fs_out_pc + 4;
-    assign next_pc = exception_flag ? exception_addr :
-                     br_taken_reg ? br_target_reg :
-                     bp_pred_taken ? bp_pred_target :
-                     seq_pc;
-    logic fs_valid;
-    logic fs_ready_go;
+    assign fetch_seq_pc = fetch_pc + 32'd4;
+    assign fetch_next_pc = bp_pred_taken ? bp_pred_target : fetch_seq_pc;
+
     logic fs_allowin;
-    assign fs_ready_go = 1'b1;
-    assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
-    assign fs_to_ds_valid = fs_valid && fs_ready_go;
+    logic redirect;
+    logic [`ADDR_WIDTH-1:0] redirect_pc;
+    logic resp_fire;
+    logic issue_fetch;
+
+    assign redirect = exception_flag || br_taken;
+    assign redirect_pc = exception_flag ? exception_addr : br_target;
+    assign fs_allowin = !fs_valid || ds_allowin;
+    assign resp_fire = req_valid && inst_valid;
+    assign issue_fetch = !redirect && inst_ready && (!req_valid || resp_fire) &&
+                         fs_allowin && !skid_valid;
+
+    assign pc_out = fetch_pc;
+    assign inst_ren = issue_fetch;
+    assign fs_to_ds_valid = fs_valid && !redirect;
+    assign fs_to_ds_bus = {fs_inst, fs_pc, fs_pred_taken, fs_pred_target};
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             fs_valid <= 1'b0;
-        end else if (fs_allowin) begin
-            fs_valid <= 1'b1;
-        end
-        if (!rst_n) begin
-            fs_pc <= `PC_START - 4;
-        end else if (fs_allowin) begin
-            fs_pc <= next_pc;
-        end
-    end
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            br_taken_reg <= 1'b0;
-            br_target_reg <= 32'b0;
-        end else if (fs_allowin) begin
-            br_taken_reg <= br_taken;
-            br_target_reg <= br_target;
+            fs_pc <= `PC_START;
+            fs_inst <= `NOP_INST;
+            fs_pred_taken <= 1'b0;
+            fs_pred_target <= 32'b0;
+            skid_valid <= 1'b0;
+            skid_pc <= 32'b0;
+            skid_inst <= `NOP_INST;
+            skid_pred_taken <= 1'b0;
+            skid_pred_target <= 32'b0;
+            req_valid <= 1'b0;
+            req_pc <= 32'b0;
+            req_pred_taken <= 1'b0;
+            req_pred_target <= 32'b0;
+            fetch_pc <= `PC_START;
+        end else if (redirect) begin
+            fs_valid <= 1'b0;
+            skid_valid <= 1'b0;
+            req_valid <= 1'b0;
+            fetch_pc <= redirect_pc;
+        end else begin
+            if (fs_allowin) begin
+                if (skid_valid) begin
+                    fs_valid <= 1'b1;
+                    fs_pc <= skid_pc;
+                    fs_inst <= skid_inst;
+                    fs_pred_taken <= skid_pred_taken;
+                    fs_pred_target <= skid_pred_target;
+                    skid_valid <= 1'b0;
+                end else if (resp_fire) begin
+                    fs_valid <= 1'b1;
+                    fs_pc <= req_pc;
+                    fs_inst <= inst_in;
+                    fs_pred_taken <= req_pred_taken;
+                    fs_pred_target <= req_pred_target;
+                end else if (ds_allowin || !fs_valid) begin
+                    fs_valid <= 1'b0;
+                end
+            end else if (resp_fire) begin
+                skid_valid <= 1'b1;
+                skid_pc <= req_pc;
+                skid_inst <= inst_in;
+                skid_pred_taken <= req_pred_taken;
+                skid_pred_target <= req_pred_target;
+            end
+
+            req_valid <= (req_valid && !resp_fire) || issue_fetch;
+            if (issue_fetch) begin
+                req_pc <= fetch_pc;
+                req_pred_taken <= bp_pred_taken;
+                req_pred_target <= bp_pred_target;
+                fetch_pc <= fetch_next_pc;
+            end
         end
     end
 
@@ -105,18 +167,12 @@ module if_stage (
         end
     end
 
-    assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
-    assign inst_ren = fs_allowin;
-    assign fs_out_pc = fs_pc;
-    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag), bp_pred_target};
-
     /*logic exception_iam;
-    assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/
+    assign exception_iam = fs_to_ds_valid && fs_pc[1:0] != 2'b00;*/
     logic [6:0] exception_code;
-    assign exception_code = /*exception_iam ? 7'b010_0000 : */7'b000_0000; 
+    assign exception_code = /*exception_iam ? 7'b010_0000 : */7'b000_0000;
     logic [`MTVAL_WIDTH-1:0] exception_mtval;
-    assign exception_mtval = /*exception_iam ? fs_out_pc : */32'b0;
+    assign exception_mtval = /*exception_iam ? fs_pc : */32'b0;
     assign fs_exc_bus = {exception_code, exception_mtval};
 
 endmodule

@@ -22,7 +22,7 @@ module my_cpu (
     `endif
 );
 
-    logic [31:0] imem_rdata;
+    logic [`ICACHE_LINE_SIZE*8-1:0] imem_rdata;
     logic [31:0] imem_addr;
     logic        imem_en;
 
@@ -71,6 +71,7 @@ module my_cpu (
         .plic_irq(plic_irq)
         `ifdef DEBUG_EN
         ,
+        .debug_inst_pc(debug_inst_pc),
         .debug_wb_pc(debug_wb_pc),
         .debug_wb_rf_addr(debug_wb_rf_addr),
         .debug_wb_rf_data(debug_wb_rf_data),
@@ -79,10 +80,6 @@ module my_cpu (
         .debug_data(debug_data)
         `endif
     );
-
-    `ifdef DEBUG_EN
-    assign debug_inst_pc = imem_addr;
-    `endif
 
     soc_inst_ram u_inst_ram (
         .clk(clk),
@@ -164,7 +161,7 @@ module soc_inst_ram #(
     input  logic        clk,
     input  logic [31:0] addr,
     input  logic        en,
-    output logic [31:0] rdata
+    output logic [`ICACHE_LINE_SIZE*8-1:0] rdata
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
@@ -172,7 +169,7 @@ module soc_inst_ram #(
 
     always_ff @(posedge clk) begin
         if (en) begin
-            rdata <= mem[addr[INDEX_WIDTH+1:2]];
+            rdata <= {mem[addr[INDEX_WIDTH+1:2] + 3], mem[addr[INDEX_WIDTH+1:2] + 2], mem[addr[INDEX_WIDTH+1:2] + 1], mem[addr[INDEX_WIDTH+1:2]]};
         end
     end
 `else
