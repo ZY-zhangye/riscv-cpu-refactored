@@ -497,7 +497,10 @@ module exe_stage(
         exe_result_sel,
         exe_csr_wen,
         exe_csr_addr,
-        csr_wdata
+        csr_wdata,
+        dmem_en,
+        dmem_wen,
+        dmem_wdata
     };
 
     //异常接口

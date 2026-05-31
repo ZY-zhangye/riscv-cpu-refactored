@@ -13,12 +13,19 @@ module mem_stage (
     output logic ms_allowin,
     input logic ws_allowin,
     output logic ms_valid,
-    //数据存储器接口
-    input logic [31:0] dmem_rdata,
+    //数据cache接口
+    output logic dmem_req_valid,
+    input logic dmem_req_ready,
+    output logic [31:0] dmem_req_addr,
+    output logic [31:0] dmem_req_wdata,
+    output logic [3:0] dmem_req_wen,
+    input logic dmem_resp_valid,
+    input logic [31:0] dmem_resp_rdata,
     //数据前递接口
     output logic [4:0] mem_dst_addr,
     output logic mem_regfile_wen,
     output logic mem_reg_fpu_wen,
+    output logic mem_result_valid,
     output logic [31:0] mem_result,
     //异常信息接口
     input logic exception_flag,
@@ -39,7 +46,9 @@ module mem_stage (
     logic ms_ready_go;
     logic es_flush_r;
     logic ms_flush;
-    assign ms_ready_go = 1'b1;
+    logic dmem_req_sent;
+    logic dmem_resp_done;
+    logic [31:0] dmem_resp_data_r;
     assign ms_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_to_ws_valid = ms_valid && ms_ready_go;
 
@@ -75,6 +84,9 @@ module mem_stage (
     logic csr_wen;
     logic [11:0] csr_addr;
     logic [31:0] csr_data;
+    logic mem_dmem_en;
+    logic [3:0] mem_dmem_wen;
+    logic [31:0] mem_dmem_wdata;
     assign {
         mem_pc,
         exe_result,
@@ -85,79 +97,87 @@ module mem_stage (
         wb_sel,
         csr_wen,
         csr_addr,
-        csr_data
+        csr_data,
+        mem_dmem_en,
+        mem_dmem_wen,
+        mem_dmem_wdata
     } = es_ms_bus_r;
 
     //读数据选择（显式MUX，减少可变移位逻辑）
     logic [1:0] data_offest;
-logic [31:0] load_data;
+    logic [31:0] dmem_resp_data;
+    logic [31:0] load_data;
 
-logic load_lb;
-logic load_lh;
-logic load_lw;
-logic load_lbu;
-logic load_lhu;
+    logic load_lb;
+    logic load_lh;
+    logic load_lw;
+    logic load_lbu;
+    logic load_lhu;
 
-assign data_offest = exe_result[1:0];
+    assign data_offest = exe_result[1:0];
+    assign dmem_resp_data = dmem_resp_valid ? dmem_resp_rdata : dmem_resp_data_r;
 
-assign load_lb  = (load_inst == `LB);
-assign load_lh  = (load_inst == `LH);
-assign load_lw  = (load_inst == `LW);
-assign load_lbu = (load_inst == `LBU);
-assign load_lhu = (load_inst == `LHU);
+    assign load_lb  = (load_inst == `LB);
+    assign load_lh  = (load_inst == `LH);
+    assign load_lw  = (load_inst == `LW);
+    assign load_lbu = (load_inst == `LBU);
+    assign load_lhu = (load_inst == `LHU);
 
-logic [7:0]  load_byte;
-logic [15:0] load_half;
+    logic [7:0]  load_byte;
+    logic [15:0] load_half;
 
-always_comb begin
-    unique case (data_offest)
-        2'b00:  load_byte = dmem_rdata[7:0];
-        2'b01:  load_byte = dmem_rdata[15:8];
-        2'b10:  load_byte = dmem_rdata[23:16];
-        default: load_byte = dmem_rdata[31:24];
-    endcase
-end
+    always_comb begin
+        unique case (data_offest)
+            2'b00:  load_byte = dmem_resp_data[7:0];
+            2'b01:  load_byte = dmem_resp_data[15:8];
+            2'b10:  load_byte = dmem_resp_data[23:16];
+            default: load_byte = dmem_resp_data[31:24];
+        endcase
+    end
 
-always_comb begin
-    unique case (data_offest[1])
-        1'b0:    load_half = dmem_rdata[15:0];
-        default: load_half = dmem_rdata[31:16];
-    endcase
-end
+    always_comb begin
+        unique case (data_offest[1])
+            1'b0:    load_half = dmem_resp_data[15:0];
+            default: load_half = dmem_resp_data[31:16];
+        endcase
+    end
 
-always_comb begin
-    load_data = dmem_rdata;
+    always_comb begin
+        load_data = dmem_resp_data;
 
-    unique case (1'b1)
-        load_lb: begin
-            load_data = {{24{load_byte[7]}}, load_byte};
-        end
+        unique case (1'b1)
+            load_lb: begin
+                load_data = {{24{load_byte[7]}}, load_byte};
+            end
 
-        load_lbu: begin
-            load_data = {24'b0, load_byte};
-        end
+            load_lbu: begin
+                load_data = {24'b0, load_byte};
+            end
 
-        load_lh: begin
-            load_data = {{16{load_half[15]}}, load_half};
-        end
+            load_lh: begin
+                load_data = {{16{load_half[15]}}, load_half};
+            end
 
-        load_lhu: begin
-            load_data = {16'b0, load_half};
-        end
+            load_lhu: begin
+                load_data = {16'b0, load_half};
+            end
 
-        default: begin
-            load_data = dmem_rdata;
-        end
-    endcase
-end
+            default: begin
+                load_data = dmem_resp_data;
+            end
+        endcase
+    end
     
     //结果选择（case减少级联三目）
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
+    // 这里的 wen 同时供 ID 阶段做 MEM 前递选择使用，因此表示“当前 MEM 指令最终会写回”。
+    // 真正进入 WB/CSR 的时刻仍由 ms_to_ws_valid/ms_ready_go 控制，避免 load 等待期间误写。
     assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush && !exception_flag;
     assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush && !exception_flag;
-    assign csr_we = ms_valid && csr_wen & ~ms_flush & ~exception_code[5];
+    assign mem_result_valid = ms_valid && ms_ready_go && !ms_flush && !exception_flag;
+    assign csr_we = ms_valid && ms_ready_go && csr_wen & ~ms_flush & ~exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
@@ -188,6 +208,9 @@ end
     logic exception_sam;
     logic sync_exception;
     logic take_irq;
+    logic mem_access;
+    logic mem_req_needed;
+    logic mem_done_for_irq;
     assign exception_iam = ms_valid && (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
     logic is_word_access;
     logic is_half_access;
@@ -200,7 +223,17 @@ end
                        (((load_inst == `SW) && (data_offest != 2'b00)) ||
                         ((load_inst == `SH) && data_offest[0]));
     assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];
-    assign take_irq = ms_valid && !ms_flush && !sync_exception && plic_irq && external_irq_enable;
+    assign mem_access = mem_dmem_en && (load_inst != 6'b0);
+    assign mem_req_needed = ms_valid && !ms_flush && !exception_flag &&
+                            mem_access && !sync_exception;
+    assign mem_done_for_irq = !mem_req_needed || dmem_resp_done || dmem_resp_valid;
+    assign take_irq = ms_valid && !ms_flush && !sync_exception &&
+                      mem_done_for_irq && plic_irq && external_irq_enable;
+    assign dmem_req_valid = mem_req_needed && !dmem_req_sent;
+    assign dmem_req_addr = exe_result;
+    assign dmem_req_wdata = mem_dmem_wdata;
+    assign dmem_req_wen = mem_dmem_wen;
+    assign ms_ready_go = !mem_req_needed || dmem_resp_done || dmem_resp_valid;
     assign exception_code = (!ms_valid || ms_flush) ? `EXC_NONE :
                             exception_iam ? `EXC_IAM :
                             exception_lam ? `EXC_LAM :
@@ -212,5 +245,27 @@ end
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :
                             exc_mtval;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dmem_req_sent <= 1'b0;
+            dmem_resp_done <= 1'b0;
+            dmem_resp_data_r <= 32'b0;
+        end else begin
+            if (ms_allowin) begin
+                dmem_req_sent <= 1'b0;
+                dmem_resp_done <= 1'b0;
+                dmem_resp_data_r <= 32'b0;
+            end else begin
+                if (dmem_req_valid && dmem_req_ready) begin
+                    dmem_req_sent <= 1'b1;
+                end
+                if (dmem_resp_valid) begin
+                    dmem_resp_done <= 1'b1;
+                    dmem_resp_data_r <= dmem_resp_rdata;
+                end
+            end
+        end
+    end
 
 endmodule

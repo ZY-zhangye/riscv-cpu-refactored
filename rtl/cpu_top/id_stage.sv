@@ -42,6 +42,8 @@ module id_stage (
     input logic [4:0] mem_dest_addr,
     input logic mem_regfile_wen,
     input logic mem_reg_fpu_wen,
+    input logic mem_result_valid,
+    input logic [`DATA_WIDTH-1:0] mem_result,
     input logic ms_valid,
     //跳转信号与异常信号
     input logic br_taken,
@@ -53,8 +55,9 @@ module id_stage (
     logic ds_valid;
     logic ds_ready_go;
     logic load_use_hazard;
+    logic mem_raw_hazard;
     logic raw_hazard;
-    assign ds_ready_go = !load_use_hazard; 
+    assign ds_ready_go = !load_use_hazard && !mem_raw_hazard; 
     assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
     //握手协议
@@ -410,6 +413,16 @@ module id_stage (
     assign src2 = (rs2_addr == 5'b0) ? 32'b0 :
                   (regfile_wen && (regfile_waddr == rs2_addr)) ? regfile_wdata :
                    rs2_data;
+    logic src1_mem_fwd;
+    logic src2_mem_fwd;
+    logic [31:0] src1_with_mem;
+    logic [31:0] src2_with_mem;
+    assign src1_mem_fwd = (rs1_addr != 5'b0) && mem_regfile_wen && mem_result_valid &&
+                          (mem_dest_addr == rs1_addr) && ms_valid;
+    assign src2_mem_fwd = (rs2_addr != 5'b0) && mem_regfile_wen && mem_result_valid &&
+                          (mem_dest_addr == rs2_addr) && ms_valid;
+    assign src1_with_mem = src1_mem_fwd ? mem_result : src1;
+    assign src2_with_mem = src2_mem_fwd ? mem_result : src2;
     logic [31:0] src1_fpu, src2_fpu;
     assign src1_fpu = (rs1_fpu_addr == 5'b0) ? 32'b0 :
                       (reg_fpu_wen && (regfile_waddr == rs1_fpu_addr)) ? regfile_wdata :
@@ -568,17 +581,15 @@ module id_stage (
     logic [1:0] src1_fwd, src2_fwd;
     assign src1_fwd = (inst_lui || inst_auipc) ? 2'b00 :
                       (rs1_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00;
+                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 : 2'b00) : 2'b00;
     assign src2_fwd = (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) ? 2'b00 :
                       (rs2_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
+                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
     assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
-                      inst_auipc ? id_pc : src1;
+                      inst_auipc ? id_pc : src1_with_mem;
     assign reg_src2 = inst_bitman_imm_inst ? {27'b0, id_inst[24:20]} :
-                      alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2;
+                      alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2_with_mem;
     assign src_packet = {reg_src1, reg_src2, src1_fwd, src2_fwd};
 
     //输出到下一级
@@ -626,6 +637,9 @@ module id_stage (
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;
+    assign mem_raw_hazard = ds_valid && ms_valid && mem_regfile_wen && !mem_result_valid &&
+                            (((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == mem_dest_addr))) ||
+                             ((need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == mem_dest_addr))));
 
 
 endmodule

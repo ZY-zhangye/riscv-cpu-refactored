@@ -52,6 +52,19 @@ module cpu_top (
     logic [31:0] if_inst_in;
     logic if_inst_valid;
 
+    //数据缓存接口
+    logic dcache_req_valid;
+    logic dcache_req_ready;
+    logic [31:0] dcache_req_addr;
+    logic [31:0] dcache_req_wdata;
+    logic [3:0] dcache_req_wen;
+    logic dcache_resp_valid;
+    logic [31:0] dcache_resp_rdata;
+    logic [31:0] es_dmem_addr;
+    logic [3:0] es_dmem_wen;
+    logic es_dmem_en;
+    logic [31:0] es_dmem_wdata;
+
     //连接id模块
     logic [4:0] rs1_addr;
     logic [4:0] rs2_addr;
@@ -81,6 +94,7 @@ module cpu_top (
     logic [4:0] mem_dest_addr;
     logic mem_regfile_wen;
     logic mem_reg_fpu_wen;
+    logic mem_result_valid;
     logic [`EXC_WIDTH-1:0] ds_exc_bus;
 
     //连接es模块
@@ -182,6 +196,8 @@ module cpu_top (
         .mem_dest_addr(mem_dest_addr),
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
+        .mem_result_valid(mem_result_valid),
+        .mem_result(mem_result),
         .ms_valid(ms_valid),
         .br_taken(br_redirect),
         .exception_flag(exception_flag),
@@ -200,10 +216,10 @@ module cpu_top (
         .es_to_ms_valid(es_to_ms_valid),
         .es_flush(es_flush),
         .es_to_ms_bus(es_to_ms_bus),
-        .dmem_addr(dmem_addr),
-        .dmem_wen(dmem_wen),
-        .dmem_en(dmem_en),
-        .dmem_wdata(dmem_wdata),
+        .dmem_addr(es_dmem_addr),
+        .dmem_wen(es_dmem_wen),
+        .dmem_en(es_dmem_en),
+        .dmem_wdata(es_dmem_wdata),
         .exe_dest_addr(exe_dest_addr),
         .exe_regfile_wen(exe_regfile_wen),
         .exe_reg_fpu_wen(exe_reg_fpu_wen),
@@ -236,10 +252,17 @@ module cpu_top (
         .ms_to_ws_valid(ms_to_ws_valid),
         .ms_allowin(ms_allowin),
         .ws_allowin(ws_allowin),
-        .dmem_rdata(dmem_rdata),
+        .dmem_req_valid(dcache_req_valid),
+        .dmem_req_ready(dcache_req_ready),
+        .dmem_req_addr(dcache_req_addr),
+        .dmem_req_wdata(dcache_req_wdata),
+        .dmem_req_wen(dcache_req_wen),
+        .dmem_resp_valid(dcache_resp_valid),
+        .dmem_resp_rdata(dcache_resp_rdata),
         .mem_dst_addr(mem_dest_addr),
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
+        .mem_result_valid(mem_result_valid),
         .mem_result(mem_result),
         .ms_valid(ms_valid),
         .exception_flag(exception_flag),
@@ -251,6 +274,23 @@ module cpu_top (
         .csr_wdata(csr_wdata),
         .exception_code(exception_code),
         .exception_mtval(exception_mtval)
+    );
+
+    dcache u_dcache (
+        .clk(clk),
+        .rst_n(rst_n),
+        .cpu_req_valid(dcache_req_valid),
+        .cpu_req_ready(dcache_req_ready),
+        .cpu_req_addr(dcache_req_addr),
+        .cpu_req_wdata(dcache_req_wdata),
+        .cpu_req_wen(dcache_req_wen),
+        .cpu_resp_valid(dcache_resp_valid),
+        .cpu_resp_rdata(dcache_resp_rdata),
+        .mem_rdata(dmem_rdata),
+        .mem_addr(dmem_addr),
+        .mem_wen(dmem_wen),
+        .mem_en(dmem_en),
+        .mem_wdata(dmem_wdata)
     );
 
     wb_stage u_wb_stage (

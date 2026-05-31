@@ -30,7 +30,7 @@
 `endif
 `define DS_ES_WIDTH (`ALU_PACKET_WIDTH + `FPU_PACKET_WIDTH + `MUL_PACKET_WIDTH + `MEM_PACKET_WIDTH + `CSR_PACKET_WIDTH + `CTRL_PACKET_WIDTH + `BR_JMP_PACKET_WIDTH + `SRC_PACKET_WIDTH + `BITMAN_PACKET_WIDTH)
 
-`define ES_MS_WIDTH (32+32+6+5+1+1+2+1+12+32)
+`define ES_MS_WIDTH (32+32+6+5+1+1+2+1+12+32+1+4+32)
 `define ALU_OP_ADD 10'b10_0000_0000
 `define ALU_OP_SUB 10'b01_0000_0000
 `define ALU_OP_AND 10'b00_1000_0000
@@ -102,6 +102,10 @@
 //指令cache参数
 `define ICACHE_SIZE 1024    //指令cache大小，单位为字节
 `define ICACHE_LINE_SIZE 16 //指令cache行大小，单位为字节
+
+//数据cache参数
+`define DCACHE_SIZE 4096    //数据cache大小，单位为字节
+`define DCACHE_LINE_SIZE 16 //数据cache行大小，单位为字节
 
 
 
