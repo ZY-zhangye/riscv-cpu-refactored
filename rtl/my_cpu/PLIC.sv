@@ -23,29 +23,44 @@ module PLIC (
     logic [`PRIORITY_WIDTH-1:0] threshold_reg; // 阈值寄存器
     logic [`PLIC_NUM_INTERRUPTS-1:0] in_service_regs; // 处理中寄存器
 
-    logic [`PRIORITY_WIDTH-1:0] claim_priority;
-    logic [`ID_WIDTH-1:0] claim_id;
-    logic claim_valid;
+    logic [`PLIC_NUM_INTERRUPTS-1:0] eligible_irqs;
+    logic [7:0] prio_valid;
+    logic [`ID_WIDTH-1:0] prio_id [0:7];
+    logic [`ID_WIDTH-1:0] claim_id_next;
+    logic claim_valid_next;
+    logic [`ID_WIDTH-1:0] claim_id_r;
+    logic claim_valid_r;
 
-    // 处理中的中断、阈值和优先级比较拆成独立组合逻辑
+    assign eligible_irqs = pending_regs & enable_regs & ~in_service_regs;
+
+    // Split the 32-way priority search into 8 priority buckets, then choose the
+    // highest bucket above threshold. plic_irq/claim are registered below to
+    // keep this selector out of the CPU interrupt timing path.
     always_comb begin
         integer i;
-        claim_priority = '0;
-        claim_id = '0;
-        claim_valid = 1'b0;
+        integer p;
 
-        for (i = 1; i < `PLIC_NUM_INTERRUPTS; i++) begin
-            if (pending_regs[i] && enable_regs[i] && !in_service_regs[i]) begin
-                if ((priority_regs[i] > threshold_reg) &&
-                    (priority_regs[i] > claim_priority)) begin
-                    claim_priority = priority_regs[i];
-                    claim_id = i[`ID_WIDTH-1:0];
-                    claim_valid = 1'b1;
-                end
+        prio_valid = '0;
+        claim_id_next = '0;
+        claim_valid_next = 1'b0;
+
+        for (p = 0; p < 8; p++) begin
+            prio_id[p] = '0;
+        end
+
+        for (i = `PLIC_NUM_INTERRUPTS - 1; i > 0; i--) begin
+            if (eligible_irqs[i]) begin
+                prio_valid[priority_regs[i]] = 1'b1;
+                prio_id[priority_regs[i]] = i[`ID_WIDTH-1:0];
             end
         end
 
-        plic_irq = claim_valid;
+        for (p = 7; p > 0; p--) begin
+            if (!claim_valid_next && prio_valid[p] && (p > threshold_reg)) begin
+                claim_id_next = prio_id[p];
+                claim_valid_next = 1'b1;
+            end
+        end
     end
 
     // PLIC寄存器读写逻辑
@@ -58,8 +73,8 @@ module PLIC (
                 read_reg = {{(32-`PRIORITY_WIDTH){1'b0}}, priority_regs[idx]};
             end else begin
                 case (addr)
-                    `PLIC_PENDING_BASE_ADDR:     read_reg = {{(32-`PLIC_NUM_INTERRUPTS){1'b0}}, pending_regs};
-                    `PLIC_ENABLE_BASE_ADDR:      read_reg = {{(32-`PLIC_NUM_INTERRUPTS){1'b0}}, enable_regs};
+                    `PLIC_PENDING_BASE_ADDR:     read_reg = pending_regs;
+                    `PLIC_ENABLE_BASE_ADDR:      read_reg = enable_regs;
                     `PLIC_THRESHOLD_BASE_ADDR:   read_reg = {{(32-`PRIORITY_WIDTH){1'b0}}, threshold_reg};
                     `PLIC_IN_SERVICE_BASE_ADDR:  read_reg = in_service_regs;
                     default:                     read_reg = 32'hDEAD_BEEF; // 无效地址返回特定值
@@ -102,6 +117,9 @@ module PLIC (
             enable_regs <= '0;
             threshold_reg <= '0;
             in_service_regs <= 32'd0;
+            claim_id_r <= '0;
+            claim_valid_r <= 1'b0;
+            plic_irq <= 1'b0;
             plic_rdata <= 32'd0;
         end else begin
             pending_next = pending_regs | (peripheral_interrupts & ~in_service_regs);
@@ -111,9 +129,9 @@ module PLIC (
 
             if (plic_sel && plic_re) begin
                 if (plic_addr == `PLIC_CLAIM_BASE_ADDR) begin
-                    if (claim_valid) begin
-                        plic_rdata <= claim_id;
-                        claim_mask[claim_id] = 1'b1;
+                    if (claim_valid_r) begin
+                        plic_rdata <= claim_id_r;
+                        claim_mask[claim_id_r] = 1'b1;
                     end else begin
                         plic_rdata <= 32'd0;
                     end
@@ -141,6 +159,9 @@ module PLIC (
 
             pending_regs <= pending_next;
             in_service_regs <= in_service_next;
+            claim_id_r <= claim_id_next;
+            claim_valid_r <= claim_valid_next;
+            plic_irq <= claim_valid_next;
         end
     end
 

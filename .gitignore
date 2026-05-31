@@ -1,0 +1,7 @@
+# Questa/ModelSim simulation artifacts
+work/
+transcript
+results/
+
+# Claude Code local settings
+.claude/

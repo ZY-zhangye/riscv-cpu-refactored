@@ -3,7 +3,7 @@
 `include "../rtl/my_cpu/my_cpu_defines.svh"
 
 module tb_my_cpu;
-    localparam string MEM_ADDR = "hex/c-test/inst.hex";
+    localparam string MEM_ADDR = "hex/riscv-tests/rv32-p-riscv.hex";
     localparam int CLK_PERIOD_NS = 10;
     localparam int TIMEOUT_NS = 10000;
 
