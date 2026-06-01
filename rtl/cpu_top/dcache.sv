@@ -6,12 +6,11 @@
 //
 // CPU 侧协议:
 //   cpu_req_ready=1 且 cpu_req_valid=1 时接收一条访存请求。
-//   命中 load 在请求被接收后的下一拍返回 cpu_resp_valid/cpu_resp_rdata。
-//   miss 不做同拍旁路，必须先完成 line fill，下一拍重新命中后再返回。
+//   cache 数据体采用同步读 RAM 模板，命中 load 在请求后一拍返回。
 //
 // 后端协议:
-//   仍保持 32-bit 数据总线，miss 时由本模块连续读取 4 个 word 组成 16B line。
-//   store 采用 write-through：命中时同步更新 cache，同时打一拍写到后端。
+//   miss 时由本模块连续读取 4 个 word 组成 16B line。
+//   store 采用 write-through：命中时更新 cache，同时写到后端。
 //   MMIO/PLIC 等非 cacheable 区域不进入 cache，走注册化直通路径。
 //==============================================================================
 module dcache (
@@ -41,6 +40,7 @@ module dcache (
     localparam DCACHE_TAG_BITS        = 32 - DCACHE_INDEX_BITS - DCACHE_OFFSET_BITS;
     localparam DCACHE_WORDS_PER_LINE  = `DCACHE_LINE_SIZE / 4;
     localparam DCACHE_WORD_INDEX_BITS = $clog2(DCACHE_WORDS_PER_LINE);
+    localparam DCACHE_LINE_BITS       = `DCACHE_LINE_SIZE * 8;
 
     typedef enum logic [3:0] {
         ST_IDLE,
@@ -59,7 +59,11 @@ module dcache (
 
     logic cache_valid [DCACHE_NUM_LINES-1:0];
     logic [DCACHE_TAG_BITS-1:0] cache_tag [DCACHE_NUM_LINES-1:0];
-    logic [31:0] cache_data [DCACHE_NUM_LINES-1:0][DCACHE_WORDS_PER_LINE-1:0];
+
+    // data RAM 不在 reset 时清零，只通过 valid 位判断内容是否有效。
+    // 同步读、整行写的结构更贴近 FPGA BRAM 推断模板。
+    (* ram_style = "block" *)
+    logic [DCACHE_LINE_BITS-1:0] cache_data [DCACHE_NUM_LINES-1:0];
 
     logic req_valid;
     logic [31:0] req_addr;
@@ -69,7 +73,11 @@ module dcache (
     logic [31:0] bypass_data;
     logic [DCACHE_WORD_INDEX_BITS-1:0] fill_word_index;
     logic [31:0] fill_data [DCACHE_WORDS_PER_LINE-1:0];
+    logic [DCACHE_LINE_BITS-1:0] data_line_r;
+    logic [DCACHE_LINE_BITS-1:0] fill_line;
+    logic [DCACHE_LINE_BITS-1:0] store_line;
 
+    logic [DCACHE_INDEX_BITS-1:0] cpu_req_index;
     logic [DCACHE_INDEX_BITS-1:0] req_index;
     logic [DCACHE_TAG_BITS-1:0] req_tag;
     logic [DCACHE_WORD_INDEX_BITS-1:0] req_word_index;
@@ -109,6 +117,8 @@ module dcache (
         end
     endfunction
 
+    assign cpu_req_index = cpu_req_addr[DCACHE_OFFSET_BITS + DCACHE_INDEX_BITS - 1
+                                       : DCACHE_OFFSET_BITS];
     assign req_word_index = req_addr[DCACHE_OFFSET_BITS-1:2];
     assign req_index = req_addr[DCACHE_OFFSET_BITS + DCACHE_INDEX_BITS - 1
                                : DCACHE_OFFSET_BITS];
@@ -120,14 +130,29 @@ module dcache (
     assign line_base_addr = {req_addr[31:DCACHE_OFFSET_BITS],
                              {DCACHE_OFFSET_BITS{1'b0}}};
 
+    always_comb begin
+        integer k;
+
+        fill_line = '0;
+        for (k = 0; k < DCACHE_WORDS_PER_LINE; k = k + 1) begin
+            fill_line[k*32 +: 32] = fill_data[k];
+        end
+
+        store_line = data_line_r;
+        store_line[req_word_index*32 +: 32] =
+            apply_wstrb(data_line_r[req_word_index*32 +: 32],
+                        req_wdata,
+                        req_wen);
+    end
+
     assign cpu_req_ready = (state == ST_IDLE);
-    assign cpu_resp_valid = (state == ST_LOOKUP) && req_valid && !req_write &&
-                            req_cacheable && req_hit ||
+    assign cpu_resp_valid = ((state == ST_LOOKUP) && req_valid && !req_write &&
+                             req_cacheable && req_hit) ||
                             (state == ST_STORE_RESP) ||
                             (state == ST_BYPASS_RESP);
     assign cpu_resp_rdata = ((state == ST_LOOKUP) && req_valid && !req_write &&
                              req_cacheable && req_hit) ?
-                            cache_data[req_index][req_word_index] :
+                            data_line_r[req_word_index*32 +: 32] :
                             bypass_data;
 
     always_comb begin
@@ -173,12 +198,10 @@ module dcache (
             bypass_rdata <= 1'b0;
             bypass_data <= 32'b0;
             fill_word_index <= '0;
+            data_line_r <= '0;
             for (i = 0; i < DCACHE_NUM_LINES; i = i + 1) begin
                 cache_valid[i] <= 1'b0;
                 cache_tag[i] <= '0;
-                for (j = 0; j < DCACHE_WORDS_PER_LINE; j = j + 1) begin
-                    cache_data[i][j] <= 32'b0;
-                end
             end
             for (j = 0; j < DCACHE_WORDS_PER_LINE; j = j + 1) begin
                 fill_data[j] <= 32'b0;
@@ -191,6 +214,7 @@ module dcache (
                         req_addr <= cpu_req_addr;
                         req_wdata <= cpu_req_wdata;
                         req_wen <= cpu_req_wen;
+                        data_line_r <= cache_data[cpu_req_index];
                         state <= ST_LOOKUP;
                     end
                 end
@@ -198,9 +222,8 @@ module dcache (
                 ST_LOOKUP: begin
                     if (req_write) begin
                         if (req_hit) begin
-                            cache_data[req_index][req_word_index] <=
-                                apply_wstrb(cache_data[req_index][req_word_index],
-                                            req_wdata, req_wen);
+                            cache_data[req_index] <= store_line;
+                            data_line_r <= store_line;
                         end
                         state <= req_cacheable ? ST_STORE_ISSUE : ST_BYPASS_ISSUE;
                     end else if (req_cacheable && req_hit) begin
@@ -229,9 +252,8 @@ module dcache (
                 end
 
                 ST_MISS_FILL: begin
-                    for (j = 0; j < DCACHE_WORDS_PER_LINE; j = j + 1) begin
-                        cache_data[req_index][j] <= fill_data[j];
-                    end
+                    cache_data[req_index] <= fill_line;
+                    data_line_r <= fill_line;
                     cache_valid[req_index] <= 1'b1;
                     cache_tag[req_index] <= req_tag;
                     state <= ST_LOOKUP;
