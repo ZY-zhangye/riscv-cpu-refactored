@@ -105,9 +105,15 @@ module cpu_top (
         .pc_out(imem_addr),
         .inst_ren(imem_en),
         .inst_in(imem_rdata),
+        .pc_out1(), // 预留的第二条指令地址输出
+        .inst_ren1(), // 预留的第二条指令使能输出
+        .inst_in1(), // 预留的第二条指令输入
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
+        .ds_allowin1(1'b0), // 预留的第二条译码阶段允许信号
+        .fs_to_ds_valid1(), // 预留的第二条指令有效信
+        .fs_to_ds_bus1(), // 预留的第二条指令总线
         .br_taken(br_redirect),
         .br_target(br_redirect_target),
         .bp_update_valid(bp_update_valid),

@@ -5,3 +5,4 @@ results/
 
 # Claude Code local settings
 .claude/
+hex/riscv-tests/rv32-p-riscv.hex

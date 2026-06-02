@@ -87,17 +87,25 @@ module my_cpu (
     soc_inst_ram u_inst_ram (
         .clk(clk),
         .addr(imem_addr),
+        .addr1(32'd0), // 预留端口，当前未使用
         .en(imem_en),
-        .rdata(imem_rdata)
+        .en1(1'b0), // 预留端口，当前未使用
+        .rdata(imem_rdata),
+        .rdata1() // 预留端口，当前未使用
     );
 
     soc_data_ram u_data_ram (
         .clk(clk),
         .addr(ram_addr),
+        .addr1(32'd0), // 预留端口，当前未使用
         .en(ram_en),
+        .en1(1'b0), // 预留端口，当前未使用
         .wen(ram_wen),
+        .wen1(4'b0000), // 预留端口，当前未使用
         .wdata(ram_wdata),
-        .rdata(ram_rdata)
+        .wdata1(32'd0), // 预留端口，当前未使用
+        .rdata(ram_rdata),
+        .rdata1() // 预留端口，当前未使用
     );
 
     bridge u_bridge (
@@ -163,8 +171,11 @@ module soc_inst_ram #(
 ) (
     input  logic        clk,
     input  logic [31:0] addr,
+    input  logic [31:0] addr1,
     input  logic        en,
-    output logic [31:0] rdata
+    input  logic        en1,
+    output logic [31:0] rdata,
+    output logic [31:0] rdata1
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
@@ -173,6 +184,9 @@ module soc_inst_ram #(
     always_ff @(posedge clk) begin
         if (en) begin
             rdata <= mem[addr[INDEX_WIDTH+1:2]];
+        end
+        if (en1) begin
+            rdata1 <= mem[addr1[INDEX_WIDTH+1:2]];
         end
     end
 `else
@@ -185,16 +199,22 @@ module soc_data_ram #(
 ) (
     input  logic        clk,
     input  logic [31:0] addr,
+    input  logic [31:0] addr1,
     input  logic        en,
+    input  logic        en1,
     input  logic [3:0]  wen,
+    input  logic [3:0]  wen1,
     input  logic [31:0] wdata,
-    output logic [31:0] rdata
+    input logic [31:0] wdata1,
+    output logic [31:0] rdata,
+    output logic [31:0] rdata1
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
     logic [31:0] mem [0:WORDS-1];
 
-    assign rdata = en ? mem[addr[INDEX_WIDTH+1:2]] : 32'd0;
+    //assign rdata = en ? mem[addr[INDEX_WIDTH+1:2]] : 32'd0;
+    assign rdata1 = en1 ? mem[addr1[INDEX_WIDTH+1:2]] : 32'd0;
 
     always_ff @(posedge clk) begin
         if (en) begin
@@ -209,6 +229,21 @@ module soc_data_ram #(
             end
             if (wen[3]) begin
                 mem[addr[INDEX_WIDTH+1:2]][31:24] <= wdata[31:24];
+            end
+            rdata <= mem[addr[INDEX_WIDTH+1:2]];
+        end
+        if (en1) begin
+            if (wen1[0]) begin
+                mem[addr1[INDEX_WIDTH+1:2]][7:0] <= wdata1[7:0];
+            end
+            if (wen1[1]) begin
+                mem[addr1[INDEX_WIDTH+1:2]][15:8] <= wdata1[15:8];
+            end
+            if (wen1[2]) begin
+                mem[addr1[INDEX_WIDTH+1:2]][23:16] <= wdata1[23:16];
+            end
+            if (wen1[3]) begin
+                mem[addr1[INDEX_WIDTH+1:2]][31:24] <= wdata1[31:24];
             end
         end
     end
