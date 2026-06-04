@@ -6,6 +6,9 @@ module cpu_top (
     input logic [31:0] imem_rdata,
     output logic [31:0] imem_addr,
     output logic imem_en,
+    input logic [31:0] imem_rdata1,
+    output logic [31:0] imem_addr1,
+    output logic imem_en1,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
     output logic [31:0] dmem_addr,
@@ -30,6 +33,9 @@ module cpu_top (
     logic fs_to_is_valid;
     logic [`FS_DS_WIDTH-1:0] fs_to_is_bus;
     logic is_allowin;
+    logic fs_to_is_valid1;
+    logic [`FS_DS_WIDTH-1:0] fs_to_is_bus1;
+    logic is_allowin1;
     logic br_taken;
     logic [31:0] br_target;
     logic br_redirect;
@@ -118,15 +124,15 @@ module cpu_top (
         .pc_out(imem_addr),
         .inst_ren(imem_en),
         .inst_in(imem_rdata),
-        .pc_out1(), // 预留的第二条指令地址输出
-        .inst_ren1(), // 预留的第二条指令使能输出
-        .inst_in1(), // 预留的第二条指令输入
+        .pc_out1(imem_addr1),
+        .inst_ren1(imem_en1),
+        .inst_in1(imem_rdata1),
         .ds_allowin(is_allowin),
         .fs_to_ds_valid(fs_to_is_valid),
         .fs_to_ds_bus(fs_to_is_bus),
-        .ds_allowin1(1'b0), // 预留的第二条译码阶段允许信号
-        .fs_to_ds_valid1(), // 预留的第二条指令有效信
-        .fs_to_ds_bus1(), // 预留的第二条指令总线
+        .ds_allowin1(is_allowin1),
+        .fs_to_ds_valid1(fs_to_is_valid1),
+        .fs_to_ds_bus1(fs_to_is_bus1),
         .br_taken(br_redirect),
         .br_target(br_redirect_target),
         .bp_update_valid(bp_update_valid),
@@ -148,9 +154,9 @@ module cpu_top (
         .is_to_ds_valid(is_to_ds_valid),
         .is_to_ds_bus(is_to_ds_bus),
         .ds_allowin(ds_allowin),
-        .fs_to_is_valid1(1'b0),
-        .fs_to_is_bus1('0),
-        .is_allowin1(),
+        .fs_to_is_valid1(fs_to_is_valid1),
+        .fs_to_is_bus1(fs_to_is_bus1),
+        .is_allowin1(is_allowin1),
         .is_to_ds_valid1(is_to_ds_valid1),
         .is_to_ds_bus1(is_to_ds_bus1),
         .ds_allowin1(ds_allowin1),

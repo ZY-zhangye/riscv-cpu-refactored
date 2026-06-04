@@ -25,6 +25,9 @@ module my_cpu (
     logic [31:0] imem_rdata;
     logic [31:0] imem_addr;
     logic        imem_en;
+    logic [31:0] imem_rdata1;
+    logic [31:0] imem_addr1;
+    logic        imem_en1;
 
     logic [31:0] cpu_dmem_rdata;
     logic [31:0] cpu_dmem_addr;
@@ -63,6 +66,9 @@ module my_cpu (
         .imem_rdata(imem_rdata),
         .imem_addr(imem_addr),
         .imem_en(imem_en),
+        .imem_rdata1(imem_rdata1),
+        .imem_addr1(imem_addr1),
+        .imem_en1(imem_en1),
         .dmem_rdata(cpu_dmem_rdata),
         .dmem_addr(cpu_dmem_addr),
         .dmem_wen(cpu_dmem_wen),
@@ -87,11 +93,11 @@ module my_cpu (
     soc_inst_ram u_inst_ram (
         .clk(clk),
         .addr(imem_addr),
-        .addr1(32'd0), // 预留端口，当前未使用
+        .addr1(imem_addr1),
         .en(imem_en),
-        .en1(1'b0), // 预留端口，当前未使用
+        .en1(imem_en1),
         .rdata(imem_rdata),
-        .rdata1() // 预留端口，当前未使用
+        .rdata1(imem_rdata1)
     );
 
     soc_data_ram u_data_ram (

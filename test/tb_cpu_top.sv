@@ -15,6 +15,9 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     logic [31:0] imem_rdata;
     logic [31:0] imem_addr;
     logic imem_en;
+    logic [31:0] imem_rdata1;
+    logic [31:0] imem_addr1;
+    logic imem_en1;
     logic [31:0] dmem_rdata;
     logic [31:0] dmem_addr;
     logic [3:0] dmem_wen;
@@ -33,6 +36,9 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         .imem_rdata(imem_rdata),
         .imem_addr(imem_addr),
         .imem_en(imem_en),
+        .imem_rdata1(imem_rdata1),
+        .imem_addr1(imem_addr1),
+        .imem_en1(imem_en1),
         .dmem_rdata(dmem_rdata),
         .dmem_addr(dmem_addr),
         .dmem_wen(dmem_wen),
@@ -72,6 +78,9 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         end else begin
             if (imem_en) begin
                 imem_rdata <= imem[imem_addr[23:2]]; // 以字为单位访问
+            end
+            if (imem_en1) begin
+                imem_rdata1 <= imem[imem_addr1[23:2]]; // 第二取指端口
             end
         end
     end

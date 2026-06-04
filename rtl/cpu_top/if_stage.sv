@@ -41,6 +41,11 @@ module if_stage (
     logic [31:0] fs_pc;
     logic br_taken_reg;
     logic [31:0] br_target_reg;
+    logic redirect_pending;
+    logic [31:0] redirect_pending_target;
+    logic ds_allowin_r;
+    logic ds_allowin1_r;
+    logic fetch_accept;
 
     localparam BP_INDEX_WIDTH = 4;
     localparam BP_ENTRIES = 1 << BP_INDEX_WIDTH;
@@ -63,8 +68,9 @@ module if_stage (
     assign bp_pred_taken = bp_hit && bp_taken[bp_lookup_index];
     assign bp_pred_target = bp_target[bp_lookup_index];
 
-    assign seq_pc = (ds_allowin && ds_allowin1) ? fs_pc + 8 : fs_pc + 4; // 如果两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
+    assign seq_pc = (ds_allowin_r && ds_allowin1_r) ? fs_pc + 8 : fs_pc + 4; // 如果上一周期两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
     assign next_pc = exception_flag ? exception_addr :
+                     redirect_pending ? redirect_pending_target :
                      br_taken_reg ? br_target_reg :
                      bp_pred_taken ? bp_pred_target :
                      seq_pc;
@@ -76,6 +82,7 @@ module if_stage (
     assign fs_ready_go = 1'b1;
     assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
     assign fs_allowin1 = !fs_valid1 || fs_ready_go && ds_allowin1;
+    assign fetch_accept = fs_allowin || fs_allowin1;
     assign fs_to_ds_valid = fs_valid && fs_ready_go;
     assign fs_to_ds_valid1 = fs_valid1 && fs_ready_go;
     always_ff @(posedge clk or negedge rst_n) begin
@@ -94,6 +101,33 @@ module if_stage (
             fs_pc <= next_pc;
         end
     end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ds_allowin_r <= 1'b0;
+            ds_allowin1_r <= 1'b0;
+        end else begin
+            ds_allowin_r <= ds_allowin;
+            ds_allowin1_r <= ds_allowin1;
+        end
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            redirect_pending <= 1'b0;
+            redirect_pending_target <= 32'b0;
+        end else if (fetch_accept) begin
+            redirect_pending <= 1'b0;
+            redirect_pending_target <= 32'b0;
+        end else if (exception_flag) begin
+            redirect_pending <= 1'b1;
+            redirect_pending_target <= exception_addr;
+        end else if (br_taken) begin
+            redirect_pending <= 1'b1;
+            redirect_pending_target <= br_target;
+        end
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             br_taken_reg <= 1'b0;
@@ -122,14 +156,14 @@ module if_stage (
     end
 
     assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag || redirect_pending) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
-    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag), bp_pred_target};
+    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag && !redirect_pending), bp_pred_target};
 
-    assign pc_out1 = next_pc + 4; // 预留的第二条指令地址
+    assign pc_out1 = next_pc + 32'd4; // 预留的第二条指令地址
     assign inst_ren1 = fs_allowin1;
-    assign fs_to_ds_bus1 = {inst_in1, next_pc + 4, 1'b0, 32'b0}; // 预留的第二条指令总线
+    assign fs_to_ds_bus1 = {(redirect_pending ? `NOP_INST : inst_in1), fs_pc + 32'd4, 1'b0, 32'b0}; // 预留的第二条指令总线
 
     /*logic exception_iam;
     assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/

@@ -217,15 +217,20 @@ module mem_stage (
     assign mem_reg_fpu_wen1 = reg_fpu_wen1_int && !ms_flush1 && !exception_flag;
     assign mem_fwd_bus1 = {rd_addr1, mem_regfile_wen1, mem_reg_fpu_wen1, ms_valid1};
 
+    logic [31:0] wb_pc0;
+    logic [31:0] wb_pc1;
+    assign wb_pc0 = ms_flush0 ? 32'b0 : mem_pc0;
+    assign wb_pc1 = ms_flush1 ? 32'b0 : mem_pc1;
+
     assign ms_to_ws_bus0 = {
-        mem_pc0,
+        wb_pc0,
         mem_result0,
         rd_addr0,
         mem_regfile_wen0,
         mem_reg_fpu_wen0
     };
     assign ms_to_ws_bus1 = {
-        mem_pc1,
+        wb_pc1,
         mem_result1,
         rd_addr1,
         mem_regfile_wen1,
