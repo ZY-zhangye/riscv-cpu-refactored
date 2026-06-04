@@ -10,13 +10,10 @@ module if_stage (
     output logic [`ADDR_WIDTH-1:0] pc_out1,
     output logic inst_ren1,
     input logic [`DATA_WIDTH-1:0] inst_in1,
-    //与译码阶段的数据接口0
+    //与issue阶段的数据接口
     input logic ds_allowin,
     output logic fs_to_ds_valid,
     output logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus,
-    //与译码阶段的数据接口1（预留）
-    input logic ds_allowin1,
-    output logic fs_to_ds_valid1,
     output logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus1,
     //分支跳转接口
     input logic br_taken,
@@ -43,8 +40,6 @@ module if_stage (
     logic [31:0] br_target_reg;
     logic redirect_pending;
     logic [31:0] redirect_pending_target;
-    logic ds_allowin_r;
-    logic ds_allowin1_r;
     logic fetch_accept;
 
     localparam BP_INDEX_WIDTH = 4;
@@ -68,49 +63,32 @@ module if_stage (
     assign bp_pred_taken = bp_hit && bp_taken[bp_lookup_index];
     assign bp_pred_target = bp_target[bp_lookup_index];
 
-    assign seq_pc = (ds_allowin_r && ds_allowin1_r) ? fs_pc + 8 : fs_pc + 4; // 如果上一周期两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
+    assign seq_pc = fs_pc + 8; // 如果上一周期两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
     assign next_pc = exception_flag ? exception_addr :
                      redirect_pending ? redirect_pending_target :
                      br_taken_reg ? br_target_reg :
                      bp_pred_taken ? bp_pred_target :
                      seq_pc;
     logic fs_valid;
-    logic fs_valid1;
     logic fs_ready_go;
     logic fs_allowin;
-    logic fs_allowin1;
     assign fs_ready_go = 1'b1;
     assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
-    assign fs_allowin1 = !fs_valid1 || fs_ready_go && ds_allowin1;
-    assign fetch_accept = fs_allowin || fs_allowin1;
     assign fs_to_ds_valid = fs_valid && fs_ready_go;
-    assign fs_to_ds_valid1 = fs_valid1 && fs_ready_go;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             fs_valid <= 1'b0;
-            fs_valid1 <= 1'b0;
         end else begin
             if (fs_allowin) 
                 fs_valid <= 1'b1;
-            if (fs_allowin1) 
-                fs_valid1 <= 1'b1;
         end
         if (!rst_n) begin
             fs_pc <= `PC_START - 4;
-        end else if (fs_allowin || fs_allowin1) begin
+        end else if (fs_allowin) begin
             fs_pc <= next_pc;
         end
     end
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ds_allowin_r <= 1'b0;
-            ds_allowin1_r <= 1'b0;
-        end else begin
-            ds_allowin_r <= ds_allowin;
-            ds_allowin1_r <= ds_allowin1;
-        end
-    end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -132,7 +110,7 @@ module if_stage (
         if (!rst_n) begin
             br_taken_reg <= 1'b0;
             br_target_reg <= 32'b0;
-        end else if (fs_allowin || fs_allowin1) begin
+        end else if (fs_allowin) begin
             br_taken_reg <= br_taken;
             br_target_reg <= br_target;
         end
@@ -162,7 +140,7 @@ module if_stage (
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag && !redirect_pending), bp_pred_target};
 
     assign pc_out1 = next_pc + 32'd4; // 预留的第二条指令地址
-    assign inst_ren1 = fs_allowin1;
+    assign inst_ren1 = fs_allowin;
     assign fs_to_ds_bus1 = {(redirect_pending ? `NOP_INST : inst_in1), fs_pc + 32'd4, 1'b0, 32'b0}; // 预留的第二条指令总线
 
     /*logic exception_iam;

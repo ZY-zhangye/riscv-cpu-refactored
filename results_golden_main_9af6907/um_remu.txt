@@ -1,0 +1,2246 @@
+Reading pref.tcl
+
+# 2024.1
+
+# vsim -c -do "run -all; quit -force" tb_cpu_top 
+# Start time: 18:41:23 on Jun 04,2026
+# ** Note: (vsim-8009) Loading existing optimized design _opt2
+# //  Questa Sim-64
+# //  Version 2024.1 win64 Feb  1 2024
+# //
+# // Unpublished work. Copyright 2024 Siemens
+# //
+# // This material contains trade secrets or otherwise confidential information
+# // owned by Siemens Industry Software Inc. or its affiliates (collectively,
+# // "SISW"), or its licensors. Access to and use of this information is strictly
+# // limited as set forth in the Customer's applicable agreements with SISW.
+# //
+# // This material may not be copied, distributed, or otherwise disclosed outside
+# // of the Customer's facilities without the express written permission of SISW,
+# // and may not be used in any way not expressly authorized by SISW.
+# //
+# Loading sv_std.std
+# Loading work.tb_cpu_top(fast)
+# run -all
+# Time: 0, Reset asserted
+# ** Warning: (vsim-8630) Infinity results from division operation.
+#    Time: 0 ns  Iteration: 3  Instance: /tb_cpu_top File: rtl/cpu_top/divider.sv Line: 43
+# Time: 10, Reset asserted
+# Time: 20
+# debug_inst_pc: 7ffffffc
+# debug_wb_pc: 00000000
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 30
+# debug_inst_pc: 80000000
+# debug_wb_pc: 00000000
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 40
+# debug_inst_pc: 80000004
+# debug_wb_pc: 00000000
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 50
+# debug_inst_pc: 80000008
+# debug_wb_pc: 00000000
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 60
+# debug_inst_pc: 8000004c
+# debug_wb_pc: 00000000
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 70
+# debug_inst_pc: 80000050
+# debug_wb_pc: 80000000
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 80000004
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 80
+# debug_inst_pc: 80000054
+# debug_wb_pc: 80000004
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 90
+# debug_inst_pc: 80000058
+# debug_wb_pc: 80000008
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 100
+# debug_inst_pc: 8000005c
+# debug_wb_pc: 8000000c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 110
+# debug_inst_pc: 80000060
+# debug_wb_pc: 80000050
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 01
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 120
+# debug_inst_pc: 80000064
+# debug_wb_pc: 80000054
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 02
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 130
+# debug_inst_pc: 80000068
+# debug_wb_pc: 80000058
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 140
+# debug_inst_pc: 8000006c
+# debug_wb_pc: 8000005c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 04
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 150
+# debug_inst_pc: 80000070
+# debug_wb_pc: 80000060
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 160
+# debug_inst_pc: 80000074
+# debug_wb_pc: 80000064
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 06
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 170
+# debug_inst_pc: 80000078
+# debug_wb_pc: 80000068
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 180
+# debug_inst_pc: 8000007c
+# debug_wb_pc: 8000006c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 08
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 190
+# debug_inst_pc: 80000080
+# debug_wb_pc: 80000070
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 09
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 200
+# debug_inst_pc: 80000084
+# debug_wb_pc: 80000074
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 210
+# debug_inst_pc: 80000088
+# debug_wb_pc: 80000078
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 220
+# debug_inst_pc: 8000008c
+# debug_wb_pc: 8000007c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 230
+# debug_inst_pc: 80000090
+# debug_wb_pc: 80000080
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0d
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 240
+# debug_inst_pc: 80000094
+# debug_wb_pc: 80000084
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 250
+# debug_inst_pc: 80000098
+# debug_wb_pc: 80000088
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0f
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 260
+# debug_inst_pc: 8000009c
+# debug_wb_pc: 8000008c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 10
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 270
+# debug_inst_pc: 800000a0
+# debug_wb_pc: 80000090
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 11
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 280
+# debug_inst_pc: 800000a4
+# debug_wb_pc: 80000094
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 12
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 290
+# debug_inst_pc: 800000a8
+# debug_wb_pc: 80000098
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 13
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 300
+# debug_inst_pc: 800000ac
+# debug_wb_pc: 8000009c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 14
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 310
+# debug_inst_pc: 800000b0
+# debug_wb_pc: 800000a0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 15
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 320
+# debug_inst_pc: 800000b4
+# debug_wb_pc: 800000a4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 16
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 330
+# debug_inst_pc: 800000b8
+# debug_wb_pc: 800000a8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 17
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 340
+# debug_inst_pc: 800000bc
+# debug_wb_pc: 800000ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 18
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 350
+# debug_inst_pc: 800000c0
+# debug_wb_pc: 800000b0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 19
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 360
+# debug_inst_pc: 800000c4
+# debug_wb_pc: 800000b4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1a
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 370
+# debug_inst_pc: 800000c8
+# debug_wb_pc: 800000b8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1b
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 380
+# debug_inst_pc: 800000cc
+# debug_wb_pc: 800000bc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 390
+# debug_inst_pc: 800000d0
+# debug_wb_pc: 800000c0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1d
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 400
+# debug_inst_pc: 800000d4
+# debug_wb_pc: 800000c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 410
+# debug_inst_pc: 800000d8
+# debug_wb_pc: 800000c8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1f
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 420
+# debug_inst_pc: 800000dc
+# debug_wb_pc: 800000cc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 430
+# debug_inst_pc: 800000e0
+# debug_wb_pc: 800000d0
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 440
+# debug_inst_pc: 800000e4
+# debug_wb_pc: 800000d4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 800000d4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 450
+# debug_inst_pc: 800000e8
+# debug_wb_pc: 800000d8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 800000e4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 460
+# debug_inst_pc: 800000ec
+# debug_wb_pc: 800000dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 470
+# debug_inst_pc: 800000f0
+# debug_wb_pc: 800000e0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 480
+# debug_inst_pc: 800000f4
+# debug_wb_pc: 800000e4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 800000e4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 490
+# debug_inst_pc: 800000f8
+# debug_wb_pc: 800000e8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 800000f4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 500
+# debug_inst_pc: 800000fc
+# debug_wb_pc: 800000ec
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 800000e4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 510
+# debug_inst_pc: 80000100
+# debug_wb_pc: 800000f0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 520
+# debug_inst_pc: 80000104
+# debug_wb_pc: 800000f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 800000f4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 530
+# debug_inst_pc: 80000108
+# debug_wb_pc: 800000f8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000114
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 540
+# debug_inst_pc: 8000010c
+# debug_wb_pc: 800000fc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 800000f4
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 550
+# debug_inst_pc: 80000110
+# debug_wb_pc: 80000100
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 560
+# debug_inst_pc: 80000114
+# debug_wb_pc: 80000104
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 7fffffff
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 570
+# debug_inst_pc: 80000118
+# debug_wb_pc: 80000108
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 580
+# debug_inst_pc: 8000011c
+# debug_wb_pc: 8000010c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 0000001f
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 590
+# debug_inst_pc: 80000120
+# debug_wb_pc: 80000110
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 600
+# debug_inst_pc: 80000124
+# debug_wb_pc: 80000114
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 610
+# debug_inst_pc: 80000128
+# debug_wb_pc: 80000118
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000118
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 620
+# debug_inst_pc: 8000012c
+# debug_wb_pc: 8000011c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 8000012c
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 630
+# debug_inst_pc: 80000130
+# debug_wb_pc: 80000120
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 80000114
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 640
+# debug_inst_pc: 80000134
+# debug_wb_pc: 80000124
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 650
+# debug_inst_pc: 80000138
+# debug_wb_pc: 80000128
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 660
+# debug_inst_pc: 8000013c
+# debug_wb_pc: 8000012c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 670
+# debug_inst_pc: 80000140
+# debug_wb_pc: 80000130
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000130
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 680
+# debug_inst_pc: 80000144
+# debug_wb_pc: 80000134
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000004
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 690
+# debug_inst_pc: 80000148
+# debug_wb_pc: 80000138
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 8000012c
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 700
+# debug_inst_pc: 8000014c
+# debug_wb_pc: 8000013c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 00000001
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 710
+# debug_inst_pc: 80000158
+# debug_wb_pc: 80000140
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 80000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 720
+# debug_inst_pc: 8000015c
+# debug_wb_pc: 80000144
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 18
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 730
+# debug_inst_pc: 80000160
+# debug_wb_pc: 80000148
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 740
+# debug_inst_pc: 80000164
+# debug_wb_pc: 8000014c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 750
+# debug_inst_pc: 80000168
+# debug_wb_pc: 80000150
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 760
+# debug_inst_pc: 80000170
+# debug_wb_pc: 8000015c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 770
+# debug_inst_pc: 80000174
+# debug_wb_pc: 80000160
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 14
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 780
+# debug_inst_pc: 80000178
+# debug_wb_pc: 80000164
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 790
+# debug_inst_pc: 8000017c
+# debug_wb_pc: 80000168
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 800
+# debug_inst_pc: 80000180
+# debug_wb_pc: 8000016c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 810
+# debug_inst_pc: 80000184
+# debug_wb_pc: 80000174
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 820
+# debug_inst_pc: 80000188
+# debug_wb_pc: 80000178
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 80000178
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 830
+# debug_inst_pc: 8000018c
+# debug_wb_pc: 8000017c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 05
+# debug_wb_rf_data: 8000018c
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 840
+# debug_inst_pc: 80000190
+# debug_wb_pc: 80000180
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 850
+# debug_inst_pc: 80000194
+# debug_wb_pc: 80000184
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 860
+# debug_inst_pc: 80000198
+# debug_wb_pc: 80000188
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 870
+# debug_inst_pc: 8000019c
+# debug_wb_pc: 8000018c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000002
+# debug_data: 00000000
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 880
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000190
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 00000014
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 890
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 900
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 910
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 920
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 930
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 940
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 950
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 960
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 970
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 980
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 990
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1000
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1010
+# debug_inst_pc: 800001a0
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1020
+# debug_inst_pc: 800001a4
+# debug_wb_pc: 80000194
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1030
+# debug_inst_pc: 800001a8
+# debug_wb_pc: 80000198
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000002
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1040
+# debug_inst_pc: 800001ac
+# debug_wb_pc: 8000019c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000002
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1050
+# debug_inst_pc: 800001b0
+# debug_wb_pc: 800001a0
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 08
+# debug_wb_rf_data: 00000000
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1060
+# debug_inst_pc: 800001b4
+# debug_wb_pc: 800001a4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000003
+# debug_data: 00000002
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1070
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001a8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: ffffffec
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1080
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1090
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1100
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1110
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1120
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1130
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1140
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1150
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1160
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1170
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1180
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1190
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1200
+# debug_inst_pc: 800001b8
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1210
+# debug_inst_pc: 800001bc
+# debug_wb_pc: 800001ac
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000006
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1220
+# debug_inst_pc: 800001c0
+# debug_wb_pc: 800001b0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000002
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1230
+# debug_inst_pc: 800001c4
+# debug_wb_pc: 800001b4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000002
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1240
+# debug_inst_pc: 800001c8
+# debug_wb_pc: 800001b8
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 10
+# debug_wb_rf_data: 00000000
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1250
+# debug_inst_pc: 800001cc
+# debug_wb_pc: 800001bc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000004
+# debug_data: 00000003
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1260
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 00000014
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1270
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1280
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1290
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1300
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1310
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1320
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1330
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1340
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1350
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1360
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1370
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1380
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1390
+# debug_inst_pc: 800001d0
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1400
+# debug_inst_pc: 800001d4
+# debug_wb_pc: 800001c4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1410
+# debug_inst_pc: 800001d8
+# debug_wb_pc: 800001c8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000014
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1420
+# debug_inst_pc: 800001dc
+# debug_wb_pc: 800001cc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000014
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1430
+# debug_inst_pc: 800001e0
+# debug_wb_pc: 800001d0
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 18
+# debug_wb_rf_data: 00000000
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1440
+# debug_inst_pc: 800001e4
+# debug_wb_pc: 800001d4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000005
+# debug_data: 00000004
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1450
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001d8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: ffffffec
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1460
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1470
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1480
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1490
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1500
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1510
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1520
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1530
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1540
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1550
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1560
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1570
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1580
+# debug_inst_pc: 800001e8
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1590
+# debug_inst_pc: 800001ec
+# debug_wb_pc: 800001dc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: fffffffa
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1600
+# debug_inst_pc: 800001f0
+# debug_wb_pc: 800001e0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: ffffffec
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1610
+# debug_inst_pc: 800001f4
+# debug_wb_pc: 800001e4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: ffffffec
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1620
+# debug_inst_pc: 800001f8
+# debug_wb_pc: 800001e8
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1630
+# debug_inst_pc: 800001fc
+# debug_wb_pc: 800001ec
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000006
+# debug_data: 00000005
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1640
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 80000000
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1650
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1660
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1670
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1680
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1690
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1700
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1710
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1720
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1730
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1740
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1750
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1760
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1770
+# debug_inst_pc: 80000200
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1780
+# debug_inst_pc: 80000204
+# debug_wb_pc: 800001f4
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000001
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1790
+# debug_inst_pc: 80000208
+# debug_wb_pc: 800001f8
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000000
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1800
+# debug_inst_pc: 8000020c
+# debug_wb_pc: 800001fc
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000000
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1810
+# debug_inst_pc: 80000210
+# debug_wb_pc: 80000200
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 08
+# debug_wb_rf_data: 00000000
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1820
+# debug_inst_pc: 80000214
+# debug_wb_pc: 80000204
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000007
+# debug_data: 00000006
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1830
+# debug_inst_pc: 80000218
+# debug_wb_pc: 80000208
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 80000000
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1840
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1850
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1860
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1870
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1880
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1890
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1900
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1910
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1920
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1930
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1940
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1950
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1960
+# debug_inst_pc: 80000218
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1970
+# debug_inst_pc: 8000021c
+# debug_wb_pc: 8000020c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: ffffffff
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1980
+# debug_inst_pc: 80000220
+# debug_wb_pc: 80000210
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 80000000
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 1990
+# debug_inst_pc: 80000224
+# debug_wb_pc: 80000214
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 80000000
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2000
+# debug_inst_pc: 80000228
+# debug_wb_pc: 80000218
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 10
+# debug_wb_rf_data: 00000000
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2010
+# debug_inst_pc: 8000022c
+# debug_wb_pc: 8000021c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000008
+# debug_data: 00000007
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2020
+# debug_inst_pc: 80000230
+# debug_wb_pc: 80000220
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 80000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2030
+# debug_inst_pc: 80000230
+# debug_wb_pc: 80000224
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2040
+# debug_inst_pc: 80000234
+# debug_wb_pc: 80000224
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2050
+# debug_inst_pc: 80000238
+# debug_wb_pc: 80000228
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 80000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2060
+# debug_inst_pc: 8000023c
+# debug_wb_pc: 8000022c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 80000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2070
+# debug_inst_pc: 80000240
+# debug_wb_pc: 80000230
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 18
+# debug_wb_rf_data: 00000000
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2080
+# debug_inst_pc: 80000244
+# debug_wb_pc: 80000234
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000009
+# debug_data: 00000008
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2090
+# debug_inst_pc: 80000248
+# debug_wb_pc: 80000238
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 00000001
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2100
+# debug_inst_pc: 80000248
+# debug_wb_pc: 8000023c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2110
+# debug_inst_pc: 8000024c
+# debug_wb_pc: 8000023c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2120
+# debug_inst_pc: 80000250
+# debug_wb_pc: 80000240
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000001
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2130
+# debug_inst_pc: 80000254
+# debug_wb_pc: 80000244
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000001
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2140
+# debug_inst_pc: 80000258
+# debug_wb_pc: 80000248
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2150
+# debug_inst_pc: 8000025c
+# debug_wb_pc: 8000024c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 0000000a
+# debug_data: 00000009
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2160
+# debug_inst_pc: 80000260
+# debug_wb_pc: 80000250
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0b
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2170
+# debug_inst_pc: 80000260
+# debug_wb_pc: 80000254
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2180
+# debug_inst_pc: 80000264
+# debug_wb_pc: 80000254
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0c
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2190
+# debug_inst_pc: 80000268
+# debug_wb_pc: 80000258
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0e
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2200
+# debug_inst_pc: 8000026c
+# debug_wb_pc: 8000025c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 07
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2210
+# debug_inst_pc: 80000280
+# debug_wb_pc: 80000260
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 08
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2220
+# debug_inst_pc: 80000284
+# debug_wb_pc: 80000264
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2230
+# debug_inst_pc: 80000288
+# debug_wb_pc: 80000268
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2240
+# debug_inst_pc: 8000028c
+# debug_wb_pc: 8000026c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2250
+# debug_inst_pc: 80000290
+# debug_wb_pc: 80000270
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2260
+# debug_inst_pc: 80000294
+# debug_wb_pc: 80000284
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2270
+# debug_inst_pc: 80000298
+# debug_wb_pc: 80000288
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 03
+# debug_wb_rf_data: 00000001
+# debug_data: 0000000a
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2280
+# debug_inst_pc: 8000029c
+# debug_wb_pc: 8000028c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 11
+# debug_wb_rf_data: 0000005d
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2290
+# debug_inst_pc: 80000000
+# debug_wb_pc: 80000290
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 0a
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2300
+# debug_inst_pc: 80000004
+# debug_wb_pc: 80000294
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2310
+# debug_inst_pc: 80000008
+# debug_wb_pc: 80000298
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2320
+# debug_inst_pc: 8000000c
+# debug_wb_pc: 8000029c
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2330
+# debug_inst_pc: 80000010
+# debug_wb_pc: 800002a0
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2340
+# debug_inst_pc: 80000014
+# debug_wb_pc: 80000004
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 0000000b
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2350
+# debug_inst_pc: 80000018
+# debug_wb_pc: 80000008
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1f
+# debug_wb_rf_data: 00000008
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2360
+# debug_inst_pc: 8000001c
+# debug_wb_pc: 8000000c
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 10
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2370
+# debug_inst_pc: 80000020
+# debug_wb_pc: 80000010
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1f
+# debug_wb_rf_data: 00000009
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2380
+# debug_inst_pc: 80000024
+# debug_wb_pc: 80000014
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 08
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2390
+# debug_inst_pc: 80000038
+# debug_wb_pc: 80000018
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1f
+# debug_wb_rf_data: 0000000b
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2400
+# debug_inst_pc: 8000003c
+# debug_wb_pc: 8000001c
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2410
+# debug_inst_pc: 80000040
+# debug_wb_pc: 80000020
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2420
+# debug_inst_pc: 80000044
+# debug_wb_pc: 80000024
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2430
+# debug_inst_pc: 80000048
+# debug_wb_pc: 80000028
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 00
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2440
+# debug_inst_pc: 8000004c
+# debug_wb_pc: 8000003c
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 8000103c
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2450
+# debug_inst_pc: 80000050
+# debug_wb_pc: 80000040
+# debug_wb_rf_wen: 0
+# debug_wb_rf_wnum: 04
+# debug_wb_rf_data: 00000000
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# Time: 2460
+# debug_inst_pc: 80000054
+# debug_wb_pc: 80000044
+# debug_wb_rf_wen: 1
+# debug_wb_rf_wnum: 1e
+# debug_wb_rf_data: 80001044
+# debug_data: 00000001
+# debug_wb_fpu_rf_wen: 0
+# --------------------------------------------------
+# ---------------------------------------------
+# Time: 2460
+# Simulation finished.
+# ----------------------------------------------
+# Test passed.
+# ----------------------------------------------
+# ** Note: $stop    : test/tb_cpu_top.sv(131)
+#    Time: 2460 ns  Iteration: 1  Instance: /tb_cpu_top
+# Break at test/tb_cpu_top.sv line 131
+# Stopped at test/tb_cpu_top.sv line 131
+#  quit -force
+# End time: 18:41:23 on Jun 04,2026, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 1
