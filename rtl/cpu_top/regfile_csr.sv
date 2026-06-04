@@ -13,7 +13,8 @@ module regfile_csr (
     input logic [6:0] exception_code,
     input logic [31:0] exception_mtval,
     input logic br_taken,
-    input logic ms_to_ws_valid,
+    input logic ms_to_ws_valid0,
+    input logic ms_to_ws_valid1,
     output logic exception_flag,
     output logic [31:0] exception_addr,
     output logic external_irq_enable
@@ -40,9 +41,7 @@ module regfile_csr (
             if (exception_code[5]) begin
                 exception_cnt <= exception_cnt + 1'b1; //每当发生异常时exception_cnt自增
             end
-            if (ms_to_ws_valid) begin
-                instret <= instret + 1'b1; //每当指令写回阶段有效时instret自增
-            end
+            instret <= instret + ms_to_ws_valid0 + ms_to_ws_valid1;
         end
     end
 

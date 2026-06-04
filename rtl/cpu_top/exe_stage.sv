@@ -1,5 +1,7 @@
 `include "defines.svh"
-module exe_stage(
+module exe_stage #(
+    parameter int LANE_ID = 0
+) (
     input logic clk,
     input logic rst_n,
     //握手信号
@@ -24,6 +26,11 @@ module exe_stage(
     output logic dmem_en,
     //数据前递接口-打包
     output logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus,
+    //跨通道前递结果接口
+    input logic [31:0] exe_result_reg_other,
+    input logic [31:0] mem_result_reg_other,
+    output logic [31:0] exe_result_reg_self,
+    output logic [31:0] mem_result_reg_self,
     //异常接口
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
     output logic [`EXE_EXC_BUS - 1:0] exe_exc_bus,
@@ -164,8 +171,8 @@ module exe_stage(
     //SRC_PACKET解包
     logic [31:0] reg_src1;
     logic [31:0] reg_src2;
-    logic [1:0] src1_fwd;
-    logic [1:0] src2_fwd;
+    logic [2:0] src1_fwd;
+    logic [2:0] src2_fwd;
     assign {reg_src1, reg_src2, src1_fwd, src2_fwd} = src_packet;
 
     //操作数选择（除FPU，其它都在这里完成）
@@ -173,19 +180,43 @@ module exe_stage(
     logic [31:0] csr_data;
     always_comb begin
         src1 = 32'b0;
-        unique case (1'b1)
-            src1_fwd[0]: src1 = exe_result_reg;
-            src1_fwd[1]: src1 = mem_result_reg;
-            default: src1 = reg_src1;
-        endcase
+        if (LANE_ID == 0) begin
+            unique case (src1_fwd)
+                3'b001:  src1 = exe_result_reg;          // Lane 0 MEM (self)
+                3'b010:  src1 = exe_result_reg_other;    // Lane 1 MEM (other)
+                3'b011:  src1 = mem_result_reg;          // Lane 0 WB (self)
+                3'b100:  src1 = mem_result_reg_other;    // Lane 1 WB (other)
+                default: src1 = reg_src1;
+            endcase
+        end else begin
+            unique case (src1_fwd)
+                3'b001:  src1 = exe_result_reg_other;    // Lane 0 MEM (other)
+                3'b010:  src1 = exe_result_reg;          // Lane 1 MEM (self)
+                3'b011:  src1 = mem_result_reg_other;    // Lane 0 WB (other)
+                3'b100:  src1 = mem_result_reg;          // Lane 1 WB (self)
+                default: src1 = reg_src1;
+            endcase
+        end
     end
     always_comb begin
         src2 = 32'b0;
-        unique case (1'b1)
-            src2_fwd[0]: src2 = exe_result_reg;
-            src2_fwd[1]: src2 = mem_result_reg;
-            default: src2 = reg_src2;
-        endcase
+        if (LANE_ID == 0) begin
+            unique case (src2_fwd)
+                3'b001:  src2 = exe_result_reg;          // Lane 0 MEM (self)
+                3'b010:  src2 = exe_result_reg_other;    // Lane 1 MEM (other)
+                3'b011:  src2 = mem_result_reg;          // Lane 0 WB (self)
+                3'b100:  src2 = mem_result_reg_other;    // Lane 1 WB (other)
+                default: src2 = reg_src2;
+            endcase
+        end else begin
+            unique case (src2_fwd)
+                3'b001:  src2 = exe_result_reg_other;    // Lane 0 MEM (other)
+                3'b010:  src2 = exe_result_reg;          // Lane 1 MEM (self)
+                3'b011:  src2 = mem_result_reg_other;    // Lane 0 WB (other)
+                3'b100:  src2 = mem_result_reg;          // Lane 1 WB (self)
+                default: src2 = reg_src2;
+            endcase
+        end
     end
     /*
     assign src1 = (src1_fwd == 2'b01) ? exe_result_reg :
@@ -476,7 +507,9 @@ module exe_stage(
     end
 
     //数据前递接口-打包
-    assign exe_fwd_bus = {rd_addr, regfile_wen && !es_flush, reg_fpu_wen && !es_flush, csr_waddr, csr_wen, es_valid};
+    logic exe_is_load;
+    assign exe_is_load = is_mem && (regfile_wen || reg_fpu_wen);
+    assign exe_fwd_bus = {rd_addr, regfile_wen && !es_flush, reg_fpu_wen && !es_flush, csr_waddr, csr_wen, es_valid, exe_is_load && !es_flush};
 
     //输出到下一级
     assign es_to_ms_bus = {
@@ -497,6 +530,7 @@ module exe_stage(
     logic [32:0] br_bus;
     assign br_bus = {br_taken, br_target};
     assign exe_exc_bus = {br_bus, ds_exc_bus_r};
-
+    assign exe_result_reg_self = exe_result_reg;
+    assign mem_result_reg_self = mem_result_reg;
 
 endmodule

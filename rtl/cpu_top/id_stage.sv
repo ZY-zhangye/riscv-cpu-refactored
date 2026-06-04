@@ -27,9 +27,11 @@ module id_stage (
     output logic ds_flush,
     output logic [`DS_ES_WIDTH-1:0] ds_to_es_bus,
     //数据前递接口--执行阶段--打包
-    input logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus,
+    input logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus0,
+    input logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus1,
     //数据前递接口--访存阶段--打包
-    input logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus,
+    input logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus0,
+    input logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus1,
     //跳转信号与异常信号
     input logic br_taken,
     input logic exception_flag,
@@ -81,20 +83,36 @@ module id_stage (
     assign {id_inst, id_pc, bp_pred_taken, bp_pred_target} = fs_to_ds_bus_r;
 
     //解包EX前递信号
-    logic [4:0] exe_dest_addr;
-    logic exe_regfile_wen;
-    logic exe_reg_fpu_wen;
-    logic [11:0] exe_csr_addr;
-    logic exe_csr_wen;
-    logic es_valid;
-    assign {exe_dest_addr, exe_regfile_wen, exe_reg_fpu_wen, exe_csr_addr, exe_csr_wen, es_valid} = exe_fwd_bus;
+    logic [4:0] exe_dest_addr0;
+    logic exe_regfile_wen0;
+    logic exe_reg_fpu_wen0;
+    logic [11:0] exe_csr_addr0;
+    logic exe_csr_wen0;
+    logic es_valid0;
+    logic exe_is_load0;
+    assign {exe_dest_addr0, exe_regfile_wen0, exe_reg_fpu_wen0, exe_csr_addr0, exe_csr_wen0, es_valid0, exe_is_load0} = exe_fwd_bus0;
+
+    logic [4:0] exe_dest_addr1;
+    logic exe_regfile_wen1;
+    logic exe_reg_fpu_wen1;
+    logic [11:0] exe_csr_addr1;
+    logic exe_csr_wen1;
+    logic es_valid1;
+    logic exe_is_load1;
+    assign {exe_dest_addr1, exe_regfile_wen1, exe_reg_fpu_wen1, exe_csr_addr1, exe_csr_wen1, es_valid1, exe_is_load1} = exe_fwd_bus1;
 
     //解包MEM前递信号
-    logic [4:0] mem_dest_addr;
-    logic mem_regfile_wen;
-    logic mem_reg_fpu_wen;
-    logic ms_valid;
-    assign {mem_dest_addr, mem_regfile_wen, mem_reg_fpu_wen, ms_valid} = mem_fwd_bus;
+    logic [4:0] mem_dest_addr0;
+    logic mem_regfile_wen0;
+    logic mem_reg_fpu_wen0;
+    logic ms_valid0;
+    assign {mem_dest_addr0, mem_regfile_wen0, mem_reg_fpu_wen0, ms_valid0} = mem_fwd_bus0;
+
+    logic [4:0] mem_dest_addr1;
+    logic mem_regfile_wen1;
+    logic mem_reg_fpu_wen1;
+    logic ms_valid1;
+    assign {mem_dest_addr1, mem_regfile_wen1, mem_reg_fpu_wen1, ms_valid1} = mem_fwd_bus1;
 
     //译码逻辑
     logic [6:0] opcode;
@@ -445,14 +463,14 @@ module id_stage (
     assign fpu_src1 = src1_fpu;
     assign fpu_src2 = src2_fpu;
     assign fpu_src1_fwd = (rs1_fpu_addr != 5'b0) ?
-                          ((exe_reg_fpu_wen && (exe_dest_addr == rs1_fpu_addr)) ? 2'b01 :
-                           (mem_reg_fpu_wen && (mem_dest_addr == rs1_fpu_addr)) ? 2'b10 : 2'b00) : 2'b00;
+                          ((exe_reg_fpu_wen0 && (exe_dest_addr0 == rs1_fpu_addr) && es_valid0) ? 2'b01 :
+                           (mem_reg_fpu_wen0 && (mem_dest_addr0 == rs1_fpu_addr) && ms_valid0) ? 2'b10 : 2'b00) : 2'b00;
     assign fpu_src2_fwd = (rs2_fpu_addr != 5'b0) ?
-                          ((exe_reg_fpu_wen && (exe_dest_addr == rs2_fpu_addr)) ? 2'b01 :
-                           (mem_reg_fpu_wen && (mem_dest_addr == rs2_fpu_addr)) ? 2'b10 : 2'b00) : 2'b00;   
+                          ((exe_reg_fpu_wen0 && (exe_dest_addr0 == rs2_fpu_addr) && es_valid0) ? 2'b01 :
+                           (mem_reg_fpu_wen0 && (mem_dest_addr0 == rs2_fpu_addr) && ms_valid0) ? 2'b10 : 2'b00) : 2'b00;   
     assign fpu_src3_fwd = (rs3_fpu_addr != 5'b0) ?
-                          ((exe_reg_fpu_wen && (exe_dest_addr == rs3_fpu_addr)) ? 2'b01 :
-                           (mem_reg_fpu_wen && (mem_dest_addr == rs3_fpu_addr)) ? 2'b10 : 2'b00) : 2'b00;
+                          ((exe_reg_fpu_wen0 && (exe_dest_addr0 == rs3_fpu_addr) && es_valid0) ? 2'b01 :
+                           (mem_reg_fpu_wen0 && (mem_dest_addr0 == rs3_fpu_addr) && ms_valid0) ? 2'b10 : 2'b00) : 2'b00;
     assign rm = id_inst[14:12];
     assign fpu_op = {inst_fadd_s, inst_fsub_s, inst_fmul_s, inst_fdiv_s, inst_fsqrt_s, inst_fmin_s, inst_fmax_s, inst_fmadd_s, inst_fmsub_s, inst_fnmadd_s, inst_fnmsub_s, 
                      inst_fcvt_w_s, inst_fcvt_wu_s, inst_fcvt_s_w, inst_fcvt_s_wu,
@@ -496,7 +514,7 @@ module id_stage (
     assign csr_waddr = csr_addr;
     assign csr_op = {(inst_csrrw || inst_csrrwi) , (inst_csrrs || inst_csrrsi) , (inst_csrrc || inst_csrrci)};
     assign csr_imm_sel = inst_csrrwi || inst_csrrsi || inst_csrrci;
-    assign csr_rdata_fwd = (exe_csr_wen && (exe_csr_addr == csr_addr)) ? 1'b1 : 1'b0;
+    assign csr_rdata_fwd = (exe_csr_wen0 && (exe_csr_addr0 == csr_addr) && es_valid0) || (exe_csr_wen1 && (exe_csr_addr1 == csr_addr) && es_valid1);
     assign csr_wen = inst_csrrw || inst_csrrwi ||
                      ((inst_csrrs || inst_csrrc) && (rs1_addr != 5'b0)) ||
                      ((inst_csrrsi || inst_csrrci) && (imm_z != 5'b0));
@@ -552,15 +570,42 @@ module id_stage (
     //SRC_PACKET打包
     logic [`SRC_PACKET_WIDTH-1:0] src_packet;
     logic [31:0] reg_src1, reg_src2;
-    logic [1:0] src1_fwd, src2_fwd;
-    assign src1_fwd = (inst_lui || inst_auipc) ? 2'b00 :
-                      (rs1_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00;
-    assign src2_fwd = (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) ? 2'b00 :
-                      (rs2_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
+    logic [2:0] src1_fwd, src2_fwd;
+
+    always_comb begin
+        src1_fwd = 3'b000;
+        if (inst_lui || inst_auipc) begin
+            src1_fwd = 3'b000;
+        end else if (rs1_addr != 5'b0) begin
+            if (exe_regfile_wen1 && (exe_dest_addr1 == rs1_addr) && es_valid1) begin
+                src1_fwd = 3'b010; // Lane 1 EXE
+            end else if (exe_regfile_wen0 && (exe_dest_addr0 == rs1_addr) && es_valid0) begin
+                src1_fwd = 3'b001; // Lane 0 EXE
+            end else if (mem_regfile_wen1 && (mem_dest_addr1 == rs1_addr) && ms_valid1) begin
+                src1_fwd = 3'b100; // Lane 1 MEM
+            end else if (mem_regfile_wen0 && (mem_dest_addr0 == rs1_addr) && ms_valid0) begin
+                src1_fwd = 3'b011; // Lane 0 MEM
+            end
+        end
+    end
+
+    always_comb begin
+        src2_fwd = 3'b000;
+        if (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) begin
+            src2_fwd = 3'b000;
+        end else if (rs2_addr != 5'b0) begin
+            if (exe_regfile_wen1 && (exe_dest_addr1 == rs2_addr) && es_valid1) begin
+                src2_fwd = 3'b010; // Lane 1 EXE
+            end else if (exe_regfile_wen0 && (exe_dest_addr0 == rs2_addr) && es_valid0) begin
+                src2_fwd = 3'b001; // Lane 0 EXE
+            end else if (mem_regfile_wen1 && (mem_dest_addr1 == rs2_addr) && ms_valid1) begin
+                src2_fwd = 3'b100; // Lane 1 MEM
+            end else if (mem_regfile_wen0 && (mem_dest_addr0 == rs2_addr) && ms_valid0) begin
+                src2_fwd = 3'b011; // Lane 0 MEM
+            end
+        end
+    end
+
     assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
                       inst_auipc ? id_pc : src1;
@@ -595,21 +640,17 @@ module id_stage (
     logic exe_load_use_hazard;
     assign need_rs1 = is_op_reg || is_op_imm || is_load || is_store || is_branch || inst_jalr || is_fpu || inst_csrrw || inst_csrrs || inst_csrrc;
     assign need_rs2 = is_op_reg || is_store || is_branch || is_fpu;
-    logic prev_load;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            prev_load <= 1'b0;
-        end else if (ds_allowin) begin
-            prev_load <= is_load || inst_flw; //仅当当前指令为加载指令时才更新prev_load信号
-        end
-    end
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
         end else begin
-            exe_load_use_hazard = ((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr)) ||
-                                  (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr))) &&
-                                  es_valid && exe_regfile_wen && prev_load;
+            exe_load_use_hazard = 
+                (((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr0)) ||
+                  (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr0))) &&
+                  es_valid0 && exe_regfile_wen0 && exe_is_load0) ||
+                (((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr1)) ||
+                  (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr1))) &&
+                  es_valid1 && exe_regfile_wen1 && exe_is_load1);
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;

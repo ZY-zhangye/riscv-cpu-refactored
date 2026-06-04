@@ -19,7 +19,7 @@
 `define MEM_PACKET_WIDTH (32+5+1)
 `define CSR_PACKET_WIDTH (32+32+12+3+1+1+1)
 `define BR_JMP_PACKET_WIDTH (32+32+32+6+2+1)
-`define SRC_PACKET_WIDTH (32+32+2+2)
+`define SRC_PACKET_WIDTH (32+32+3+3)
 `ifdef Z_BITMAIN_ENABLE
     `define BITMAN_OP_WIDTH 28
     `define BITMAN_PACKET_WIDTH (`BITMAN_OP_WIDTH)
@@ -42,7 +42,7 @@
 `define ALU_OP_SLT 10'b00_0000_0010
 `define ALU_OP_SLTU 10'b00_0000_0001
 `define EXE_EXC_BUS (33+`EXC_WIDTH)
-`define EX_FWD_PACKET_WIDTH (5+1+1+12+1+1)  // rd_addr + regfile_wen + reg_fpu_wen + csr_addr + csr_wen + valid = 21
+`define EX_FWD_PACKET_WIDTH (5+1+1+12+1+1+1)  // rd_addr + regfile_wen + reg_fpu_wen + csr_addr + csr_wen + valid + is_load = 22
 `define MEM_FWD_PACKET_WIDTH (5+1+1+1)      // rd_addr + regfile_wen + reg_fpu_wen + valid = 8
 
 `define MS_WS_WIDTH (32+32+5+1+1)

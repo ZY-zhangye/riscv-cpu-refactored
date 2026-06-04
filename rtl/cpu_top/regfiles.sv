@@ -45,11 +45,23 @@ module regfiles (
                 regfile[regfile_waddr1] <= regfile_wdata1;
         end
     end
-    //读寄存器（含WB阶段写回数据前递，避免ID阶段再做选择）
+    //读寄存器（含双WB端口写回数据前递）
     assign regfile_rdata1 = (regfile_raddr1 != 5'b0) ?
-        ((regfile_wen && regfile_waddr == regfile_raddr1) ? regfile_wdata : regfile[regfile_raddr1]) : 32'b0;
+        ((regfile_wen && regfile_waddr == regfile_raddr1) ? regfile_wdata :
+         (regfile_wen1 && regfile_waddr1 == regfile_raddr1) ? regfile_wdata1 :
+         regfile[regfile_raddr1]) : 32'b0;
+    assign regfile_rdata11 = (regfile_raddr11 != 5'b0) ?
+        ((regfile_wen && regfile_waddr == regfile_raddr11) ? regfile_wdata :
+         (regfile_wen1 && regfile_waddr1 == regfile_raddr11) ? regfile_wdata1 :
+         regfile[regfile_raddr11]) : 32'b0;
     assign regfile_rdata2 = (regfile_raddr2 != 5'b0) ?
-        ((regfile_wen && regfile_waddr == regfile_raddr2) ? regfile_wdata : regfile[regfile_raddr2]) : 32'b0;
+        ((regfile_wen && regfile_waddr == regfile_raddr2) ? regfile_wdata :
+         (regfile_wen1 && regfile_waddr1 == regfile_raddr2) ? regfile_wdata1 :
+         regfile[regfile_raddr2]) : 32'b0;
+    assign regfile_rdata21 = (regfile_raddr21 != 5'b0) ?
+        ((regfile_wen && regfile_waddr == regfile_raddr21) ? regfile_wdata :
+         (regfile_wen1 && regfile_waddr1 == regfile_raddr21) ? regfile_wdata1 :
+         regfile[regfile_raddr21]) : 32'b0;
     `ifdef DEBUG_EN
     assign debug_data = regfile[3];
     `endif

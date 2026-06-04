@@ -3,15 +3,22 @@ module wb_stage (
     input logic clk,
     input logic rst_n,
     //来自内存阶段的信息
-    input logic [`MS_WS_WIDTH-1:0] ms_to_ws_bus,
+    input logic [`MS_WS_WIDTH-1:0] ms_to_ws_bus0,
+    input logic [`MS_WS_WIDTH-1:0] ms_to_ws_bus1,
     //握手信号
-    input logic ms_to_ws_valid,
-    output logic ws_allowin,
+    input logic ms_to_ws_valid0,
+    input logic ms_to_ws_valid1,
+    output logic ws_allowin0,
+    output logic ws_allowin1,
     //送到寄存器堆的信息
     output logic regfile_wen,
+    output logic regfile_wen1,
     output logic reg_fpu_wen,
+    output logic reg_fpu_wen1,
     output logic [4:0] regfile_addr,
-    output logic [31:0] regfile_wdata
+    output logic [4:0] regfile_addr1,
+    output logic [31:0] regfile_wdata,
+    output logic [31:0] regfile_wdata1
     //debug接口
     `ifdef DEBUG_EN
     ,
@@ -23,44 +30,65 @@ module wb_stage (
     `endif
 );
 
-    logic ws_ready_go;
-    logic ws_valid;
-    assign ws_ready_go = 1'b1;
-    assign ws_allowin = !ws_valid || ws_ready_go && ms_to_ws_valid;
+    logic ws_ready_go0, ws_ready_go1;
+    logic ws_valid0, ws_valid1;
+    assign ws_ready_go0 = 1'b1;
+    assign ws_ready_go1 = 1'b1;
+
+    assign ws_allowin0 = !ws_valid0 || ws_ready_go0 && ms_to_ws_valid0;
+    assign ws_allowin1 = !ws_valid1 || ws_ready_go1 && ms_to_ws_valid1;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ws_valid <= 1'b0;
-        end else if (ws_allowin) begin
-            ws_valid <= ms_to_ws_valid;
+            ws_valid0 <= 1'b0;
+            ws_valid1 <= 1'b0;
+        end else begin
+            if (ws_allowin0) ws_valid0 <= ms_to_ws_valid0;
+            if (ws_allowin1) ws_valid1 <= ms_to_ws_valid1;
         end
     end
 
-    logic [`MS_WS_WIDTH-1:0] ms_ws_bus_r;
+    logic [`MS_WS_WIDTH-1:0] ms_ws_bus_r0, ms_ws_bus_r1;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            ms_ws_bus_r <= '0;
-        end else if (ms_to_ws_valid && ws_allowin) begin
-            ms_ws_bus_r <= ms_to_ws_bus;
+            ms_ws_bus_r0 <= '0;
+            ms_ws_bus_r1 <= '0;
+        end else begin
+            if (ms_to_ws_valid0 && ws_allowin0) begin
+                ms_ws_bus_r0 <= ms_to_ws_bus0;
+            end
+            if (ms_to_ws_valid1 && ws_allowin1) begin
+                ms_ws_bus_r1 <= ms_to_ws_bus1;
+            end
         end
     end
 
     //解析来自内存阶段的信息
-    logic [31:0] wb_result;
-    logic [4:0] wb_dst_addr;
-    logic [31:0] wb_pc;
-    logic wb_regfile_wen;
-    logic wb_fpu_regfile_wen;
-    assign {wb_pc, wb_result, wb_dst_addr, wb_regfile_wen, wb_fpu_regfile_wen} = ms_ws_bus_r;
-    assign regfile_wen = wb_regfile_wen;
-    assign reg_fpu_wen = wb_fpu_regfile_wen;
-    assign regfile_addr = wb_dst_addr;
-    assign regfile_wdata = wb_result;
+    logic [31:0] wb_result0, wb_result1;
+    logic [4:0] wb_dst_addr0, wb_dst_addr1;
+    logic [31:0] wb_pc0, wb_pc1;
+    logic wb_regfile_wen0, wb_regfile_wen1;
+    logic wb_fpu_regfile_wen0, wb_fpu_regfile_wen1;
+
+    assign {wb_pc0, wb_result0, wb_dst_addr0, wb_regfile_wen0, wb_fpu_regfile_wen0} = ms_ws_bus_r0;
+    assign {wb_pc1, wb_result1, wb_dst_addr1, wb_regfile_wen1, wb_fpu_regfile_wen1} = ms_ws_bus_r1;
+
+    assign regfile_wen = wb_regfile_wen0 && ws_valid0;
+    assign reg_fpu_wen = wb_fpu_regfile_wen0 && ws_valid0;
+    assign regfile_addr = wb_dst_addr0;
+    assign regfile_wdata = wb_result0;
+
+    assign regfile_wen1 = wb_regfile_wen1 && ws_valid1;
+    assign reg_fpu_wen1 = wb_fpu_regfile_wen1 && ws_valid1;
+    assign regfile_addr1 = wb_dst_addr1;
+    assign regfile_wdata1 = wb_result1;
+
     `ifdef DEBUG_EN
-    assign debug_wb_pc = wb_pc;
-    assign debug_wb_rf_addr = wb_dst_addr;
-    assign debug_wb_rf_data = wb_result;
-    assign debug_wb_rf_wen = wb_regfile_wen;
-    assign debug_wb_fpu_rf_wen = wb_fpu_regfile_wen;
+    assign debug_wb_pc = wb_pc0;
+    assign debug_wb_rf_addr = wb_dst_addr0;
+    assign debug_wb_rf_data = wb_result0;
+    assign debug_wb_rf_wen = wb_regfile_wen0 && ws_valid0;
+    assign debug_wb_fpu_rf_wen = wb_fpu_regfile_wen0 && ws_valid0;
     `endif
 
 endmodule
