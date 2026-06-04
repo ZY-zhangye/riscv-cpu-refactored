@@ -27,9 +27,9 @@ module cpu_top (
 );
 
     //连接if模块
-    logic ds_allowin;
-    logic fs_to_ds_valid;
-    logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus;
+    logic fs_to_is_valid;
+    logic [`FS_DS_WIDTH-1:0] fs_to_is_bus;
+    logic is_allowin;
     logic br_taken;
     logic [31:0] br_target;
     logic br_redirect;
@@ -44,7 +44,13 @@ module cpu_top (
     logic [31:0] exception_addr;
     logic external_irq_enable;
 
-    //连接id模块
+    //连接issue模块
+    logic is_to_ds_valid;
+    logic [`FS_DS_WIDTH-1:0] is_to_ds_bus;
+    logic ds_allowin;
+    logic is_flush;
+
+    //连接id_exe模块
     logic [4:0] rs1_addr;
     logic [4:0] rs2_addr;
     logic [31:0] rs1_data;
@@ -57,26 +63,13 @@ module cpu_top (
     logic [31:0] rs2_fpu_data;
     logic [11:0] csr_addr;
     logic [31:0] csr_data;
-    logic ds_to_es_valid;
-    logic es_allowin;
-    logic ds_flush;
-    logic [`DS_ES_WIDTH-1:0] ds_to_es_bus;
     logic regfile_wen;
     logic reg_fpu_wen;
     logic [4:0] regfile_waddr;
     logic [`DATA_WIDTH-1:0] regfile_wdata;
-    logic [4:0] exe_dest_addr;
-    logic exe_regfile_wen;
-    logic exe_reg_fpu_wen;
-    logic [11:0] exe_csr_addr;
-    logic exe_csr_wen;
-    logic [4:0] mem_dest_addr;
-    logic mem_regfile_wen;
-    logic mem_reg_fpu_wen;
-    logic [`EXC_WIDTH-1:0] ds_exc_bus;
+    logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus;
 
     //连接es模块
-    logic es_valid;
     logic ms_allowin;
     logic es_to_ms_valid;
     logic [`ES_MS_WIDTH-1:0] es_to_ms_bus;
@@ -86,7 +79,6 @@ module cpu_top (
     logic [`EXE_EXC_BUS - 1:0] exe_exc_bus;
 
     //连接ms模块
-    logic ms_valid;
     logic [`MS_WS_WIDTH-1:0] ms_to_ws_bus;
     logic ms_to_ws_valid;
     logic ws_allowin;
@@ -108,9 +100,9 @@ module cpu_top (
         .pc_out1(), // 预留的第二条指令地址输出
         .inst_ren1(), // 预留的第二条指令使能输出
         .inst_in1(), // 预留的第二条指令输入
-        .ds_allowin(ds_allowin),
-        .fs_to_ds_valid(fs_to_ds_valid),
-        .fs_to_ds_bus(fs_to_ds_bus),
+        .ds_allowin(is_allowin),
+        .fs_to_ds_valid(fs_to_is_valid),
+        .fs_to_ds_bus(fs_to_is_bus),
         .ds_allowin1(1'b0), // 预留的第二条译码阶段允许信号
         .fs_to_ds_valid1(), // 预留的第二条指令有效信
         .fs_to_ds_bus1(), // 预留的第二条指令总线
@@ -126,12 +118,34 @@ module cpu_top (
         .exception_addr(exception_addr)
     );
 
-    id_stage u_id_stage (
+    issue_stage u_issue_stage (
         .clk(clk),
         .rst_n(rst_n),
-        .fs_to_ds_valid(fs_to_ds_valid),
-        .fs_to_ds_bus(fs_to_ds_bus),
+        .fs_to_is_valid(fs_to_is_valid),
+        .fs_to_is_bus(fs_to_is_bus),
+        .is_allowin(is_allowin),
+        .is_to_ds_valid(is_to_ds_valid),
+        .is_to_ds_bus(is_to_ds_bus),
         .ds_allowin(ds_allowin),
+        .fs_to_is_valid1(1'b0),
+        .fs_to_is_bus1('0),
+        .is_allowin1(),
+        .is_to_ds_valid1(),
+        .is_to_ds_bus1(),
+        .ds_allowin1(1'b0),
+        .br_taken(br_redirect),
+        .exception_flag(exception_flag),
+        .is_flush(is_flush),
+        .is_flush1()
+    );
+
+    id_exe_stage u_id_exe_stage (
+        .clk(clk),
+        .rst_n(rst_n),
+        .fs_to_ds_valid(is_to_ds_valid),
+        .fs_to_ds_bus(is_to_ds_bus),
+        .ds_allowin(ds_allowin),
+        .is_flush(is_flush),
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr),
         .rs1_data(rs1_data),
@@ -144,38 +158,10 @@ module cpu_top (
         .rs2_fpu_data(rs2_fpu_data),
         .csr_addr(csr_addr),
         .csr_data(csr_data),
-        .ds_to_es_valid(ds_to_es_valid),
-        .es_allowin(es_allowin),
-        .ds_flush(ds_flush),
-        .ds_to_es_bus(ds_to_es_bus),
-        .regfile_wen(regfile_wen),
-        .reg_fpu_wen(reg_fpu_wen),
-        .regfile_waddr(regfile_waddr),
-        .regfile_wdata(regfile_wdata),
-        .exe_dest_addr(exe_dest_addr),
-        .exe_regfile_wen(exe_regfile_wen),
-        .exe_reg_fpu_wen(exe_reg_fpu_wen),
-        .exe_csr_addr(exe_csr_addr),
-        .exe_csr_wen(exe_csr_wen),
-        .es_valid(es_valid),
-        .mem_dest_addr(mem_dest_addr),
-        .mem_regfile_wen(mem_regfile_wen),
-        .mem_reg_fpu_wen(mem_reg_fpu_wen),
-        .ms_valid(ms_valid),
-        .br_taken(br_redirect),
+        .mem_fwd_bus(mem_fwd_bus),
         .exception_flag(exception_flag),
         .fs_exc_bus(fs_exc_bus),
-        .ds_exc_bus(ds_exc_bus)
-    );
-
-    exe_stage u_exe_stage (
-        .clk(clk),
-        .rst_n(rst_n),
-        .ds_to_es_valid(ds_to_es_valid),
         .ms_allowin(ms_allowin),
-        .ds_to_es_bus(ds_to_es_bus),
-        .ds_flush(ds_flush),
-        .es_allowin(es_allowin),
         .es_to_ms_valid(es_to_ms_valid),
         .es_flush(es_flush),
         .es_to_ms_bus(es_to_ms_bus),
@@ -183,14 +169,9 @@ module cpu_top (
         .dmem_wen(dmem_wen),
         .dmem_en(dmem_en),
         .dmem_wdata(dmem_wdata),
-        .exe_dest_addr(exe_dest_addr),
-        .exe_regfile_wen(exe_regfile_wen),
-        .exe_reg_fpu_wen(exe_reg_fpu_wen),
-        .exe_csr_addr(exe_csr_addr),
-        .exe_csr_wen(exe_csr_wen),
-        .es_valid(es_valid),
-        .ds_exc_bus(ds_exc_bus),
-        .exception_flag(exception_flag),
+        .mem_result(mem_result),
+        .reg_fpu_data3(reg_fpu_data3),
+        .exe_exc_bus(exe_exc_bus),
         .br_taken(br_taken),
         .br_target(br_target),
         .br_redirect(br_redirect),
@@ -199,10 +180,7 @@ module cpu_top (
         .bp_update_pc(bp_update_pc),
         .bp_update_taken(bp_update_taken),
         .bp_update_target(bp_update_target),
-        .bp_update_is_jalr(bp_update_is_jalr),
-        .mem_result(mem_result),
-        .reg_fpu_data3(reg_fpu_data3),
-        .exe_exc_bus(exe_exc_bus)
+        .bp_update_is_jalr(bp_update_is_jalr)
     );
 
     mem_stage u_mem_stage (
@@ -216,11 +194,8 @@ module cpu_top (
         .ms_allowin(ms_allowin),
         .ws_allowin(ws_allowin),
         .dmem_rdata(dmem_rdata),
-        .mem_dst_addr(mem_dest_addr),
-        .mem_regfile_wen(mem_regfile_wen),
-        .mem_reg_fpu_wen(mem_reg_fpu_wen),
+        .mem_fwd_bus(mem_fwd_bus),
         .mem_result(mem_result),
-        .ms_valid(ms_valid),
         .exception_flag(exception_flag),
         .exe_exc_bus(exe_exc_bus),
         .plic_irq(plic_irq),

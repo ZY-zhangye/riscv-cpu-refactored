@@ -32,9 +32,9 @@ module reg_fpu (
             reg_fpu[reg_fpu_waddr] <= reg_fpu_wdata;
         end
     end
-    //读寄存器
-    assign reg_fpu_rdata1 = reg_fpu[reg_fpu_raddr1];
-    assign reg_fpu_rdata2 = reg_fpu[reg_fpu_raddr2];
+    //读寄存器（含WB阶段写回数据前递，避免ID阶段再做选择）
+    assign reg_fpu_rdata1 = (reg_fpu_wen && reg_fpu_waddr == reg_fpu_raddr1) ? reg_fpu_wdata : reg_fpu[reg_fpu_raddr1];
+    assign reg_fpu_rdata2 = (reg_fpu_wen && reg_fpu_waddr == reg_fpu_raddr2) ? reg_fpu_wdata : reg_fpu[reg_fpu_raddr2];
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             reg_fpu_rdata3 <= 32'b0;

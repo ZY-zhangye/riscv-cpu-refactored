@@ -22,13 +22,8 @@ module exe_stage(
     output logic [31:0] dmem_wdata,
     output logic [3:0] dmem_wen,
     output logic dmem_en,
-    //数据前递接口-仅地址
-    output logic [4:0] exe_dest_addr,
-    output logic exe_regfile_wen,
-    output logic exe_reg_fpu_wen,
-    output logic [11:0] exe_csr_addr,
-    output logic exe_csr_wen,
-    output logic es_valid,
+    //数据前递接口-打包
+    output logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus,
     //异常接口
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
     output logic [`EXE_EXC_BUS - 1:0] exe_exc_bus,
@@ -45,6 +40,7 @@ module exe_stage(
     output logic bp_update_is_jalr
 );
 
+    logic es_valid;
     logic es_ready_go;
     logic mul_stall;
     logic fpu_stall;
@@ -401,8 +397,6 @@ module exe_stage(
     assign inst_csrrwi = csr_op == 3'b100 && csr_imm_sel == 1'b1;
     assign inst_csrrsi = csr_op == 3'b010 && csr_imm_sel == 1'b1;
     assign inst_csrrci = csr_op == 3'b001 && csr_imm_sel == 1'b1;
-    assign exe_csr_wen = csr_wen;
-    assign exe_csr_addr = csr_waddr;
     assign csr_wdata = inst_csrrw ? src1 :
                        inst_csrrs ? (csr_data | src1) :
                        inst_csrrc ? (csr_data & ~src1) :
@@ -481,10 +475,8 @@ module exe_stage(
         end
     end
 
-    //数据前递接口
-    assign exe_dest_addr = rd_addr;
-    assign exe_regfile_wen = regfile_wen && !es_flush;
-    assign exe_reg_fpu_wen = reg_fpu_wen && !es_flush;
+    //数据前递接口-打包
+    assign exe_fwd_bus = {rd_addr, regfile_wen && !es_flush, reg_fpu_wen && !es_flush, csr_waddr, csr_wen, es_valid};
 
     //输出到下一级
     assign es_to_ms_bus = {
@@ -495,8 +487,8 @@ module exe_stage(
         regfile_wen,
         reg_fpu_wen,
         exe_result_sel,
-        exe_csr_wen,
-        exe_csr_addr,
+        csr_wen,
+        csr_waddr,
         csr_wdata
     };
 

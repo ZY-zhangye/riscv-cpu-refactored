@@ -26,26 +26,15 @@ module id_stage (
     input logic es_allowin,
     output logic ds_flush,
     output logic [`DS_ES_WIDTH-1:0] ds_to_es_bus,
-    //数据前递接口--写回
-    input logic regfile_wen,
-    input logic reg_fpu_wen,
-    input logic [4:0] regfile_waddr,
-    input logic [`DATA_WIDTH-1:0] regfile_wdata,
-    //数据前递接口--执行阶段--仅前递地址，数据选择统一在exe_stage完成
-    input logic [4:0] exe_dest_addr,
-    input logic exe_regfile_wen,
-    input logic exe_reg_fpu_wen,
-    input logic [11:0] exe_csr_addr,
-    input logic exe_csr_wen,
-    input logic es_valid,
-    //数据前递接口--访存阶段--仅前递地址，数据选择统一在exe_stage完成
-    input logic [4:0] mem_dest_addr,
-    input logic mem_regfile_wen,
-    input logic mem_reg_fpu_wen,
-    input logic ms_valid,
+    //数据前递接口--执行阶段--打包
+    input logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus,
+    //数据前递接口--访存阶段--打包
+    input logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus,
     //跳转信号与异常信号
     input logic br_taken,
     input logic exception_flag,
+    //冲刷信号（来自issue_stage，预留给双发射）
+    input logic is_flush,
     input logic [`EXC_WIDTH-1:0] fs_exc_bus,
     output logic [`EXC_WIDTH-1:0] ds_exc_bus
 );  
@@ -83,23 +72,29 @@ module id_stage (
             fs_exc_bus_r <= fs_exc_bus_r;
         end
     end
-    always_comb begin
-        if (!rst_n) begin
-            ds_flush = 1'b0;
-        end else begin
-            if (exception_flag || br_taken) begin
-                ds_flush <= 1'b1;
-            end else begin
-                ds_flush <= 1'b0;
-            end
-        end
-    end
+    assign ds_flush = rst_n && (br_taken || exception_flag || is_flush);
 
     logic [`ADDR_WIDTH-1:0] id_pc;
     logic [`DATA_WIDTH-1:0] id_inst;
     logic bp_pred_taken;
     logic [`ADDR_WIDTH-1:0] bp_pred_target;
     assign {id_inst, id_pc, bp_pred_taken, bp_pred_target} = fs_to_ds_bus_r;
+
+    //解包EX前递信号
+    logic [4:0] exe_dest_addr;
+    logic exe_regfile_wen;
+    logic exe_reg_fpu_wen;
+    logic [11:0] exe_csr_addr;
+    logic exe_csr_wen;
+    logic es_valid;
+    assign {exe_dest_addr, exe_regfile_wen, exe_reg_fpu_wen, exe_csr_addr, exe_csr_wen, es_valid} = exe_fwd_bus;
+
+    //解包MEM前递信号
+    logic [4:0] mem_dest_addr;
+    logic mem_regfile_wen;
+    logic mem_reg_fpu_wen;
+    logic ms_valid;
+    assign {mem_dest_addr, mem_regfile_wen, mem_reg_fpu_wen, ms_valid} = mem_fwd_bus;
 
     //译码逻辑
     logic [6:0] opcode;
@@ -402,21 +397,13 @@ module id_stage (
     assign inst_feq_s     = is_fpu && f7_1010000 && f3_010;
     assign inst_fclass_s  = is_fpu && f7_1110000 && f3_001 && rs2_00000;
 
-    //写回阶段数据前递结果
+    //写回阶段数据前递已移至regfiles/reg_fpu内部实现，此处直接使用寄存器堆读出的数据
     logic [31:0] src1, src2;
-    assign src1 = (rs1_addr == 5'b0) ? 32'b0 :
-                  (regfile_wen && (regfile_waddr == rs1_addr)) ? regfile_wdata :
-                   rs1_data;
-    assign src2 = (rs2_addr == 5'b0) ? 32'b0 :
-                  (regfile_wen && (regfile_waddr == rs2_addr)) ? regfile_wdata :
-                   rs2_data;
+    assign src1 = (rs1_addr == 5'b0) ? 32'b0 : rs1_data;
+    assign src2 = (rs2_addr == 5'b0) ? 32'b0 : rs2_data;
     logic [31:0] src1_fpu, src2_fpu;
-    assign src1_fpu = (rs1_fpu_addr == 5'b0) ? 32'b0 :
-                      (reg_fpu_wen && (regfile_waddr == rs1_fpu_addr)) ? regfile_wdata :
-                       rs1_fpu_data;
-    assign src2_fpu = (rs2_fpu_addr == 5'b0) ? 32'b0 :
-                      (reg_fpu_wen && (regfile_waddr == rs2_fpu_addr)) ? regfile_wdata :
-                       rs2_fpu_data;
+    assign src1_fpu = (rs1_fpu_addr == 5'b0) ? 32'b0 : rs1_fpu_data;
+    assign src2_fpu = (rs2_fpu_addr == 5'b0) ? 32'b0 : rs2_fpu_data;
 
     //立即数选择
     logic IMI_valid , IMS_valid , IMB_valid , IMU_valid , IMJ_valid , IMZ_valid;

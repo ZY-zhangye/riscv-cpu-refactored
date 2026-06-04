@@ -12,13 +12,10 @@ module mem_stage (
     output logic ms_to_ws_valid,
     output logic ms_allowin,
     input logic ws_allowin,
-    output logic ms_valid,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
-    //数据前递接口
-    output logic [4:0] mem_dst_addr,
-    output logic mem_regfile_wen,
-    output logic mem_reg_fpu_wen,
+    //数据前递接口-打包
+    output logic [`MEM_FWD_PACKET_WIDTH-1:0] mem_fwd_bus,
     output logic [31:0] mem_result,
     //异常信息接口
     input logic exception_flag,
@@ -34,6 +31,9 @@ module mem_stage (
     output logic [31:0] exception_mtval
 );
 
+    logic ms_valid;
+    logic mem_regfile_wen;
+    logic mem_reg_fpu_wen;
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_r;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus_r;
     logic ms_ready_go;
@@ -154,9 +154,9 @@ end
     //结果选择（case减少级联三目）
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
-    assign mem_dst_addr = rd_addr;
     assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
     assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;
+    assign mem_fwd_bus = {rd_addr, mem_regfile_wen, mem_reg_fpu_wen, ms_valid};
     assign csr_we = csr_wen & ~ms_flush & ~exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
