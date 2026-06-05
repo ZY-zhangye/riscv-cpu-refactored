@@ -39,7 +39,8 @@ module id_exe_stage (
     input logic exception_flag,
     input logic [`EXC_WIDTH-1:0] fs_exc_bus,
     //与MEM阶段的握手信号
-    input logic ms_allowin,
+    input logic ms_allowin0,
+    input logic ms_allowin1,
     output logic es_to_ms_valid0,
     output logic es_flush0,
     output logic [`ES_MS_WIDTH-1:0] es_to_ms_bus0,
@@ -51,8 +52,9 @@ module id_exe_stage (
     output logic [31:0] dmem_wdata,
     output logic [3:0] dmem_wen,
     output logic dmem_en,
-    //mem阶段数据前递接口（数据，共享）
-    input logic [31:0] mem_result,
+    //mem阶段数据前递接口（数据）
+    input logic [31:0] mem_result0,
+    input logic [31:0] mem_result1,
     //reg_fpu数据3接口（共享）
     input logic [31:0] reg_fpu_data3,
     //异常接口（输出，二选一仲裁）
@@ -91,8 +93,8 @@ module id_exe_stage (
     logic        dmem_en0;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus0;
 
-    logic [31:0] exe_result_reg_self0, mem_result_reg_self0;
-    logic [31:0] exe_result_reg_self1, mem_result_reg_self1;
+    logic [31:0] exe_result_current0;
+    logic [31:0] exe_result_current1;
 
     id_stage u_id0 (
         .clk(clk), .rst_n(rst_n),
@@ -123,7 +125,7 @@ module id_exe_stage (
     exe_stage #(.LANE_ID(0)) u_exe0 (
         .clk(clk), .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid0),
-        .ms_allowin(ms_allowin),
+        .ms_allowin(ms_allowin0),
         .ds_to_es_bus(ds_to_es_bus0),
         .ds_flush(ds_flush0),
         .es_allowin(es_allowin0),
@@ -133,10 +135,9 @@ module id_exe_stage (
         .dmem_addr(dmem_addr0), .dmem_wen(dmem_wen0),
         .dmem_en(dmem_en0), .dmem_wdata(dmem_wdata0),
         .exe_fwd_bus(exe_fwd_bus0),
-        .exe_result_reg_other(exe_result_reg_self1),
-        .mem_result_reg_other(mem_result_reg_self1),
-        .exe_result_reg_self(exe_result_reg_self0),
-        .mem_result_reg_self(mem_result_reg_self0),
+        .exe_result_lane0(exe_result_current0),
+        .exe_result_lane1(exe_result_current1),
+        .exe_result_current(exe_result_current0),
         .ds_exc_bus(ds_exc_bus0),
         .exception_flag(exception_flag),
         .br_taken(br_taken0), .br_target(br_target0),
@@ -144,7 +145,8 @@ module id_exe_stage (
         .bp_update_valid(bp_update_valid0), .bp_update_pc(bp_update_pc0),
         .bp_update_taken(bp_update_taken0), .bp_update_target(bp_update_target0),
         .bp_update_is_jalr(bp_update_is_jalr0),
-        .mem_result(mem_result),
+        .mem_result0(mem_result0),
+        .mem_result1(mem_result1),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus0)
     );
@@ -198,7 +200,7 @@ module id_exe_stage (
     exe_stage #(.LANE_ID(1)) u_exe1 (
         .clk(clk), .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid1),
-        .ms_allowin(ms_allowin),
+        .ms_allowin(ms_allowin1),
         .ds_to_es_bus(ds_to_es_bus1),
         .ds_flush(ds_flush1),
         .es_allowin(es_allowin1),
@@ -208,10 +210,9 @@ module id_exe_stage (
         .dmem_addr(dmem_addr1), .dmem_wen(dmem_wen1),
         .dmem_en(dmem_en1), .dmem_wdata(dmem_wdata1),
         .exe_fwd_bus(exe_fwd_bus1),
-        .exe_result_reg_other(exe_result_reg_self0),
-        .mem_result_reg_other(mem_result_reg_self0),
-        .exe_result_reg_self(exe_result_reg_self1),
-        .mem_result_reg_self(mem_result_reg_self1),
+        .exe_result_lane0(exe_result_current0),
+        .exe_result_lane1(exe_result_current1),
+        .exe_result_current(exe_result_current1),
         .ds_exc_bus(ds_exc_bus1),
         .exception_flag(exception_flag),
         .br_taken(br_taken1), .br_target(br_target1),
@@ -219,7 +220,8 @@ module id_exe_stage (
         .bp_update_valid(bp_update_valid1), .bp_update_pc(bp_update_pc1),
         .bp_update_taken(bp_update_taken1), .bp_update_target(bp_update_target1),
         .bp_update_is_jalr(bp_update_is_jalr1),
-        .mem_result(mem_result),
+        .mem_result0(mem_result0),
+        .mem_result1(mem_result1),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus1)
     );

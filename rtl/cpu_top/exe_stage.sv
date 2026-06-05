@@ -16,7 +16,8 @@ module exe_stage #(
     output logic [`ES_MS_WIDTH-1:0] es_to_ms_bus,
     output logic es_flush,
     //mem阶段数据前递接口
-    input logic [31:0] mem_result,
+    input logic [31:0] mem_result0,
+    input logic [31:0] mem_result1,
     //reg_fpu数据3接口，仅在部分情况使用
     input logic [31:0] reg_fpu_data3,
     //DMEM接口
@@ -26,11 +27,10 @@ module exe_stage #(
     output logic dmem_en,
     //数据前递接口-打包
     output logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus,
-    //跨通道前递结果接口
-    input logic [31:0] exe_result_reg_other,
-    input logic [31:0] mem_result_reg_other,
-    output logic [31:0] exe_result_reg_self,
-    output logic [31:0] mem_result_reg_self,
+    //双通道前递结果快照接口
+    input logic [31:0] exe_result_lane0,
+    input logic [31:0] exe_result_lane1,
+    output logic [31:0] exe_result_current,
     //异常接口
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
     output logic [`EXE_EXC_BUS - 1:0] exe_exc_bus,
@@ -68,13 +68,16 @@ module exe_stage #(
     logic [31:0] exe_result;
     logic [31:0] csr_wdata;
     logic [31:0] csr_wdata_reg;
-    logic [31:0] mem_result_reg;
-    logic [31:0] exe_result_reg; 
+    logic [31:0] exe_result_reg0;
+    logic [31:0] exe_result_reg1;
+    logic [31:0] mem_result_reg0;
+    logic [31:0] mem_result_reg1;
     logic [`EXC_WIDTH-1:0] ds_exc_bus_r;  
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ds_to_es_bus_r <= '0;
-            exe_result_reg <= '0;
+            exe_result_reg0 <= '0;
+            exe_result_reg1 <= '0;
             csr_wdata_reg <= '0;
             ds_flush_r <= 1'b0;
             ds_exc_bus_r <= '0;
@@ -82,20 +85,20 @@ module exe_stage #(
             ds_flush_r <= ds_flush;
             ds_to_es_bus_r <= ds_to_es_bus;
             ds_exc_bus_r <= ds_exc_bus;
-            exe_result_reg <= exe_result;
+            exe_result_reg0 <= exe_result_lane0;
+            exe_result_reg1 <= exe_result_lane1;
             csr_wdata_reg <= csr_wdata;
         end else begin
-            exe_result_reg <= exe_result_reg;
             csr_wdata_reg <= csr_wdata_reg;
         end
     end
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            mem_result_reg <= '0;
+            mem_result_reg0 <= '0;
+            mem_result_reg1 <= '0;
         end else if (ds_to_es_valid && es_allowin) begin
-            mem_result_reg <= mem_result;
-        end else begin
-            mem_result_reg <= mem_result_reg;
+            mem_result_reg0 <= mem_result0;
+            mem_result_reg1 <= mem_result1;
         end
     end
     assign es_flush = rst_n && (ds_flush_r || exception_flag);
@@ -180,43 +183,23 @@ module exe_stage #(
     logic [31:0] csr_data;
     always_comb begin
         src1 = 32'b0;
-        if (LANE_ID == 0) begin
-            unique case (src1_fwd)
-                3'b001:  src1 = exe_result_reg;          // Lane 0 MEM (self)
-                3'b010:  src1 = exe_result_reg_other;    // Lane 1 MEM (other)
-                3'b011:  src1 = mem_result_reg;          // Lane 0 WB (self)
-                3'b100:  src1 = mem_result_reg_other;    // Lane 1 WB (other)
-                default: src1 = reg_src1;
-            endcase
-        end else begin
-            unique case (src1_fwd)
-                3'b001:  src1 = exe_result_reg_other;    // Lane 0 MEM (other)
-                3'b010:  src1 = exe_result_reg;          // Lane 1 MEM (self)
-                3'b011:  src1 = mem_result_reg_other;    // Lane 0 WB (other)
-                3'b100:  src1 = mem_result_reg;          // Lane 1 WB (self)
-                default: src1 = reg_src1;
-            endcase
-        end
+        unique case (src1_fwd)
+            3'b001:  src1 = exe_result_reg0; // Lane 0 EXE result snapshot
+            3'b010:  src1 = exe_result_reg1; // Lane 1 EXE result snapshot
+            3'b011:  src1 = mem_result_reg0; // Lane 0 MEM result snapshot
+            3'b100:  src1 = mem_result_reg1; // Lane 1 MEM result snapshot
+            default: src1 = reg_src1;
+        endcase
     end
     always_comb begin
         src2 = 32'b0;
-        if (LANE_ID == 0) begin
-            unique case (src2_fwd)
-                3'b001:  src2 = exe_result_reg;          // Lane 0 MEM (self)
-                3'b010:  src2 = exe_result_reg_other;    // Lane 1 MEM (other)
-                3'b011:  src2 = mem_result_reg;          // Lane 0 WB (self)
-                3'b100:  src2 = mem_result_reg_other;    // Lane 1 WB (other)
-                default: src2 = reg_src2;
-            endcase
-        end else begin
-            unique case (src2_fwd)
-                3'b001:  src2 = exe_result_reg_other;    // Lane 0 MEM (other)
-                3'b010:  src2 = exe_result_reg;          // Lane 1 MEM (self)
-                3'b011:  src2 = mem_result_reg_other;    // Lane 0 WB (other)
-                3'b100:  src2 = mem_result_reg;          // Lane 1 WB (self)
-                default: src2 = reg_src2;
-            endcase
-        end
+        unique case (src2_fwd)
+            3'b001:  src2 = exe_result_reg0; // Lane 0 EXE result snapshot
+            3'b010:  src2 = exe_result_reg1; // Lane 1 EXE result snapshot
+            3'b011:  src2 = mem_result_reg0; // Lane 0 MEM result snapshot
+            3'b100:  src2 = mem_result_reg1; // Lane 1 MEM result snapshot
+            default: src2 = reg_src2;
+        endcase
     end
     /*
     assign src1 = (src1_fwd == 2'b01) ? exe_result_reg :
@@ -352,14 +335,14 @@ module exe_stage #(
     //FPU计算
     logic [31:0] fpu_result;
     logic [31:0] src1_fpu, src2_fpu, src3_fpu;
-    assign src1_fpu = (fpu_src1_fwd == 2'b01) ? exe_result_reg :
-                      (fpu_src1_fwd == 2'b10) ? mem_result_reg :
+    assign src1_fpu = (fpu_src1_fwd == 2'b01) ? exe_result_reg0 :
+                      (fpu_src1_fwd == 2'b10) ? mem_result_reg0 :
                       fpu_src1;
-    assign src2_fpu = (fpu_src2_fwd == 2'b01) ? exe_result_reg :
-                      (fpu_src2_fwd == 2'b10) ? mem_result_reg :
+    assign src2_fpu = (fpu_src2_fwd == 2'b01) ? exe_result_reg0 :
+                      (fpu_src2_fwd == 2'b10) ? mem_result_reg0 :
                       fpu_src2;
-    assign src3_fpu = (fpu_src3_fwd == 2'b01) ? exe_result_reg :
-                      (fpu_src3_fwd == 2'b10) ? mem_result_reg :
+    assign src3_fpu = (fpu_src3_fwd == 2'b01) ? exe_result_reg0 :
+                      (fpu_src3_fwd == 2'b10) ? mem_result_reg0 :
                       reg_fpu_data3;
     fpu u_fpu (
         .clk(clk),
@@ -530,7 +513,6 @@ module exe_stage #(
     logic [32:0] br_bus;
     assign br_bus = {br_taken, br_target};
     assign exe_exc_bus = {br_bus, ds_exc_bus_r};
-    assign exe_result_reg_self = exe_result_reg;
-    assign mem_result_reg_self = mem_result_reg;
+    assign exe_result_current = exe_result;
 
 endmodule

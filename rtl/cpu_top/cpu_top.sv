@@ -25,7 +25,23 @@ module cpu_top (
     output logic [31:0] debug_wb_rf_data,
     output logic debug_wb_rf_wen,
     output logic debug_wb_fpu_rf_wen,
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+    output logic [31:0] debug_wb_pc0,
+    output logic [4:0] debug_wb_rf_addr0,
+    output logic [31:0] debug_wb_rf_data0,
+    output logic debug_wb_rf_wen0,
+    output logic debug_wb_fpu_rf_wen0,
+    output logic [31:0] debug_wb_pc1,
+    output logic [4:0] debug_wb_rf_addr1,
+    output logic [31:0] debug_wb_rf_data1,
+    output logic debug_wb_rf_wen1,
+    output logic debug_wb_fpu_rf_wen1,
+    output logic [31:0] debug_issue_inst0,
+    output logic [31:0] debug_issue_pc0,
+    output logic debug_issue_valid0,
+    output logic [31:0] debug_issue_inst1,
+    output logic [31:0] debug_issue_pc1,
+    output logic debug_issue_valid1
     `endif
 );
 
@@ -33,7 +49,6 @@ module cpu_top (
     logic fs_to_is_valid;
     logic [`FS_DS_WIDTH-1:0] fs_to_is_bus;
     logic is_allowin;
-    logic fs_to_is_valid1;
     logic [`FS_DS_WIDTH-1:0] fs_to_is_bus1;
     logic is_allowin1;
     logic br_taken;
@@ -152,14 +167,23 @@ module cpu_top (
         .is_to_ds_valid(is_to_ds_valid),
         .is_to_ds_bus(is_to_ds_bus),
         .ds_allowin(ds_allowin),
-        .fs_to_is_valid1(fs_to_is_valid1),
         .fs_to_is_bus1(fs_to_is_bus1),
+        .is_to_ds_valid1(is_to_ds_valid1),
         .is_to_ds_bus1(is_to_ds_bus1),
         .ds_allowin1(ds_allowin1),
         .br_taken(br_redirect),
         .exception_flag(exception_flag),
         .is_flush(is_flush),
         .is_flush1(is_flush1)
+        `ifdef DEBUG_EN
+        ,
+        .debug_issue_inst0(debug_issue_inst0),
+        .debug_issue_pc0(debug_issue_pc0),
+        .debug_issue_valid0(debug_issue_valid0),
+        .debug_issue_inst1(debug_issue_inst1),
+        .debug_issue_pc1(debug_issue_pc1),
+        .debug_issue_valid1(debug_issue_valid1)
+        `endif
     );
 
     id_exe_stage u_id_exe_stage (
@@ -193,7 +217,8 @@ module cpu_top (
         .mem_fwd_bus1(mem_fwd_bus1),
         .exception_flag(exception_flag),
         .fs_exc_bus(fs_exc_bus),
-        .ms_allowin(ms_allowin0),
+        .ms_allowin0(ms_allowin0),
+        .ms_allowin1(ms_allowin1),
         .es_to_ms_valid0(es_to_ms_valid0),
         .es_flush0(es_flush0),
         .es_to_ms_bus0(es_to_ms_bus0),
@@ -204,7 +229,8 @@ module cpu_top (
         .dmem_wen(dmem_wen),
         .dmem_en(dmem_en),
         .dmem_wdata(dmem_wdata),
-        .mem_result(mem_result0), // wait, FPU uses mem_result for Lane 0
+        .mem_result0(mem_result0),
+        .mem_result1(mem_result1),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus),
         .br_taken(br_taken),
@@ -274,7 +300,17 @@ module cpu_top (
         .debug_wb_rf_addr(debug_wb_rf_addr),
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
-        .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen)
+        .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
+        .debug_wb_pc0(debug_wb_pc0),
+        .debug_wb_rf_addr0(debug_wb_rf_addr0),
+        .debug_wb_rf_data0(debug_wb_rf_data0),
+        .debug_wb_rf_wen0(debug_wb_rf_wen0),
+        .debug_wb_fpu_rf_wen0(debug_wb_fpu_rf_wen0),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1)
         `endif
     );
 

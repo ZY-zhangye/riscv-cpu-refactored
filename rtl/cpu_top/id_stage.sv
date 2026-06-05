@@ -45,6 +45,7 @@ module id_stage (
     logic ds_ready_go;
     logic load_use_hazard;
     logic raw_hazard;
+    logic is_flush_r;
     assign ds_ready_go = !load_use_hazard; 
     assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
@@ -66,15 +67,17 @@ module id_stage (
         if (!rst_n) begin
             fs_to_ds_bus_r <= '0;
             fs_exc_bus_r <= '0;
+            is_flush_r <= 1'b0;
         end else if (fs_to_ds_valid && ds_allowin) begin
             fs_to_ds_bus_r <= fs_to_ds_bus;
             fs_exc_bus_r <= fs_exc_bus;
+            is_flush_r <= is_flush;
         end else begin
             fs_to_ds_bus_r <= fs_to_ds_bus_r;
             fs_exc_bus_r <= fs_exc_bus_r;
         end
     end
-    assign ds_flush = rst_n && (br_taken || exception_flag || is_flush);
+    assign ds_flush = rst_n && (br_taken || exception_flag || is_flush_r);
 
     logic [`ADDR_WIDTH-1:0] id_pc;
     logic [`DATA_WIDTH-1:0] id_inst;

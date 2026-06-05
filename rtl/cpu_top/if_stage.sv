@@ -75,6 +75,7 @@ module if_stage (
     assign fs_ready_go = 1'b1;
     assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
     assign fs_to_ds_valid = fs_valid && fs_ready_go;
+    assign fetch_accept = redirect_pending && fs_allowin;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             fs_valid <= 1'b0;
@@ -83,7 +84,7 @@ module if_stage (
                 fs_valid <= 1'b1;
         end
         if (!rst_n) begin
-            fs_pc <= `PC_START - 4;
+            fs_pc <= `PC_START - 8;
         end else if (fs_allowin) begin
             fs_pc <= next_pc;
         end
@@ -94,15 +95,15 @@ module if_stage (
         if (!rst_n) begin
             redirect_pending <= 1'b0;
             redirect_pending_target <= 32'b0;
-        end else if (fetch_accept) begin
-            redirect_pending <= 1'b0;
-            redirect_pending_target <= 32'b0;
         end else if (exception_flag) begin
             redirect_pending <= 1'b1;
             redirect_pending_target <= exception_addr;
         end else if (br_taken) begin
             redirect_pending <= 1'b1;
             redirect_pending_target <= br_target;
+        end else if (fetch_accept) begin
+            redirect_pending <= 1'b0;
+            redirect_pending_target <= 32'b0;
         end
     end
 

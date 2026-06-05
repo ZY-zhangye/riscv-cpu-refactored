@@ -24,6 +24,22 @@ module tb_my_cpu;
     logic        debug_wb_rf_wen;
     logic        debug_wb_fpu_rf_wen;
     logic [31:0] debug_data;
+    logic [31:0] debug_wb_pc0;
+    logic [4:0]  debug_wb_rf_addr0;
+    logic [31:0] debug_wb_rf_data0;
+    logic        debug_wb_rf_wen0;
+    logic        debug_wb_fpu_rf_wen0;
+    logic [31:0] debug_wb_pc1;
+    logic [4:0]  debug_wb_rf_addr1;
+    logic [31:0] debug_wb_rf_data1;
+    logic        debug_wb_rf_wen1;
+    logic        debug_wb_fpu_rf_wen1;
+    logic [31:0] debug_issue_inst0;
+    logic [31:0] debug_issue_pc0;
+    logic        debug_issue_valid0;
+    logic [31:0] debug_issue_inst1;
+    logic [31:0] debug_issue_pc1;
+    logic        debug_issue_valid1;
 `endif
 
     assign external_interrupts = '0;
@@ -46,7 +62,23 @@ module tb_my_cpu;
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
         .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
-        .debug_data(debug_data)
+        .debug_data(debug_data),
+        .debug_wb_pc0(debug_wb_pc0),
+        .debug_wb_rf_addr0(debug_wb_rf_addr0),
+        .debug_wb_rf_data0(debug_wb_rf_data0),
+        .debug_wb_rf_wen0(debug_wb_rf_wen0),
+        .debug_wb_fpu_rf_wen0(debug_wb_fpu_rf_wen0),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1),
+        .debug_issue_inst0(debug_issue_inst0),
+        .debug_issue_pc0(debug_issue_pc0),
+        .debug_issue_valid0(debug_issue_valid0),
+        .debug_issue_inst1(debug_issue_inst1),
+        .debug_issue_pc1(debug_issue_pc1),
+        .debug_issue_valid1(debug_issue_valid1)
 `endif
     );
 
@@ -87,6 +119,14 @@ module tb_my_cpu;
             $display("debug_wb_rf_data: %h", debug_wb_rf_data);
             $display("debug_data: %h", debug_data);
             $display("debug_wb_fpu_rf_wen: %b", debug_wb_fpu_rf_wen);
+            $display("debug_issue0: valid=%b pc=%h inst=%h", debug_issue_valid0, debug_issue_pc0, debug_issue_inst0);
+            $display("debug_issue1: valid=%b pc=%h inst=%h", debug_issue_valid1, debug_issue_pc1, debug_issue_inst1);
+            $display("debug_wb0: pc=%h wen=%b fwen=%b rd=%h data=%h",
+                     debug_wb_pc0, debug_wb_rf_wen0, debug_wb_fpu_rf_wen0,
+                     debug_wb_rf_addr0, debug_wb_rf_data0);
+            $display("debug_wb1: pc=%h wen=%b fwen=%b rd=%h data=%h",
+                     debug_wb_pc1, debug_wb_rf_wen1, debug_wb_fpu_rf_wen1,
+                     debug_wb_rf_addr1, debug_wb_rf_data1);
             $display("led: %h", led);
             $display("plic_irq: %b", plic_irq);
             $display("--------------------------------------------------");
@@ -94,7 +134,8 @@ module tb_my_cpu;
     end
 
     always_ff @(posedge clk) begin
-        if (rst_n && (debug_wb_pc == 32'h8000_0044)) begin
+        if (rst_n && ((debug_wb_pc0 == 32'h8000_0044) ||
+                      (debug_wb_pc1 == 32'h8000_0044))) begin
             $display("---------------------------------------------");
             $display("Time: %0t", $time);
             $display("Simulation finished.");

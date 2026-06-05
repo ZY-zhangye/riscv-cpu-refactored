@@ -18,7 +18,23 @@ module my_cpu (
     output logic [31:0] debug_wb_rf_data,
     output logic        debug_wb_rf_wen,
     output logic        debug_wb_fpu_rf_wen,
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+    output logic [31:0] debug_wb_pc0,
+    output logic [4:0]  debug_wb_rf_addr0,
+    output logic [31:0] debug_wb_rf_data0,
+    output logic        debug_wb_rf_wen0,
+    output logic        debug_wb_fpu_rf_wen0,
+    output logic [31:0] debug_wb_pc1,
+    output logic [4:0]  debug_wb_rf_addr1,
+    output logic [31:0] debug_wb_rf_data1,
+    output logic        debug_wb_rf_wen1,
+    output logic        debug_wb_fpu_rf_wen1,
+    output logic [31:0] debug_issue_inst0,
+    output logic [31:0] debug_issue_pc0,
+    output logic        debug_issue_valid0,
+    output logic [31:0] debug_issue_inst1,
+    output logic [31:0] debug_issue_pc1,
+    output logic        debug_issue_valid1
     `endif
 );
 
@@ -82,7 +98,23 @@ module my_cpu (
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
         .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
-        .debug_data(debug_data)
+        .debug_data(debug_data),
+        .debug_wb_pc0(debug_wb_pc0),
+        .debug_wb_rf_addr0(debug_wb_rf_addr0),
+        .debug_wb_rf_data0(debug_wb_rf_data0),
+        .debug_wb_rf_wen0(debug_wb_rf_wen0),
+        .debug_wb_fpu_rf_wen0(debug_wb_fpu_rf_wen0),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1),
+        .debug_issue_inst0(debug_issue_inst0),
+        .debug_issue_pc0(debug_issue_pc0),
+        .debug_issue_valid0(debug_issue_valid0),
+        .debug_issue_inst1(debug_issue_inst1),
+        .debug_issue_pc1(debug_issue_pc1),
+        .debug_issue_valid1(debug_issue_valid1)
         `endif
     );
 
