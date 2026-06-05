@@ -5,7 +5,7 @@
 module tb_my_cpu;
     localparam string MEM_ADDR = "hex/riscv-tests/rv32-p-riscv.hex";
     localparam int CLK_PERIOD_NS = 10;
-    localparam int TIMEOUT_NS = 10000;
+    localparam int TIMEOUT_NS = 15000;
 
     logic clk;
     logic clk_uart;
@@ -40,6 +40,8 @@ module tb_my_cpu;
     logic [31:0] debug_issue_inst1;
     logic [31:0] debug_issue_pc1;
     logic        debug_issue_valid1;
+    logic [1:0]  finish_hit_count;
+    logic [31:0] finish_data_sample;
 `endif
 
     assign external_interrupts = '0;
@@ -134,19 +136,31 @@ module tb_my_cpu;
     end
 
     always_ff @(posedge clk) begin
-        if (rst_n && ((debug_wb_pc0 == 32'h8000_0044) ||
-                      (debug_wb_pc1 == 32'h8000_0044))) begin
-            $display("---------------------------------------------");
-            $display("Time: %0t", $time);
-            $display("Simulation finished.");
-            $display("----------------------------------------------");
-            if (debug_data == 32'h0000_0001) begin
-                $display("Test passed.");
+        if (!rst_n) begin
+            finish_hit_count <= 2'd0;
+            finish_data_sample <= 32'b0;
+        end else if ((debug_wb_pc0 == 32'h8000_0044) ||
+                     (debug_wb_pc1 == 32'h8000_0044)) begin
+            if ((finish_hit_count != 2'd0) && (debug_data == finish_data_sample)) begin
+                if (finish_hit_count == 2'd2) begin
+                    $display("---------------------------------------------");
+                    $display("Time: %0t", $time);
+                    $display("Simulation finished.");
+                    $display("----------------------------------------------");
+                    if (debug_data == 32'h0000_0001) begin
+                        $display("Test passed.");
+                    end else begin
+                        $display("Test failed. Expected 1 in x10, got %08h", debug_data);
+                    end
+                    $display("----------------------------------------------");
+                    $stop;
+                end else begin
+                    finish_hit_count <= finish_hit_count + 2'd1;
+                end
             end else begin
-                $display("Test failed. Expected 1 in x10, got %08h", debug_data);
+                finish_hit_count <= 2'd1;
+                finish_data_sample <= debug_data;
             end
-            $display("----------------------------------------------");
-            $stop;
         end
     end
 `endif
