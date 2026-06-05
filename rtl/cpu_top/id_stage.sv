@@ -1,5 +1,7 @@
 `include "defines.svh"
-module id_stage (
+module id_stage #(
+    parameter int LANE_ID = 0
+) (
     input logic clk,
     input logic rst_n,
     //与if_stage的数据接口
@@ -40,6 +42,7 @@ module id_stage (
     input logic [`EXC_WIDTH-1:0] fs_exc_bus,
     output logic [`EXC_WIDTH-1:0] ds_exc_bus
 );  
+    localparam bit LANE1_SLIM = (LANE_ID == 1);
 
     logic ds_valid;
     logic ds_ready_go;
@@ -167,7 +170,7 @@ module id_stage (
     assign is_auipc  = (opcode == 7'b0010111);
     assign is_system = (opcode == 7'b1110011);
     assign is_fence  = (opcode == 7'b0001111);
-    assign is_fpu    = (opcode == 7'b1010011);
+    assign is_fpu    = !LANE1_SLIM && (opcode == 7'b1010011);
     
     logic f3_000 , f3_001 , f3_010 , f3_011 , f3_100 , f3_101 , f3_110 , f3_111 ;
     assign f3_000 = (funct3 == 3'b000);
@@ -189,8 +192,8 @@ module id_stage (
     `ifdef Z_BITMAIN_ENABLE
     logic is_bitman;
     logic is_bitman_imm;
-    assign is_bitman = (opcode == 7'b0110011);
-    assign is_bitman_imm = (opcode == 7'b0010011);
+    assign is_bitman = !LANE1_SLIM && (opcode == 7'b0110011);
+    assign is_bitman_imm = !LANE1_SLIM && (opcode == 7'b0010011);
     //定义Z-bitman指令
     logic inst_sh1add, inst_sh2add, inst_sh3add;
     logic inst_andn, inst_orn, inst_xnor;
@@ -391,8 +394,8 @@ module id_stage (
     logic inst_flt_s , inst_fle_s , inst_feq_s;
     logic inst_fclass_s;
 
-    assign inst_flw      = is_fload  && f3_010;
-    assign inst_fsw      = is_fstore && f3_010;
+    assign inst_flw      = !LANE1_SLIM && is_fload  && f3_010;
+    assign inst_fsw      = !LANE1_SLIM && is_fstore && f3_010;
     assign inst_fadd_s   = is_fpu && f7_0000000;
     assign inst_fsub_s   = is_fpu && f7_0000100;
     assign inst_fmul_s   = is_fpu && f7_0001000;
@@ -462,7 +465,7 @@ module id_stage (
     logic [1:0] fpu_src1_fwd;
     logic [1:0] fpu_src2_fwd;
     logic [1:0] fpu_src3_fwd;
-    assign rs3_fpu_ren = inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s; //仅当指令为三源寄存器的fpu指令时才需要读取rs3_fpu寄存器
+    assign rs3_fpu_ren = !LANE1_SLIM && (inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s); //仅当指令为三源寄存器的fpu指令时才需要读取rs3_fpu寄存器
     assign fpu_src1 = src1_fpu;
     assign fpu_src2 = src2_fpu;
     assign fpu_src1_fwd = (rs1_fpu_addr != 5'b0) ?
@@ -481,17 +484,18 @@ module id_stage (
                      inst_fmv_w_x, inst_fmv_x_w,
                      inst_flt_s, inst_fle_s, inst_feq_s,
                      inst_fclass_s};
-    assign fpu_packet = {fpu_op, rm, fpu_src1_fwd, fpu_src2_fwd, fpu_src3_fwd, fpu_src1, fpu_src2};
+    assign fpu_packet = LANE1_SLIM ? '0 : {fpu_op, rm, fpu_src1_fwd, fpu_src2_fwd, fpu_src3_fwd, fpu_src1, fpu_src2};
 
     //MUL_PACKET打包
     logic [`MUL_PACKET_WIDTH-1:0] mul_packet;
     logic [3:0] mul_op;
     logic src1_signed , src2_signed;
-    assign src1_signed = inst_mul || inst_mulh || inst_mulhsu || inst_div || inst_rem;
-    assign src2_signed = inst_mul || inst_mulh || inst_div || inst_rem;
-    assign mul_op = {inst_mul , (inst_mulh || inst_mulhsu || inst_mulhu) ,
+    assign src1_signed = !LANE1_SLIM && (inst_mul || inst_mulh || inst_mulhsu || inst_div || inst_rem);
+    assign src2_signed = !LANE1_SLIM && (inst_mul || inst_mulh || inst_div || inst_rem);
+    assign mul_op = LANE1_SLIM ? '0 :
+                    {inst_mul , (inst_mulh || inst_mulhsu || inst_mulhu) ,
                      (inst_div || inst_divu) , (inst_rem || inst_remu)};
-    assign mul_packet = {mul_op, src1_signed, src2_signed};
+    assign mul_packet = LANE1_SLIM ? '0 : {mul_op, src1_signed, src2_signed};
 
     //MEM_PACKET打包
     logic [`MEM_PACKET_WIDTH-1:0] mem_packet;
@@ -545,20 +549,22 @@ module id_stage (
     logic [1:0] exe_result_sel;
     assign is_bitman_inst = inst_bitman_any;
     assign is_alu_inst = alu_add || alu_sub || alu_and || alu_or || alu_xor || alu_sll || alu_srl || alu_sra || alu_slt || alu_sltu;
-    assign is_fpu_inst = inst_fadd_s || inst_fsub_s || inst_fmul_s || inst_fdiv_s || inst_fsqrt_s || inst_fmin_s || inst_fmax_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
+    assign is_fpu_inst = !LANE1_SLIM &&
+                         (inst_fadd_s || inst_fsub_s || inst_fmul_s || inst_fdiv_s || inst_fsqrt_s || inst_fmin_s || inst_fmax_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
                          inst_fcvt_w_s  || inst_fcvt_wu_s || inst_fcvt_s_w  || inst_fcvt_s_wu ||
                          inst_fsgnj_s   || inst_fsgnjn_s  || inst_fsgnjx_s  ||
                          inst_fmv_w_x   || inst_fmv_x_w   ||
                          inst_flt_s     || inst_fle_s     || inst_feq_s     ||
-                         inst_fclass_s;
-    assign is_mul_inst = inst_mul || inst_mulh || inst_mulhsu || inst_mulhu || inst_div || inst_divu || inst_rem || inst_remu;
+                         inst_fclass_s);
+    assign is_mul_inst = !LANE1_SLIM && (inst_mul || inst_mulh || inst_mulhsu || inst_mulhu || inst_div || inst_divu || inst_rem || inst_remu);
     assign is_mem_inst = is_load || is_store || inst_flw || inst_fsw;
     assign is_csr_inst = inst_csrrw || inst_csrrs || inst_csrrc || inst_csrrwi || inst_csrrsi || inst_csrrci;
     assign is_br_jmp_inst = is_branch || is_jal || is_jalr;
     assign ctrl_rd_addr = rd_addr;
     assign ctrl_regfile_wen = is_alu_inst || is_fpu_inst || is_mul_inst || is_load || inst_flw || is_csr_inst || is_jal || is_jalr || is_bitman_inst;
     assign ctrl_reg_fpu_wen = is_fpu_inst;
-    assign is_multicycle_inst = (inst_fdiv_s || inst_fsqrt_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
+    assign is_multicycle_inst = !LANE1_SLIM &&
+                           (inst_fdiv_s || inst_fsqrt_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
                            inst_fcvt_w_s  || inst_fcvt_wu_s || inst_fcvt_s_w  || inst_fcvt_s_wu ||
                            inst_fsgnj_s   || inst_fsgnjn_s  || inst_fsgnjx_s  ||
                            inst_fmv_w_x   || inst_fmv_x_w   ||

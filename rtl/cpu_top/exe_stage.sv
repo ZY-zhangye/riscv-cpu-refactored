@@ -46,6 +46,7 @@ module exe_stage #(
     output logic [31:0] bp_update_target,
     output logic bp_update_is_jalr
 );
+    localparam bit LANE1_SLIM = (LANE_ID == 1);
 
     logic es_valid;
     logic es_ready_go;
@@ -316,23 +317,30 @@ module exe_stage #(
         endcase
     end
 
-    //MUL计算
+    //MUL计算。lane1 裁剪掉 M/D 多周期与扩展执行单元，只保留基础整数、CSR、BR/JMP、MEM 路径。
     logic [31:0] mul_result;
-    mul u_mul (
-        .clk(clk),
-        .rst_n(rst_n),
-        .is_mul(is_mul),
-        .is_multicycle(is_multicycle),
-        .mul_src1(src1),
-        .mul_src2(src2),
-        .src1_signed(src1_signed),
-        .src2_signed(src2_signed),
-        .mul_op(mul_op),
-        .mul_result(mul_result),
-        .mul_stall(mul_stall)
-    );
+    generate
+        if (LANE_ID == 1) begin : gen_no_mul_lane1
+            assign mul_result = 32'b0;
+            assign mul_stall = 1'b0;
+        end else begin : gen_mul_lane0
+            mul u_mul (
+                .clk(clk),
+                .rst_n(rst_n),
+                .is_mul(is_mul),
+                .is_multicycle(is_multicycle),
+                .mul_src1(src1),
+                .mul_src2(src2),
+                .src1_signed(src1_signed),
+                .src2_signed(src2_signed),
+                .mul_op(mul_op),
+                .mul_result(mul_result),
+                .mul_stall(mul_stall)
+            );
+        end
+    endgenerate
 
-    //FPU计算
+    //FPU计算。lane1 不再保留 F 扩展执行单元。
     logic [31:0] fpu_result;
     logic [31:0] src1_fpu, src2_fpu, src3_fpu;
     assign src1_fpu = (fpu_src1_fwd == 2'b01) ? exe_result_reg0 :
@@ -344,19 +352,26 @@ module exe_stage #(
     assign src3_fpu = (fpu_src3_fwd == 2'b01) ? exe_result_reg0 :
                       (fpu_src3_fwd == 2'b10) ? mem_result_reg0 :
                       reg_fpu_data3;
-    fpu u_fpu (
-        .clk(clk),
-        .rst_n(rst_n),
-        .is_fpu(is_fpu),
-        .is_multicycle(is_multicycle),
-        .fpu_op(fpu_op),
-        .rm(rm),
-        .fpu_src1(src1_fpu),
-        .fpu_src2(src2_fpu),
-        .fpu_src3(src3_fpu),
-        .fpu_result(fpu_result),
-        .fpu_stall(fpu_stall)
-    );
+    generate
+        if (LANE_ID == 1) begin : gen_no_fpu_lane1
+            assign fpu_result = 32'b0;
+            assign fpu_stall = 1'b0;
+        end else begin : gen_fpu_lane0
+            fpu u_fpu (
+                .clk(clk),
+                .rst_n(rst_n),
+                .is_fpu(is_fpu),
+                .is_multicycle(is_multicycle),
+                .fpu_op(fpu_op),
+                .rm(rm),
+                .fpu_src1(src1_fpu),
+                .fpu_src2(src2_fpu),
+                .fpu_src3(src3_fpu),
+                .fpu_result(fpu_result),
+                .fpu_stall(fpu_stall)
+            );
+        end
+    endgenerate
 
     //MEM访问
     logic inst_lb, inst_sb, inst_lh, inst_sh, inst_lw, inst_sw,inst_lbu, inst_lhu;

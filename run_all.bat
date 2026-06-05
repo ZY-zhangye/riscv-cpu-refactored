@@ -2,15 +2,15 @@
 setlocal EnableExtensions
 
 REM === instructions definition ===
-set UI_INSTS=lh lhu sh sb lb lbu sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti jalr sltu sltiu beq bne blt bge bltu bgeu jal lui auipc
-set MI_INSTS=csr scall sbreak ma_fetch
-set UM_INSTS=mul mulh mulhu mulhsu div divu rem remu
+REM set UI_INSTS=lh lhu sh sb lb lbu sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti jalr sltu sltiu beq bne blt bge bltu bgeu jal lui auipc
+REM set MI_INSTS=csr scall sbreak ma_fetch
+REM set UM_INSTS=mul mulh mulhu mulhsu div divu rem remu
 
 REM === currently implemented Z-bitman instructions ===
-set ZBA_INSTS=sh1add sh2add sh3add
-set ZBB_INSTS=andn orn xnor min max minu maxu sext_b sext_h zext_h orc_b rev8
-set ZBKB_INSTS=brev8 pack packh zip unzip
-set ZBS_INSTS=bclr bclri bext bexti binv binvi bset bseti
+REM set ZBA_INSTS=sh1add sh2add sh3add
+REM set ZBB_INSTS=andn orn xnor min max minu maxu sext_b sext_h zext_h orc_b rev8
+REM set ZBKB_INSTS=brev8 pack packh zip unzip
+set ZBS_INSTS=bclr bclri bext binv binvi bset bseti bexti
 
 set MODE=%~1
 if "%MODE%"=="" set MODE=all

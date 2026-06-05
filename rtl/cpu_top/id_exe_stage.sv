@@ -96,7 +96,7 @@ module id_exe_stage (
     logic [31:0] exe_result_current0;
     logic [31:0] exe_result_current1;
 
-    id_stage u_id0 (
+    id_stage #(.LANE_ID(0)) u_id0 (
         .clk(clk), .rst_n(rst_n),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
@@ -171,7 +171,7 @@ module id_exe_stage (
     logic        dmem_en1;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus1;
 
-    id_stage u_id1 (
+    id_stage #(.LANE_ID(1)) u_id1 (
         .clk(clk), .rst_n(rst_n),
         .fs_to_ds_valid(fs_to_ds_valid1),
         .fs_to_ds_bus(fs_to_ds_bus1),
