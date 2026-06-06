@@ -24,6 +24,8 @@ module id_stage (
     //与执行阶段的数据接口
     output logic ds_to_es_valid,
     input logic es_allowin,
+    input logic ordered_stall,
+    output logic ds_load_use_hazard,
     output logic ds_flush,
     output logic [`DS_ES_WIDTH-1:0] ds_to_es_bus,
     //数据前递接口--执行阶段--打包
@@ -46,9 +48,10 @@ module id_stage (
     logic load_use_hazard;
     logic raw_hazard;
     logic is_flush_r;
-    assign ds_ready_go = !load_use_hazard; 
+    assign ds_ready_go = !load_use_hazard && !ordered_stall;
     assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
+    assign ds_load_use_hazard = load_use_hazard;
     //握手协议
     always_ff @(posedge clk) begin
         if (!rst_n) begin
@@ -650,10 +653,10 @@ module id_stage (
             exe_load_use_hazard = 
                 (((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr0)) ||
                   (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr0))) &&
-                  es_valid0 && exe_regfile_wen0 && exe_is_load0) ||
+                  es_valid0 && exe_regfile_wen0 && exe_is_load0 && (exe_dest_addr0 != 5'b0)) ||
                 (((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr1)) ||
                   (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr1))) &&
-                  es_valid1 && exe_regfile_wen1 && exe_is_load1);
+                  es_valid1 && exe_regfile_wen1 && exe_is_load1 && (exe_dest_addr1 != 5'b0));
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;

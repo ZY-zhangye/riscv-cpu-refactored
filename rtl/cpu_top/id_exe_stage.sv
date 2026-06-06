@@ -76,6 +76,7 @@ module id_exe_stage (
     //===========================================================================
     logic        ds_to_es_valid0;
     logic        es_allowin0;
+    logic        ds_load_use_hazard0;
     logic        ds_flush0;
     logic [`DS_ES_WIDTH-1:0] ds_to_es_bus0;
     logic [`EXC_WIDTH-1:0] ds_exc_bus0;
@@ -109,6 +110,8 @@ module id_exe_stage (
         .csr_addr(csr_addr), .csr_data(csr_data),
         .ds_to_es_valid(ds_to_es_valid0),
         .es_allowin(es_allowin0),
+        .ordered_stall(1'b0),
+        .ds_load_use_hazard(ds_load_use_hazard0),
         .ds_flush(ds_flush0),
         .ds_to_es_bus(ds_to_es_bus0),
         .exe_fwd_bus0(exe_fwd_bus0),
@@ -156,6 +159,7 @@ module id_exe_stage (
     //===========================================================================
     logic        ds_to_es_valid1;
     logic        es_allowin1;
+    logic        ds_load_use_hazard1;
     logic        ds_flush1;
     logic [`DS_ES_WIDTH-1:0] ds_to_es_bus1;
     logic [`EXC_WIDTH-1:0] ds_exc_bus1;
@@ -169,6 +173,8 @@ module id_exe_stage (
     logic [31:0] dmem_addr1, dmem_wdata1;
     logic [3:0]  dmem_wen1;
     logic        dmem_en1;
+    logic        dmem_conflict;
+    logic        ms_allowin1_dmem_safe;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus1;
 
     id_stage u_id1 (
@@ -184,6 +190,8 @@ module id_exe_stage (
         .csr_addr(), .csr_data('0),
         .ds_to_es_valid(ds_to_es_valid1),
         .es_allowin(es_allowin1),
+        .ordered_stall(ds_load_use_hazard0),
+        .ds_load_use_hazard(ds_load_use_hazard1),
         .ds_flush(ds_flush1),
         .ds_to_es_bus(ds_to_es_bus1),
         .exe_fwd_bus0(exe_fwd_bus0),
@@ -200,7 +208,7 @@ module id_exe_stage (
     exe_stage #(.LANE_ID(1)) u_exe1 (
         .clk(clk), .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid1),
-        .ms_allowin(ms_allowin1),
+        .ms_allowin(ms_allowin1_dmem_safe),
         .ds_to_es_bus(ds_to_es_bus1),
         .ds_flush(ds_flush1),
         .es_allowin(es_allowin1),
@@ -229,6 +237,9 @@ module id_exe_stage (
     //===========================================================================
     // DMEM接口仲裁：lane0优先
     //===========================================================================
+    assign dmem_conflict = dmem_en0 && dmem_en1;
+    assign ms_allowin1_dmem_safe = ms_allowin1 && !dmem_conflict;
+
     assign dmem_addr      = dmem_en0       ? dmem_addr0     : dmem_addr1;
     assign dmem_wdata     = dmem_en0       ? dmem_wdata0    : dmem_wdata1;
     assign dmem_wen       = dmem_en0       ? dmem_wen0      : dmem_wen1;

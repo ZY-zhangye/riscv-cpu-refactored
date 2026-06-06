@@ -47,6 +47,7 @@ module issue_stage (
         logic       need_rs2;
         logic       write_gpr;
         logic       is_simple_int;
+        logic       is_load;
     } issue_info_t;
 
     logic [`FS_DS_WIDTH-1:0] buf0;
@@ -86,7 +87,10 @@ module issue_stage (
         logic is_op_reg;
         logic is_lui;
         logic is_auipc;
+        logic is_load;
+        logic is_legal_op_imm;
         logic is_legal_op_reg;
+        logic is_legal_load;
 
         begin
             opcode = inst[6:0];
@@ -97,20 +101,33 @@ module issue_stage (
             is_op_reg = (opcode == 7'b0110011);
             is_lui    = (opcode == 7'b0110111);
             is_auipc  = (opcode == 7'b0010111);
+            is_load   = (opcode == 7'b0000011);
 
+            is_legal_op_imm = ((funct3 == 3'b000) || (funct3 == 3'b010) ||
+                               (funct3 == 3'b011) || (funct3 == 3'b100) ||
+                               (funct3 == 3'b110) || (funct3 == 3'b111) ||
+                               ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
+                               ((funct3 == 3'b101) &&
+                                ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))));
             is_legal_op_reg = (funct7 == 7'b0000000) ||
                               ((funct7 == 7'b0100000) &&
                                ((funct3 == 3'b000) || (funct3 == 3'b101)));
+            is_legal_load = (funct3 == 3'b000) || (funct3 == 3'b001) ||
+                            (funct3 == 3'b010) || (funct3 == 3'b100) ||
+                            (funct3 == 3'b101);
 
             info = '0;
             info.rs1 = inst[19:15];
             info.rs2 = inst[24:20];
             info.rd  = inst[11:7];
-            info.need_rs1 = is_op_imm || is_op_reg;
+            info.need_rs1 = is_op_imm || is_op_reg || is_load;
             info.need_rs2 = is_op_reg;
-            info.write_gpr = is_op_imm || is_op_reg || is_lui || is_auipc;
-            info.is_simple_int = is_op_imm || (is_op_reg && is_legal_op_reg) ||
+            info.write_gpr = is_op_imm || is_op_reg || is_lui || is_auipc ||
+                             (is_load && is_legal_load);
+            info.is_simple_int = (is_op_imm && is_legal_op_imm) ||
+                                 (is_op_reg && is_legal_op_reg) ||
                                  is_lui || is_auipc;
+            info.is_load = is_load && is_legal_load;
             decode_issue_info = info;
         end
     endfunction
@@ -123,7 +140,8 @@ module issue_stage (
     assign info1 = decode_issue_info(buf_inst1);
 
     assign can_pair = buf_valid0 && buf_valid1 &&
-                      info0.is_simple_int && info1.is_simple_int &&
+                      info0.is_simple_int &&
+                      (info1.is_simple_int || info1.is_load) &&
                       !(info0.write_gpr && (info0.rd != 5'b0) &&
                         ((info1.need_rs1 && (info1.rs1 == info0.rd)) ||
                          (info1.need_rs2 && (info1.rs2 == info0.rd)))) &&

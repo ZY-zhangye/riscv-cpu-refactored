@@ -22,7 +22,21 @@ module tb_dual_issue_simple;
     logic debug_wb_rf_wen;
     logic debug_wb_fpu_rf_wen;
     logic [31:0] debug_data;
-    logic saw_lane1_x3;
+    logic [31:0] debug_wb_pc0;
+    logic [4:0]  debug_wb_rf_addr0;
+    logic [31:0] debug_wb_rf_data0;
+    logic        debug_wb_rf_wen0;
+    logic        debug_wb_fpu_rf_wen0;
+    logic [31:0] debug_wb_pc1;
+    logic [4:0]  debug_wb_rf_addr1;
+    logic [31:0] debug_wb_rf_data1;
+    logic        debug_wb_rf_wen1;
+    logic        debug_wb_fpu_rf_wen1;
+    logic saw_lane1_load_x3;
+    logic saw_load_use_x4;
+    logic saw_x5_before_x4;
+    logic wb_x4_now;
+    logic wb_x5_now;
 
     logic [31:0] imem [0:63];
     logic [31:0] dmem [0:63];
@@ -47,7 +61,17 @@ module tb_dual_issue_simple;
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
         .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
-        .debug_data(debug_data)
+        .debug_data(debug_data),
+        .debug_wb_pc0(debug_wb_pc0),
+        .debug_wb_rf_addr0(debug_wb_rf_addr0),
+        .debug_wb_rf_data0(debug_wb_rf_data0),
+        .debug_wb_rf_wen0(debug_wb_rf_wen0),
+        .debug_wb_fpu_rf_wen0(debug_wb_fpu_rf_wen0),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1)
     );
 
     initial begin
@@ -62,18 +86,24 @@ module tb_dual_issue_simple;
         end
 
         // 8000_0000: addi x1, x0, 1
-        // 8000_0004: addi x2, x0, 2
-        // 8000_0008: addi x3, x0, 3
-        // The first two instructions are independent and should be eligible
-        // for lane0/lane1 issue when the second fetch port is active.
+        // 8000_0004: lw   x3, 0(x0)
+        // 8000_0008: addi x4, x3, 5
+        // 8000_000c: addi x5, x0, 9
+        // The first two instructions should dual issue, then the low-address
+        // addi must wait for the lane1 load result before the high-address
+        // independent addi can commit.
         imem[0] = 32'h0010_0093;
-        imem[1] = 32'h0020_0113;
-        imem[2] = 32'h0030_0193;
+        imem[1] = 32'h0000_2183;
+        imem[2] = 32'h0051_8213;
+        imem[3] = 32'h0090_0293;
+        dmem[0] = 32'h1234_5678;
 
         imem_rdata = 32'h0000_0013;
         imem_rdata1 = 32'h0000_0013;
         dmem_rdata = 32'h0;
-        saw_lane1_x3 = 1'b0;
+        saw_lane1_load_x3 = 1'b0;
+        saw_load_use_x4 = 1'b0;
+        saw_x5_before_x4 = 1'b0;
         rst_n = 1'b0;
         #20;
         rst_n = 1'b1;
@@ -107,29 +137,52 @@ module tb_dual_issue_simple;
 
     always @(posedge clk) begin
         if (rst_n) begin
-            if (u_cpu_top.regfile_wen1 &&
-                (u_cpu_top.regfile_waddr1 == 5'd3) &&
-                (u_cpu_top.regfile_wdata1_wb == 32'h0000_0003)) begin
-                saw_lane1_x3 <= 1'b1;
+            wb_x4_now = debug_wb_rf_wen0 &&
+                        (debug_wb_pc0 == 32'h8000_0008) &&
+                        (debug_wb_rf_addr0 == 5'd4) &&
+                        (debug_wb_rf_data0 == 32'h1234_567d);
+            wb_x5_now = (debug_wb_rf_wen0 &&
+                         (debug_wb_pc0 == 32'h8000_000c) &&
+                         (debug_wb_rf_addr0 == 5'd5)) ||
+                        (debug_wb_rf_wen1 &&
+                         (debug_wb_pc1 == 32'h8000_000c) &&
+                         (debug_wb_rf_addr1 == 5'd5));
+
+            if (debug_wb_rf_wen1 &&
+                (debug_wb_pc1 == 32'h8000_0004) &&
+                (debug_wb_rf_addr1 == 5'd3) &&
+                (debug_wb_rf_data1 == 32'h1234_5678)) begin
+                saw_lane1_load_x3 <= 1'b1;
+            end
+            if (wb_x4_now) begin
+                saw_load_use_x4 <= 1'b1;
+            end
+            if (!saw_load_use_x4 && !wb_x4_now && wb_x5_now) begin
+                saw_x5_before_x4 <= 1'b1;
             end
 
-            $display("t=%0t if0=%08h en0=%b if1=%08h en1=%b wb0_pc=%08h wb0_we=%b wb0_rd=%0d wb0_data=%08h wb1_we=%b wb1_rd=%0d wb1_data=%08h x3=%08h saw_l1_x3=%b",
-                     $time, imem_addr, imem_en, imem_addr1, imem_en1,
-                     debug_wb_pc, debug_wb_rf_wen, debug_wb_rf_addr,
-                     debug_wb_rf_data, u_cpu_top.regfile_wen1,
-                     u_cpu_top.regfile_waddr1, u_cpu_top.regfile_wdata1_wb,
-                     debug_data, saw_lane1_x3);
+            if ((debug_wb_rf_wen0 && (debug_wb_rf_addr0 != 5'b0)) ||
+                (debug_wb_rf_wen1 && (debug_wb_rf_addr1 != 5'b0))) begin
+                $display("t=%0t wb0_pc=%08h wb0_we=%b wb0_rd=%0d wb0_data=%08h wb1_pc=%08h wb1_we=%b wb1_rd=%0d wb1_data=%08h x3=%08h order_bad=%b",
+                         $time, debug_wb_pc0, debug_wb_rf_wen0,
+                         debug_wb_rf_addr0, debug_wb_rf_data0,
+                         debug_wb_pc1, debug_wb_rf_wen1,
+                         debug_wb_rf_addr1, debug_wb_rf_data1,
+                         debug_data, saw_x5_before_x4);
+            end
         end
     end
 
     initial begin
-        #300;
-        if (saw_lane1_x3 && (debug_data == 32'h0000_0003)) begin
+        #500;
+        if (saw_lane1_load_x3 && saw_load_use_x4 && !saw_x5_before_x4 &&
+            (debug_data == 32'h1234_5678)) begin
             $display("DUAL_ISSUE_SIMPLE_PASS");
             $finish;
         end
-        $display("DUAL_ISSUE_SIMPLE_FAIL saw_lane1_x3=%b x3=%08h",
-                 saw_lane1_x3, debug_data);
+        $display("DUAL_ISSUE_SIMPLE_FAIL saw_lane1_load_x3=%b saw_load_use_x4=%b order_bad=%b x3=%08h",
+                 saw_lane1_load_x3, saw_load_use_x4, saw_x5_before_x4,
+                 debug_data);
         $finish;
     end
 endmodule

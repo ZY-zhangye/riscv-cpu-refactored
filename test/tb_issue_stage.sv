@@ -29,7 +29,9 @@ module tb_issue_stage;
     localparam logic [31:0] INST_ADDI_X2_X1_2 = 32'h0020_8113;
     localparam logic [31:0] INST_ADDI_X1_X0_2 = 32'h0020_0093;
     localparam logic [31:0] INST_LW_X3_0_X0   = 32'h0000_2183;
+    localparam logic [31:0] INST_LW_X3_0_X1   = 32'h0000_a183;
     localparam logic [31:0] INST_BEQ_X0_X0_8  = 32'h0000_0463;
+    localparam logic [31:0] INST_BEXTI_X2_X0_3 = 32'h4830_5113;
 
     issue_stage u_issue_stage (
         .clk(clk),
@@ -161,6 +163,22 @@ module tb_issue_stage;
     task automatic test_serial_classes;
         begin
             reset_dut();
+            send_packet(INST_ADDI_X1_X0_1, INST_LW_X3_0_X0);
+            check("lane1 load pair lane0 valid", is_to_ds_valid);
+            check("lane1 load pair lane1 valid", is_to_ds_valid1);
+            check("lane1 load pair older alu", bus_inst(is_to_ds_bus) == INST_ADDI_X1_X0_1);
+            check("lane1 load pair younger load", bus_inst(is_to_ds_bus1) == INST_LW_X3_0_X0);
+
+            reset_dut();
+            send_packet(INST_ADDI_X1_X0_1, INST_LW_X3_0_X1);
+            check("lane1 load raw base blocks lane1", is_to_ds_valid && !is_to_ds_valid1);
+            check("lane1 load raw older first", bus_inst(is_to_ds_bus) == INST_ADDI_X1_X0_1);
+            @(posedge clk);
+            #1;
+            check("lane1 load raw younger next lane0", is_to_ds_valid &&
+                                                    (bus_inst(is_to_ds_bus) == INST_LW_X3_0_X1));
+
+            reset_dut();
             send_packet(INST_LW_X3_0_X0, INST_ADDI_X2_X0_2);
             check("load lane0 valid", is_to_ds_valid);
             check("load blocks lane1", !is_to_ds_valid1);
@@ -177,6 +195,14 @@ module tb_issue_stage;
             #1;
             check("branch eventually lane0", is_to_ds_valid &&
                                           (bus_inst(is_to_ds_bus) == INST_BEQ_X0_X0_8));
+
+            reset_dut();
+            send_packet(INST_ADDI_X1_X0_1, INST_BEXTI_X2_X0_3);
+            check("zbs candidate blocks lane1", is_to_ds_valid && !is_to_ds_valid1);
+            @(posedge clk);
+            #1;
+            check("zbs eventually lane0", is_to_ds_valid &&
+                                       (bus_inst(is_to_ds_bus) == INST_BEXTI_X2_X0_3));
         end
     endtask
 

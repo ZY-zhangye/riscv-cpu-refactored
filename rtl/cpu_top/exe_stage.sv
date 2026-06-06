@@ -392,7 +392,7 @@ module exe_stage #(
     end
     always_comb begin
         dmem_wen = 4'b0000;
-        if (!es_flush) begin
+        if (es_valid && !es_flush) begin
             unique case (1'b1)
                 inst_sb: dmem_wen = sb_wen;
                 inst_sh: dmem_wen = sh_wen;
@@ -401,7 +401,7 @@ module exe_stage #(
             endcase
         end
     end
-    assign dmem_en = |mem_op && !es_flush;
+    assign dmem_en = es_valid && |mem_op && !es_flush;
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
