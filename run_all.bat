@@ -3,6 +3,7 @@ setlocal EnableExtensions
 
 REM === instructions definition ===
 set UI_INSTS=jalr lh lhu sh sb lb lbu sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti sltu sltiu beq bne blt bge bltu bgeu jal lui auipc
+set UI_BRANCH_INSTS=jalr beq bne blt bge bltu bgeu jal
 set MI_INSTS=csr scall sbreak ma_fetch
 set UM_INSTS=mul mulh mulhu mulhsu div divu rem remu
 
@@ -32,6 +33,7 @@ if /I "%MODE%"=="zbb" goto :run_zbb_only
 if /I "%MODE%"=="zbkb" goto :run_zbkb_only
 if /I "%MODE%"=="zbs" goto :run_zbs_only
 if /I "%MODE%"=="base" goto :run_base_only
+if /I "%MODE%"=="branch" goto :run_branch_only
 if /I not "%MODE%"=="all" goto :usage
 
 :run_base
@@ -77,6 +79,19 @@ if /I "%MODE%"=="all" (
 :run_base_only
 set MODE=base
 goto :run_base
+
+:run_branch_only
+set "GROUP_NAME=UI branch/jump instructions"
+set "TEST_PREFIX=rv32ui-p"
+set "TEST_LIST=%UI_BRANCH_INSTS%"
+set "RESULT_PREFIX=branch"
+call :run_group
+if errorlevel 1 goto :fail
+echo.
+echo Branch/jump tests finished!
+echo BRANCH TESTS PASSED!
+pause
+exit /b 0
 
 :run_z_only
 call :run_z_groups
@@ -190,5 +205,5 @@ exit /b 1
 
 :usage
 echo Unknown mode: %MODE%
-echo Usage: run_all.bat [all^|base^|z^|zba^|zbb^|zbkb^|zbs]
+echo Usage: run_all.bat [all^|base^|branch^|z^|zba^|zbb^|zbkb^|zbs]
 exit /b 1
