@@ -547,7 +547,7 @@ module id_stage #(
     logic wb_exe_result;
     logic wb_mem_result;
     logic [1:0] exe_result_sel;
-    assign is_bitman_inst = inst_bitman_any;
+    assign is_bitman_inst = !LANE1_SLIM && inst_bitman_any;
     assign is_alu_inst = alu_add || alu_sub || alu_and || alu_or || alu_xor || alu_sll || alu_srl || alu_sra || alu_slt || alu_sltu;
     assign is_fpu_inst = !LANE1_SLIM &&
                          (inst_fadd_s || inst_fsub_s || inst_fmul_s || inst_fdiv_s || inst_fsqrt_s || inst_fmin_s || inst_fmax_s || inst_fmadd_s || inst_fmsub_s || inst_fnmadd_s || inst_fnmsub_s ||
@@ -557,8 +557,8 @@ module id_stage #(
                          inst_flt_s     || inst_fle_s     || inst_feq_s     ||
                          inst_fclass_s);
     assign is_mul_inst = !LANE1_SLIM && (inst_mul || inst_mulh || inst_mulhsu || inst_mulhu || inst_div || inst_divu || inst_rem || inst_remu);
-    assign is_mem_inst = is_load || is_store || inst_flw || inst_fsw;
-    assign is_csr_inst = inst_csrrw || inst_csrrs || inst_csrrc || inst_csrrwi || inst_csrrsi || inst_csrrci;
+    assign is_mem_inst = is_load || is_store || (!LANE1_SLIM && (inst_flw || inst_fsw));
+    assign is_csr_inst = !LANE1_SLIM && (inst_csrrw || inst_csrrs || inst_csrrc || inst_csrrwi || inst_csrrsi || inst_csrrci);
     assign is_br_jmp_inst = is_branch || is_jal || is_jalr;
     assign ctrl_rd_addr = rd_addr;
     assign ctrl_regfile_wen = is_alu_inst || is_fpu_inst || is_mul_inst || is_load || inst_flw || is_csr_inst || is_jal || is_jalr || is_bitman_inst;
@@ -615,27 +615,46 @@ module id_stage #(
         end
     end
 
-    assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
+    assign reg_src1 = (!LANE1_SLIM && (inst_flw || inst_fsw)) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
                       inst_auipc ? id_pc : src1;
-    assign reg_src2 = inst_bitman_imm_inst ? {27'b0, id_inst[24:20]} :
+    assign reg_src2 = (!LANE1_SLIM && inst_bitman_imm_inst) ? {27'b0, id_inst[24:20]} :
                       alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2;
     assign src_packet = {reg_src1, reg_src2, src1_fwd, src2_fwd};
 
     //输出到下一级
     `ifdef Z_BITMAIN_ENABLE
-    assign ds_to_es_bus = {bitman_packet, alu_packet, fpu_packet, mul_packet, mem_packet, csr_packet, br_jmp_packet, ctrl_packet , src_packet};
+    assign ds_to_es_bus = {
+        LANE1_SLIM ? '0 : bitman_packet,
+        alu_packet,
+        LANE1_SLIM ? '0 : fpu_packet,
+        LANE1_SLIM ? '0 : mul_packet,
+        mem_packet,
+        LANE1_SLIM ? '0 : csr_packet,
+        br_jmp_packet,
+        ctrl_packet,
+        src_packet
+    };
     `else
-    assign ds_to_es_bus = {alu_packet, fpu_packet, mul_packet, mem_packet, csr_packet, br_jmp_packet, ctrl_packet , src_packet};
+    assign ds_to_es_bus = {
+        alu_packet,
+        LANE1_SLIM ? '0 : fpu_packet,
+        LANE1_SLIM ? '0 : mul_packet,
+        mem_packet,
+        LANE1_SLIM ? '0 : csr_packet,
+        br_jmp_packet,
+        ctrl_packet,
+        src_packet
+    };
     `endif
 
     //异常处理
     logic [6:0] exc_code;
     logic [31:0] exc_mtval;
     assign exc_code = ds_flush ? 7'b0 :
-                      (inst_ecall && ds_allowin) ? 7'b0101011 :   //环境调用异常
-                      (inst_ebreak && ds_allowin) ? 7'b0100011 :  //断点异常
-                      (inst_mret && ds_allowin) ? 7'b1000000 :   //机器模式返回异常
+                      (!LANE1_SLIM && inst_ecall && ds_allowin) ? 7'b0101011 :   //环境调用异常
+                      (!LANE1_SLIM && inst_ebreak && ds_allowin) ? 7'b0100011 :  //断点异常
+                      (!LANE1_SLIM && inst_mret && ds_allowin) ? 7'b1000000 :   //机器模式返回异常
                       fs_exc_bus_r[38:32];  //来自取指阶段的异常
     assign exc_mtval = ds_flush ? 32'b0 :
                        (inst_ecall && ds_allowin) ? 32'b0 :

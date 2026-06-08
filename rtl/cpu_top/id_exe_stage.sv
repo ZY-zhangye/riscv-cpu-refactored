@@ -197,7 +197,9 @@ module id_exe_stage (
         .ds_exc_bus(ds_exc_bus1)
     );
 
-    exe_stage #(.LANE_ID(1)) u_exe1 (
+    exe_stage #(
+        .LANE_ID(1)
+    ) u_exe1 (
         .clk(clk), .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid1),
         .ms_allowin(ms_allowin1),
