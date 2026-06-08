@@ -1,5 +1,7 @@
 `include "defines.svh"
-module if_stage (
+module if_stage #(
+    parameter int BP_INDEX_WIDTH = 6
+) (
     input logic clk,
     input logic rst_n,
     //取指端口0
@@ -42,15 +44,25 @@ module if_stage (
     logic [31:0] redirect_pending_target;
     logic fetch_accept;
 
-    logic bp_pred_taken;
-    logic [`ADDR_WIDTH-1:0] bp_pred_target;
+    logic bp_pred_taken0;
+    logic [`ADDR_WIDTH-1:0] bp_pred_target0;
+    logic bp_pred_taken1;
+    logic [`ADDR_WIDTH-1:0] bp_pred_target1;
+    logic fetch_kill;
+    logic lane0_pred_valid;
+    logic lane1_pred_valid;
 
-    branch_predictor u_branch_predictor (
+    branch_predictor #(
+        .INDEX_WIDTH(BP_INDEX_WIDTH)
+    ) u_branch_predictor (
         .clk(clk),
         .rst_n(rst_n),
-        .lookup_pc(fs_out_pc),
-        .pred_taken(bp_pred_taken),
-        .pred_target(bp_pred_target),
+        .lookup_pc0(fs_out_pc),
+        .pred_taken0(bp_pred_taken0),
+        .pred_target0(bp_pred_target0),
+        .lookup_pc1(fs_out_pc + 32'd4),
+        .pred_taken1(bp_pred_taken1),
+        .pred_target1(bp_pred_target1),
         .update_valid(bp_update_valid),
         .update_pc(bp_update_pc),
         .update_taken(bp_update_taken),
@@ -59,10 +71,14 @@ module if_stage (
     );
 
     assign seq_pc = fs_pc + 8; // 如果上一周期两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
+    assign fetch_kill = br_taken || br_taken_reg || exception_flag || redirect_pending;
+    assign lane0_pred_valid = bp_pred_taken0 && !fetch_kill;
+    assign lane1_pred_valid = bp_pred_taken1 && !lane0_pred_valid && !fetch_kill;
     assign next_pc = exception_flag ? exception_addr :
                      redirect_pending ? redirect_pending_target :
                      br_taken_reg ? br_target_reg :
-                     bp_pred_taken ? bp_pred_target :
+                     lane0_pred_valid ? bp_pred_target0 :
+                     lane1_pred_valid ? bp_pred_target1 :
                      seq_pc;
     logic fs_valid;
     logic fs_ready_go;
@@ -113,14 +129,16 @@ module if_stage (
     end
 
     assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag || redirect_pending) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = fetch_kill ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
-    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag && !redirect_pending), bp_pred_target};
+    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, lane0_pred_valid, bp_pred_target0};
 
     assign pc_out1 = next_pc + 32'd4; // 预留的第二条指令地址
     assign inst_ren1 = fs_allowin;
-    assign fs_to_ds_bus1 = {(redirect_pending ? `NOP_INST : inst_in1), fs_pc + 32'd4, 1'b0, 32'b0}; // 预留的第二条指令总线
+    assign fs_to_ds_bus1 = {(fetch_kill || lane0_pred_valid ? `NOP_INST : inst_in1), fs_pc + 32'd4,
+                            lane1_pred_valid,
+                            bp_pred_target1}; // 预留的第二条指令总线
 
     /*logic exception_iam;
     assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/

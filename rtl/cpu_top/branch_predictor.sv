@@ -1,16 +1,17 @@
 `include "defines.svh"
 
 module branch_predictor #(
-    parameter int INDEX_WIDTH = 4,
-    parameter int ENTRIES = 1 << INDEX_WIDTH,
-    parameter int TAG_WIDTH = `ADDR_WIDTH - INDEX_WIDTH - 2
+    parameter int INDEX_WIDTH = 4
 ) (
     input logic clk,
     input logic rst_n,
 
-    input logic [`ADDR_WIDTH-1:0] lookup_pc,
-    output logic pred_taken,
-    output logic [`ADDR_WIDTH-1:0] pred_target,
+    input logic [`ADDR_WIDTH-1:0] lookup_pc0,
+    output logic pred_taken0,
+    output logic [`ADDR_WIDTH-1:0] pred_target0,
+    input logic [`ADDR_WIDTH-1:0] lookup_pc1,
+    output logic pred_taken1,
+    output logic [`ADDR_WIDTH-1:0] pred_target1,
 
     input logic update_valid,
     input logic [`ADDR_WIDTH-1:0] update_pc,
@@ -19,21 +20,33 @@ module branch_predictor #(
     input logic update_is_jalr
 );
 
+    localparam int ENTRIES = 1 << INDEX_WIDTH;
+    localparam int TAG_WIDTH = `ADDR_WIDTH - INDEX_WIDTH - 2;
+
     logic valid [ENTRIES-1:0];
     logic [1:0] counter [ENTRIES-1:0];
     logic [TAG_WIDTH-1:0] tag [ENTRIES-1:0];
     logic [`ADDR_WIDTH-1:0] target [ENTRIES-1:0];
 
-    logic [INDEX_WIDTH-1:0] lookup_index;
-    logic [TAG_WIDTH-1:0] lookup_tag;
-    logic hit;
+    logic [INDEX_WIDTH-1:0] lookup_index0;
+    logic [TAG_WIDTH-1:0] lookup_tag0;
+    logic hit0;
+    logic [INDEX_WIDTH-1:0] lookup_index1;
+    logic [TAG_WIDTH-1:0] lookup_tag1;
+    logic hit1;
 
-    assign lookup_index = lookup_pc[INDEX_WIDTH+1:2];
-    assign lookup_tag = lookup_pc[`ADDR_WIDTH-1:INDEX_WIDTH+2];
-    assign hit = valid[lookup_index] && (tag[lookup_index] == lookup_tag);
+    assign lookup_index0 = lookup_pc0[INDEX_WIDTH+1:2];
+    assign lookup_tag0 = lookup_pc0[`ADDR_WIDTH-1:INDEX_WIDTH+2];
+    assign hit0 = valid[lookup_index0] && (tag[lookup_index0] == lookup_tag0);
 
-    assign pred_taken = hit && counter[lookup_index][1];
-    assign pred_target = target[lookup_index];
+    assign lookup_index1 = lookup_pc1[INDEX_WIDTH+1:2];
+    assign lookup_tag1 = lookup_pc1[`ADDR_WIDTH-1:INDEX_WIDTH+2];
+    assign hit1 = valid[lookup_index1] && (tag[lookup_index1] == lookup_tag1);
+
+    assign pred_taken0 = hit0 && counter[lookup_index0][1];
+    assign pred_target0 = target[lookup_index0];
+    assign pred_taken1 = hit1 && counter[lookup_index1][1];
+    assign pred_target1 = target[lookup_index1];
 
     always_ff @(posedge clk or negedge rst_n) begin
         integer i;

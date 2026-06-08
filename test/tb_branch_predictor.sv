@@ -6,9 +6,12 @@ module tb_branch_predictor;
 
     logic clk;
     logic rst_n;
-    logic [`ADDR_WIDTH-1:0] lookup_pc;
-    logic pred_taken;
-    logic [`ADDR_WIDTH-1:0] pred_target;
+    logic [`ADDR_WIDTH-1:0] lookup_pc0;
+    logic pred_taken0;
+    logic [`ADDR_WIDTH-1:0] pred_target0;
+    logic [`ADDR_WIDTH-1:0] lookup_pc1;
+    logic pred_taken1;
+    logic [`ADDR_WIDTH-1:0] pred_target1;
     logic update_valid;
     logic [`ADDR_WIDTH-1:0] update_pc;
     logic update_taken;
@@ -17,12 +20,17 @@ module tb_branch_predictor;
 
     int errors;
 
-    branch_predictor u_branch_predictor (
+    branch_predictor #(
+        .INDEX_WIDTH(6)
+    ) u_branch_predictor (
         .clk(clk),
         .rst_n(rst_n),
-        .lookup_pc(lookup_pc),
-        .pred_taken(pred_taken),
-        .pred_target(pred_target),
+        .lookup_pc0(lookup_pc0),
+        .pred_taken0(pred_taken0),
+        .pred_target0(pred_target0),
+        .lookup_pc1(lookup_pc1),
+        .pred_taken1(pred_taken1),
+        .pred_target1(pred_target1),
         .update_valid(update_valid),
         .update_pc(update_pc),
         .update_taken(update_taken),
@@ -71,7 +79,8 @@ module tb_branch_predictor;
     initial begin
         errors = 0;
         rst_n = 1'b0;
-        lookup_pc = 32'h0000_0100;
+        lookup_pc0 = 32'h0000_0100;
+        lookup_pc1 = 32'h0000_0104;
         update_valid = 1'b0;
         update_pc = '0;
         update_taken = 1'b0;
@@ -82,39 +91,47 @@ module tb_branch_predictor;
         rst_n = 1'b1;
         @(negedge clk);
 
-        check("cold lookup predicts not taken", !pred_taken);
+        check("cold lane0 lookup predicts not taken", !pred_taken0);
+        check("cold lane1 lookup predicts not taken", !pred_taken1);
 
         apply_update(32'h0000_0100, 1'b1, 32'h0000_0200, 1'b0);
-        lookup_pc = 32'h0000_0100;
+        lookup_pc0 = 32'h0000_0100;
+        lookup_pc1 = 32'h0000_0104;
         #1;
-        check("new taken update predicts taken", pred_taken);
-        check("taken update target is visible", pred_target == 32'h0000_0200);
+        check("new taken update predicts taken on lane0", pred_taken0);
+        check("taken update target is visible on lane0", pred_target0 == 32'h0000_0200);
+        check("untrained lane1 remains not taken", !pred_taken1);
+
+        apply_update(32'h0000_0104, 1'b1, 32'h0000_0300, 1'b0);
+        #1;
+        check("second lookup port predicts trained lane1", pred_taken1);
+        check("second lookup port target is visible", pred_target1 == 32'h0000_0300);
 
         apply_update(32'h0000_0100, 1'b0, 32'h0000_0200, 1'b0);
         #1;
-        check("one not-taken from weak taken predicts not taken", !pred_taken);
+        check("one not-taken from weak taken predicts not taken", !pred_taken0);
 
         apply_update(32'h0000_0100, 1'b1, 32'h0000_0200, 1'b0);
         apply_update(32'h0000_0100, 1'b1, 32'h0000_0200, 1'b0);
         #1;
-        check("two taken updates predict taken", pred_taken);
+        check("two taken updates predict taken", pred_taken0);
 
         apply_update(32'h0000_0100, 1'b0, 32'h0000_0200, 1'b0);
         #1;
-        check("strong taken survives one not-taken", pred_taken);
+        check("strong taken survives one not-taken", pred_taken0);
 
         apply_update(32'h0000_0100, 1'b0, 32'h0000_0200, 1'b0);
         #1;
-        check("second not-taken drops to not taken", !pred_taken);
+        check("second not-taken drops to not taken", !pred_taken0);
 
-        lookup_pc = 32'h0001_0100;
+        lookup_pc0 = 32'h0001_0100;
         #1;
-        check("same index different tag misses", !pred_taken);
+        check("same index different tag misses", !pred_taken0);
 
         apply_update(32'h0000_0300, 1'b1, 32'h0000_0400, 1'b1);
-        lookup_pc = 32'h0000_0300;
+        lookup_pc0 = 32'h0000_0300;
         #1;
-        check("jalr update is ignored", !pred_taken);
+        check("jalr update is ignored", !pred_taken0);
 
         if (errors == 0) begin
             $display("tb_branch_predictor PASSED");
