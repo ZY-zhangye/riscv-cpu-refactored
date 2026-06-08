@@ -49,6 +49,7 @@ module issue_stage (
         logic       is_simple_int;
         logic       is_load;
         logic       is_store;
+        logic       is_branch_jmp;
     } issue_info_t;
 
     logic [`FS_DS_WIDTH-1:0] buf0;
@@ -59,6 +60,7 @@ module issue_stage (
     logic lane0_fire;
     logic lane1_fire;
     logic can_pair;
+    logic lane1_issue_class_ok;
     logic packet_accept;
     logic buffer_empty;
     logic buffer_single;
@@ -90,10 +92,15 @@ module issue_stage (
         logic is_auipc;
         logic is_load;
         logic is_store;
+        logic is_branch;
+        logic is_jal;
+        logic is_jalr;
         logic is_legal_op_imm;
         logic is_legal_op_reg;
         logic is_legal_load;
         logic is_legal_store;
+        logic is_legal_branch;
+        logic is_legal_jalr;
 
         begin
             opcode = inst[6:0];
@@ -106,6 +113,9 @@ module issue_stage (
             is_auipc  = (opcode == 7'b0010111);
             is_load   = (opcode == 7'b0000011);
             is_store  = (opcode == 7'b0100011);
+            is_branch = (opcode == 7'b1100011);
+            is_jal    = (opcode == 7'b1101111);
+            is_jalr   = (opcode == 7'b1100111);
 
             is_legal_op_imm = ((funct3 == 3'b000) || (funct3 == 3'b010) ||
                                (funct3 == 3'b011) || (funct3 == 3'b100) ||
@@ -121,20 +131,28 @@ module issue_stage (
                             (funct3 == 3'b101);
             is_legal_store = (funct3 == 3'b000) || (funct3 == 3'b001) ||
                              (funct3 == 3'b010);
+            is_legal_branch = (funct3 == 3'b000) || (funct3 == 3'b001) ||
+                              (funct3 == 3'b100) || (funct3 == 3'b101) ||
+                              (funct3 == 3'b110) || (funct3 == 3'b111);
+            is_legal_jalr = (funct3 == 3'b000);
 
             info = '0;
             info.rs1 = inst[19:15];
             info.rs2 = inst[24:20];
             info.rd  = inst[11:7];
-            info.need_rs1 = is_op_imm || is_op_reg || is_load || is_store;
-            info.need_rs2 = is_op_reg || is_store;
+            info.need_rs1 = is_op_imm || is_op_reg || is_load || is_store ||
+                             is_branch || is_jalr;
+            info.need_rs2 = is_op_reg || is_store || is_branch;
             info.write_gpr = is_op_imm || is_op_reg || is_lui || is_auipc ||
-                             (is_load && is_legal_load);
+                             (is_load && is_legal_load) || is_jal ||
+                             (is_jalr && is_legal_jalr);
             info.is_simple_int = (is_op_imm && is_legal_op_imm) ||
                                  (is_op_reg && is_legal_op_reg) ||
                                  is_lui || is_auipc;
             info.is_load = is_load && is_legal_load;
             info.is_store = is_store && is_legal_store;
+            info.is_branch_jmp = (is_branch && is_legal_branch) || is_jal ||
+                                 (is_jalr && is_legal_jalr);
             decode_issue_info = info;
         end
     endfunction
@@ -146,17 +164,19 @@ module issue_stage (
     assign info0 = decode_issue_info(buf_inst0);
     assign info1 = decode_issue_info(buf_inst1);
 
+    assign lane1_issue_class_ok = info1.is_simple_int || info1.is_load ||
+                                  info1.is_store || info1.is_branch_jmp;
     assign can_pair = buf_valid0 && buf_valid1 &&
                       info0.is_simple_int &&
-                      (info1.is_simple_int || info1.is_load || info1.is_store) &&
+                      lane1_issue_class_ok &&
                       !(info0.write_gpr && (info0.rd != 5'b0) &&
                         ((info1.need_rs1 && (info1.rs1 == info0.rd)) ||
                          (info1.need_rs2 && (info1.rs2 == info0.rd)))) &&
                       !(info0.write_gpr && info1.write_gpr &&
                         (info0.rd != 5'b0) && (info0.rd == info1.rd));
 
-    // Checkpoint 3: IDLE may dual-issue safe simple integer pairs. Unsafe
-    // pairs fall back to ordered lane0-only issue.
+    // IDLE may dual-issue safe pairs. Lane0 control-flow instructions remain
+    // lane0-only because issue does not know the final branch direction.
     assign buffer_empty = !buf_valid0 && !buf_valid1;
     assign buffer_single = buf_valid0 && !buf_valid1;
     assign dual_issue_ready = (state == ISSUE_IDLE) && can_pair && ds_allowin && ds_allowin1;

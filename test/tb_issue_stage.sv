@@ -208,11 +208,29 @@ module tb_issue_stage;
 
             reset_dut();
             send_packet(INST_ADDI_X1_X0_1, INST_BEQ_X0_X0_8);
-            check("branch candidate blocks lane1", is_to_ds_valid && !is_to_ds_valid1);
+            check("lane1 branch pair lane0 valid", is_to_ds_valid);
+            check("lane1 branch pair lane1 valid", is_to_ds_valid1);
+            check("lane1 branch pair older alu", bus_inst(is_to_ds_bus) == INST_ADDI_X1_X0_1);
+            check("lane1 branch pair younger branch", bus_inst(is_to_ds_bus1) == INST_BEQ_X0_X0_8);
+            check("lane1 branch pair not flushed early", !is_flush1);
+
+            reset_dut();
+            send_packet(INST_BEQ_X0_X0_8, INST_ADDI_X2_X0_2);
+            check("lane0 branch blocks lane1", is_to_ds_valid && !is_to_ds_valid1);
+            check("lane0 branch older first", bus_inst(is_to_ds_bus) == INST_BEQ_X0_X0_8);
+            check("lane0 branch does not locally flush lane1", !is_flush1);
             @(posedge clk);
             #1;
-            check("branch eventually lane0", is_to_ds_valid &&
-                                          (bus_inst(is_to_ds_bus) == INST_BEQ_X0_X0_8));
+            check("lane0 branch younger next lane0", is_to_ds_valid &&
+                                                  (bus_inst(is_to_ds_bus) == INST_ADDI_X2_X0_2));
+
+            reset_dut();
+            send_packet(INST_BEQ_X0_X0_8, INST_BEQ_X0_X0_8);
+            check("lane0 branch blocks branch lane1", is_to_ds_valid && !is_to_ds_valid1);
+            @(posedge clk);
+            #1;
+            check("lane0 branch lane1 branch next lane0", is_to_ds_valid &&
+                                                        (bus_inst(is_to_ds_bus) == INST_BEQ_X0_X0_8));
 
             reset_dut();
             send_packet(INST_ADDI_X1_X0_1, INST_BEXTI_X2_X0_3);

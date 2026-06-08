@@ -84,7 +84,9 @@ module id_exe_stage (
     logic [`EX_FWD_PACKET_WIDTH-1:0] exe_fwd_bus1;
 
     logic        br_redirect0, br_taken0;
+    logic        br_redirect1, br_taken1;
     logic [31:0] br_target0, br_redirect_target0;
+    logic [31:0] br_target1, br_redirect_target1;
     logic        bp_update_valid0;
     logic [31:0] bp_update_pc0, bp_update_target0;
     logic        bp_update_taken0, bp_update_is_jalr0;
@@ -118,7 +120,7 @@ module id_exe_stage (
         .exe_fwd_bus1(exe_fwd_bus1),
         .mem_fwd_bus0(mem_fwd_bus0),
         .mem_fwd_bus1(mem_fwd_bus1),
-        .br_taken(br_redirect0),
+        .br_taken(br_redirect0 || br_redirect1),
         .exception_flag(exception_flag),
         .is_flush(is_flush),
         .fs_exc_bus(fs_exc_bus),
@@ -164,8 +166,6 @@ module id_exe_stage (
     logic [`DS_ES_WIDTH-1:0] ds_to_es_bus1;
     logic [`EXC_WIDTH-1:0] ds_exc_bus1;
 
-    logic        br_redirect1, br_taken1;
-    logic [31:0] br_target1, br_redirect_target1;
     logic        bp_update_valid1;
     logic [31:0] bp_update_pc1, bp_update_target1;
     logic        bp_update_taken1, bp_update_is_jalr1;

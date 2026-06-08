@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 REM === instructions definition ===
-set UI_INSTS=lh lhu sh sb lb lbu sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti jalr sltu sltiu beq bne blt bge bltu bgeu jal lui auipc
+set UI_INSTS=jalr lh lhu sh sb lb lbu sw lw add addi sub and andi or ori xor xori sll srl sra slli srli srai slt slti sltu sltiu beq bne blt bge bltu bgeu jal lui auipc
 set MI_INSTS=csr scall sbreak ma_fetch
 set UM_INSTS=mul mulh mulhu mulhsu div divu rem remu
 

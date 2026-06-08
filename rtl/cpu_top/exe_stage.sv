@@ -453,7 +453,8 @@ module exe_stage #(
     logic is_branch;
     assign is_branch = |br_jmp_opcode;
 
-    assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
+    assign br_taken = es_valid && !es_flush &&
+                      (is_jal | is_jalr | (is_branch & br_cond_raw));
 
     // 4. 计算目标地址
     // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
@@ -463,7 +464,7 @@ module exe_stage #(
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
-    assign br_redirect = !es_flush && is_br_jmp &&
+    assign br_redirect = es_valid && !es_flush && is_br_jmp &&
                          ((br_taken != bp_pred_taken) ||
                           (br_taken && (br_target != bp_pred_target)));
     assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
