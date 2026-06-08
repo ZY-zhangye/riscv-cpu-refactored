@@ -43,14 +43,22 @@ module if_stage #(
     logic redirect_pending;
     logic [31:0] redirect_pending_target;
     logic fetch_accept;
+    logic redirect_valid;
+    logic [`ADDR_WIDTH-1:0] redirect_target;
+    logic redirect_valid_reg;
+    logic [`ADDR_WIDTH-1:0] redirect_target_reg;
 
     logic bp_pred_taken0;
     logic [`ADDR_WIDTH-1:0] bp_pred_target0;
     logic bp_pred_taken1;
     logic [`ADDR_WIDTH-1:0] bp_pred_target1;
     logic fetch_kill;
+    logic lane0_fetch_valid;
+    logic lane1_fetch_valid;
     logic lane0_pred_valid;
     logic lane1_pred_valid;
+    logic selected_pred_valid;
+    logic [`ADDR_WIDTH-1:0] selected_pred_target;
 
     branch_predictor #(
         .INDEX_WIDTH(BP_INDEX_WIDTH)
@@ -70,15 +78,23 @@ module if_stage #(
         .update_is_jalr(bp_update_is_jalr)
     );
 
+    assign redirect_valid = br_taken;
+    assign redirect_target = br_target;
+    assign redirect_valid_reg = br_taken_reg;
+    assign redirect_target_reg = br_target_reg;
+
     assign seq_pc = fs_pc + 8; // 如果上一周期两条指令都被译码阶段接受，则下一周期取两条指令，否则只取一条
-    assign fetch_kill = br_taken || br_taken_reg || exception_flag || redirect_pending;
-    assign lane0_pred_valid = bp_pred_taken0 && !fetch_kill;
-    assign lane1_pred_valid = bp_pred_taken1 && !lane0_pred_valid && !fetch_kill;
+    assign fetch_kill = redirect_valid || redirect_valid_reg || exception_flag || redirect_pending;
+    assign lane0_fetch_valid = !fetch_kill;
+    assign lane0_pred_valid = bp_pred_taken0 && lane0_fetch_valid;
+    assign lane1_fetch_valid = lane0_fetch_valid && !lane0_pred_valid;
+    assign lane1_pred_valid = bp_pred_taken1 && lane1_fetch_valid;
+    assign selected_pred_valid = lane0_pred_valid || lane1_pred_valid;
+    assign selected_pred_target = lane0_pred_valid ? bp_pred_target0 : bp_pred_target1;
     assign next_pc = exception_flag ? exception_addr :
                      redirect_pending ? redirect_pending_target :
-                     br_taken_reg ? br_target_reg :
-                     lane0_pred_valid ? bp_pred_target0 :
-                     lane1_pred_valid ? bp_pred_target1 :
+                     redirect_valid_reg ? redirect_target_reg :
+                     selected_pred_valid ? selected_pred_target :
                      seq_pc;
     logic fs_valid;
     logic fs_ready_go;
@@ -109,9 +125,9 @@ module if_stage #(
         end else if (exception_flag) begin
             redirect_pending <= 1'b1;
             redirect_pending_target <= exception_addr;
-        end else if (br_taken) begin
+        end else if (redirect_valid) begin
             redirect_pending <= 1'b1;
-            redirect_pending_target <= br_target;
+            redirect_pending_target <= redirect_target;
         end else if (fetch_accept) begin
             redirect_pending <= 1'b0;
             redirect_pending_target <= 32'b0;
@@ -123,20 +139,22 @@ module if_stage #(
             br_taken_reg <= 1'b0;
             br_target_reg <= 32'b0;
         end else if (fs_allowin) begin
-            br_taken_reg <= br_taken;
-            br_target_reg <= br_target;
+            br_taken_reg <= redirect_valid;
+            br_target_reg <= redirect_target;
         end
     end
 
+    // The instruction RAM is synchronous: pc_out requests the next fetch pair,
+    // while fs_pc tracks the address of the instruction data returning now.
     assign pc_out = next_pc;
-    assign fs_out_inst = fetch_kill ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = lane0_fetch_valid ? inst_in : `NOP_INST; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, lane0_pred_valid, bp_pred_target0};
 
-    assign pc_out1 = next_pc + 32'd4; // 预留的第二条指令地址
+    assign pc_out1 = next_pc + 32'd4;
     assign inst_ren1 = fs_allowin;
-    assign fs_to_ds_bus1 = {(fetch_kill || lane0_pred_valid ? `NOP_INST : inst_in1), fs_pc + 32'd4,
+    assign fs_to_ds_bus1 = {(lane1_fetch_valid ? inst_in1 : `NOP_INST), fs_pc + 32'd4,
                             lane1_pred_valid,
                             bp_pred_target1}; // 预留的第二条指令总线
 
