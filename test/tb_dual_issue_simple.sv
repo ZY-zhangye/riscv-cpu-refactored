@@ -32,7 +32,8 @@ module tb_dual_issue_simple;
     logic [31:0] debug_wb_rf_data1;
     logic        debug_wb_rf_wen1;
     logic        debug_wb_fpu_rf_wen1;
-    logic saw_lane1_load_x3;
+    logic saw_load_x3;
+    logic saw_lane1_store;
     logic saw_load_use_x4;
     logic saw_x5_before_x4;
     logic wb_x4_now;
@@ -85,23 +86,30 @@ module tb_dual_issue_simple;
             dmem[i] = 32'h0;
         end
 
-        // 8000_0000: addi x1, x0, 1
-        // 8000_0004: lw   x3, 0(x0)
-        // 8000_0008: addi x4, x3, 5
-        // 8000_000c: addi x5, x0, 9
-        // The first two instructions should dual issue, then the low-address
-        // addi must wait for the lane1 load result before the high-address
-        // independent addi can commit.
-        imem[0] = 32'h0010_0093;
-        imem[1] = 32'h0000_2183;
-        imem[2] = 32'h0051_8213;
-        imem[3] = 32'h0090_0293;
+        // 8000_0000: addi x1, x0, 42
+        // 8000_0004: nop
+        // 8000_0008: addi x2, x0, 4
+        // 8000_000c: sw   x1, 0(x0)
+        // 8000_0010: lw   x3, 0(x0)
+        // 8000_0014: addi x4, x3, 5
+        // 8000_0018: addi x5, x0, 9
+        // The store should be able to issue on lane1 behind an independent
+        // lane0 ALU op, then the following load-use sequence must remain
+        // ordered before the independent high-address addi commits.
+        imem[0] = 32'h02a0_0093;
+        imem[1] = 32'h0000_0013;
+        imem[2] = 32'h0040_0113;
+        imem[3] = 32'h0010_2023;
+        imem[4] = 32'h0000_2183;
+        imem[5] = 32'h0051_8213;
+        imem[6] = 32'h0090_0293;
         dmem[0] = 32'h1234_5678;
 
         imem_rdata = 32'h0000_0013;
         imem_rdata1 = 32'h0000_0013;
         dmem_rdata = 32'h0;
-        saw_lane1_load_x3 = 1'b0;
+        saw_load_x3 = 1'b0;
+        saw_lane1_store = 1'b0;
         saw_load_use_x4 = 1'b0;
         saw_x5_before_x4 = 1'b0;
         rst_n = 1'b0;
@@ -138,21 +146,26 @@ module tb_dual_issue_simple;
     always @(posedge clk) begin
         if (rst_n) begin
             wb_x4_now = debug_wb_rf_wen0 &&
-                        (debug_wb_pc0 == 32'h8000_0008) &&
+                        (debug_wb_pc0 == 32'h8000_0014) &&
                         (debug_wb_rf_addr0 == 5'd4) &&
-                        (debug_wb_rf_data0 == 32'h1234_567d);
+                        (debug_wb_rf_data0 == 32'h0000_002f);
             wb_x5_now = (debug_wb_rf_wen0 &&
-                         (debug_wb_pc0 == 32'h8000_000c) &&
+                         (debug_wb_pc0 == 32'h8000_0018) &&
                          (debug_wb_rf_addr0 == 5'd5)) ||
                         (debug_wb_rf_wen1 &&
-                         (debug_wb_pc1 == 32'h8000_000c) &&
+                         (debug_wb_pc1 == 32'h8000_0018) &&
                          (debug_wb_rf_addr1 == 5'd5));
 
-            if (debug_wb_rf_wen1 &&
-                (debug_wb_pc1 == 32'h8000_0004) &&
-                (debug_wb_rf_addr1 == 5'd3) &&
-                (debug_wb_rf_data1 == 32'h1234_5678)) begin
-                saw_lane1_load_x3 <= 1'b1;
+            if (dmem_en && (dmem_wen == 4'b1111) &&
+                (dmem_addr == 32'h0000_0000) &&
+                (dmem_wdata == 32'h0000_002a)) begin
+                saw_lane1_store <= 1'b1;
+            end
+            if (debug_wb_rf_wen0 &&
+                (debug_wb_pc0 == 32'h8000_0010) &&
+                (debug_wb_rf_addr0 == 5'd3) &&
+                (debug_wb_rf_data0 == 32'h0000_002a)) begin
+                saw_load_x3 <= 1'b1;
             end
             if (wb_x4_now) begin
                 saw_load_use_x4 <= 1'b1;
@@ -175,13 +188,13 @@ module tb_dual_issue_simple;
 
     initial begin
         #500;
-        if (saw_lane1_load_x3 && saw_load_use_x4 && !saw_x5_before_x4 &&
-            (debug_data == 32'h1234_5678)) begin
+        if (saw_lane1_store && saw_load_x3 && saw_load_use_x4 &&
+            !saw_x5_before_x4 && (debug_data == 32'h0000_002a)) begin
             $display("DUAL_ISSUE_SIMPLE_PASS");
             $finish;
         end
-        $display("DUAL_ISSUE_SIMPLE_FAIL saw_lane1_load_x3=%b saw_load_use_x4=%b order_bad=%b x3=%08h",
-                 saw_lane1_load_x3, saw_load_use_x4, saw_x5_before_x4,
+        $display("DUAL_ISSUE_SIMPLE_FAIL saw_lane1_store=%b saw_load_x3=%b saw_load_use_x4=%b order_bad=%b x3=%08h",
+                 saw_lane1_store, saw_load_x3, saw_load_use_x4, saw_x5_before_x4,
                  debug_data);
         $finish;
     end

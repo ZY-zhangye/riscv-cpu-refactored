@@ -30,6 +30,8 @@ module tb_issue_stage;
     localparam logic [31:0] INST_ADDI_X1_X0_2 = 32'h0020_0093;
     localparam logic [31:0] INST_LW_X3_0_X0   = 32'h0000_2183;
     localparam logic [31:0] INST_LW_X3_0_X1   = 32'h0000_a183;
+    localparam logic [31:0] INST_SW_X1_0_X0   = 32'h0010_2023;
+    localparam logic [31:0] INST_SW_X1_0_X2   = 32'h0011_2023;
     localparam logic [31:0] INST_BEQ_X0_X0_8  = 32'h0000_0463;
     localparam logic [31:0] INST_BEXTI_X2_X0_3 = 32'h4830_5113;
 
@@ -177,6 +179,22 @@ module tb_issue_stage;
             #1;
             check("lane1 load raw younger next lane0", is_to_ds_valid &&
                                                     (bus_inst(is_to_ds_bus) == INST_LW_X3_0_X1));
+
+            reset_dut();
+            send_packet(INST_ADDI_X2_X0_2, INST_SW_X1_0_X0);
+            check("lane1 store pair lane0 valid", is_to_ds_valid);
+            check("lane1 store pair lane1 valid", is_to_ds_valid1);
+            check("lane1 store pair older alu", bus_inst(is_to_ds_bus) == INST_ADDI_X2_X0_2);
+            check("lane1 store pair younger store", bus_inst(is_to_ds_bus1) == INST_SW_X1_0_X0);
+
+            reset_dut();
+            send_packet(INST_ADDI_X2_X0_2, INST_SW_X1_0_X2);
+            check("lane1 store raw base blocks lane1", is_to_ds_valid && !is_to_ds_valid1);
+            check("lane1 store raw older first", bus_inst(is_to_ds_bus) == INST_ADDI_X2_X0_2);
+            @(posedge clk);
+            #1;
+            check("lane1 store raw younger next lane0", is_to_ds_valid &&
+                                                     (bus_inst(is_to_ds_bus) == INST_SW_X1_0_X2));
 
             reset_dut();
             send_packet(INST_LW_X3_0_X0, INST_ADDI_X2_X0_2);
