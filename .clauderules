@@ -1,0 +1,6 @@
+# Workspace Coding Rules
+
+## Rule: Stay Within Workspace
+1. All files generated during development (including process scripts, temporary python/shell scripts, test reports, and markdown documentation) **must** be created and maintained directly inside the workspace directory (`F:/riscv-cpu-refactored`) or its subdirectories.
+2. Do **not** place any documents, scratch scripts, or temporary files in the system temp directories, Desktop, home directories, or external agent brain/artifact directories (e.g., `C:/Users/ZY/.gemini/antigravity-cli/brain/...`), unless explicitly requested by the user.
+3. Keep all project assets, design summaries, and engineering logs organized within the repository structure.
