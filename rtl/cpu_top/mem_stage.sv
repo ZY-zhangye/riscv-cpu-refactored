@@ -37,32 +37,25 @@ module mem_stage (
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_r;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus_r;
     logic ms_ready_go;
-    logic es_flush_r;
-    logic ms_flush;
     assign ms_ready_go = 1'b1;
-    assign ms_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_to_ws_valid = ms_valid && ms_ready_go;
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ms_valid <= 1'b0;
-        end else if (ms_allowin) begin
-            ms_valid <= es_to_ms_valid;
-        end
-    end
+    skid_buffer #(
+        .DATA_WIDTH(`ES_MS_WIDTH + `EXE_EXC_BUS)
+    ) ms_skid_buf (
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .flush      (exception_flag),
+        .valid_in   (es_to_ms_valid),
+        .data_in    ({es_to_ms_bus, exe_exc_bus}),
+        .ready_out  (ms_allowin),
+        .ready_in   (ms_ready_go && ws_allowin),
+        .valid_out  (ms_valid),
+        .data_out   ({es_ms_bus_r, exe_exc_bus_r})
+    );
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            es_ms_bus_r <= '0;
-            exe_exc_bus_r <= '0;
-            es_flush_r <= 1'b0;
-        end else if (es_to_ms_valid && ms_allowin) begin
-            es_ms_bus_r <= es_to_ms_bus;
-            exe_exc_bus_r <= exe_exc_bus;
-            es_flush_r <= es_flush;
-        end
-    end
-    assign ms_flush = rst_n && es_flush_r;
+    logic ms_flush;
+    assign ms_flush = !ms_valid;
 
     //解包
     logic [31:0] mem_pc;

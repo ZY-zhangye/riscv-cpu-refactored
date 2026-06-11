@@ -55,45 +55,26 @@ module id_stage (
     logic load_use_hazard;
     logic raw_hazard;
     assign ds_ready_go = !load_use_hazard; 
-    assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
-    //握手协议
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            ds_valid <= 1'b0;
-        end else if (ds_allowin) begin
-            ds_valid <= fs_to_ds_valid;
-        end else begin
-            ds_valid <= ds_valid;
-        end
-    end
 
-    //锁存数据
+    assign ds_flush = exception_flag || br_taken;
+
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_r;
     logic [`EXC_WIDTH-1:0] fs_exc_bus_r;
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            fs_to_ds_bus_r <= '0;
-            fs_exc_bus_r <= '0;
-        end else if (fs_to_ds_valid && ds_allowin) begin
-            fs_to_ds_bus_r <= fs_to_ds_bus;
-            fs_exc_bus_r <= fs_exc_bus;
-        end else begin
-            fs_to_ds_bus_r <= fs_to_ds_bus_r;
-            fs_exc_bus_r <= fs_exc_bus_r;
-        end
-    end
-    always_comb begin
-        if (!rst_n) begin
-            ds_flush = 1'b0;
-        end else begin
-            if (exception_flag || br_taken) begin
-                ds_flush <= 1'b1;
-            end else begin
-                ds_flush <= 1'b0;
-            end
-        end
-    end
+
+    skid_buffer #(
+        .DATA_WIDTH(`FS_DS_WIDTH + `EXC_WIDTH)
+    ) id_skid_buf (
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .flush      (ds_flush),
+        .valid_in   (fs_to_ds_valid),
+        .data_in    ({fs_to_ds_bus, fs_exc_bus}),
+        .ready_out  (ds_allowin),
+        .ready_in   (ds_ready_go && es_allowin),
+        .valid_out  (ds_valid),
+        .data_out   ({fs_to_ds_bus_r, fs_exc_bus_r})
+    );
 
     logic [`ADDR_WIDTH-1:0] id_pc;
     logic [`DATA_WIDTH-1:0] id_inst;
@@ -592,14 +573,14 @@ module id_stage (
     logic [6:0] exc_code;
     logic [31:0] exc_mtval;
     assign exc_code = ds_flush ? 7'b0 :
-                      (inst_ecall && ds_allowin) ? 7'b0101011 :   //环境调用异常
-                      (inst_ebreak && ds_allowin) ? 7'b0100011 :  //断点异常
-                      (inst_mret && ds_allowin) ? 7'b1000000 :   //机器模式返回异常
+                      (inst_ecall && ds_valid) ? 7'b0101011 :   //环境调用异常
+                      (inst_ebreak && ds_valid) ? 7'b0100011 :  //断点异常
+                      (inst_mret && ds_valid) ? 7'b1000000 :   //机器模式返回异常
                       fs_exc_bus_r[38:32];  //来自取指阶段的异常
     assign exc_mtval = ds_flush ? 32'b0 :
-                       (inst_ecall && ds_allowin) ? 32'b0 :
-                       (inst_ebreak && ds_allowin) ? 32'b0 :
-                       (inst_mret && ds_allowin) ? 32'b0 :
+                       (inst_ecall && ds_valid) ? 32'b0 :
+                       (inst_ebreak && ds_valid) ? 32'b0 :
+                       (inst_mret && ds_valid) ? 32'b0 :
                        fs_exc_bus_r[31:0];
     assign ds_exc_bus = {exc_code, exc_mtval};
     
@@ -612,8 +593,8 @@ module id_stage (
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             prev_load <= 1'b0;
-        end else if (ds_allowin) begin
-            prev_load <= is_load || inst_flw; //仅当当前指令为加载指令时才更新prev_load信号
+        end else if ((ds_valid && ds_ready_go && es_allowin) || (!ds_valid && es_allowin)) begin
+            prev_load <= ds_valid && (is_load || inst_flw); //仅当当前指令为加载指令时才更新prev_load信号
         end
     end
     always_comb begin

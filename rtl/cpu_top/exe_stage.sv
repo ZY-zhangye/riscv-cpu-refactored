@@ -453,6 +453,12 @@ module exe_stage(
     logic [31:0] pc_jalr;
     assign jalr_sum = src1 + br_jmp_imm;
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
+    always_ff @(posedge clk) begin
+        if (exe_pc == 32'h8000_01a0 || exe_pc == 32'h8000_019c || exe_pc == 32'h8000_020c || exe_pc == 32'h8000_0208) begin
+            $display("EXE: time=%0t pc=%h ds_flush=%b ds_flush_r=%b es_flush=%b br_redirect=%b valid=%b allowin=%b", $time, exe_pc, ds_flush, ds_flush_r, es_flush, br_redirect, es_valid, es_allowin);
+        end
+    end
+
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
     assign br_redirect = !es_flush && is_br_jmp &&
@@ -492,8 +498,8 @@ module exe_stage(
         exe_result, //32
         load_inst,  //6
         rd_addr,
-        regfile_wen,
-        reg_fpu_wen,
+        exe_regfile_wen,
+        exe_reg_fpu_wen,
         exe_result_sel,
         exe_csr_wen,
         exe_csr_addr,

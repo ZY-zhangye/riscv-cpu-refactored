@@ -26,23 +26,22 @@ module wb_stage (
     logic ws_ready_go;
     logic ws_valid;
     assign ws_ready_go = 1'b1;
-    assign ws_allowin = !ws_valid || ws_ready_go && ms_to_ws_valid;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ws_valid <= 1'b0;
-        end else if (ws_allowin) begin
-            ws_valid <= ms_to_ws_valid;
-        end
-    end
 
     logic [`MS_WS_WIDTH-1:0] ms_ws_bus_r;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ms_ws_bus_r <= '0;
-        end else if (ms_to_ws_valid && ws_allowin) begin
-            ms_ws_bus_r <= ms_to_ws_bus;
-        end
-    end
+
+    skid_buffer #(
+        .DATA_WIDTH(`MS_WS_WIDTH)
+    ) ws_skid_buf (
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .flush      (1'b0),
+        .valid_in   (ms_to_ws_valid),
+        .data_in    (ms_to_ws_bus),
+        .ready_out  (ws_allowin),
+        .ready_in   (ws_ready_go),
+        .valid_out  (ws_valid),
+        .data_out   (ms_ws_bus_r)
+    );
 
     //解析来自内存阶段的信息
     logic [31:0] wb_result;
