@@ -28,6 +28,8 @@ module exe_stage(
     output logic exe_reg_fpu_wen,
     output logic [11:0] exe_csr_addr,
     output logic exe_csr_wen,
+    output logic exe_load_pending,
+    output logic exe_result_pending,
     output logic es_valid,
     //异常接口
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
@@ -46,18 +48,15 @@ module exe_stage(
 );
 
     logic es_ready_go;
+    logic es_core_allowin;
+    logic es_allowin_r;
+    logic es_skid_valid_next;
     logic mul_stall;
     logic fpu_stall;
     assign es_ready_go = !mul_stall && !fpu_stall;
-    assign es_allowin = !es_valid || es_ready_go && ms_allowin;
+    assign es_core_allowin = !es_valid || es_ready_go && ms_allowin;
+    assign es_allowin = es_allowin_r;
     assign es_to_ms_valid = es_valid && es_ready_go;
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            es_valid <= 1'b0;
-        end else if (es_allowin) begin
-            es_valid <= ds_to_es_valid;
-        end
-    end
 
     //锁存数据信号
     logic [`DS_ES_WIDTH-1:0] ds_to_es_bus_r;
@@ -67,32 +66,85 @@ module exe_stage(
     logic [31:0] csr_wdata_reg;
     logic [31:0] mem_result_reg;
     logic [31:0] exe_result_reg; 
+    logic [31:0] reg_fpu_data3_reg;
     logic [`EXC_WIDTH-1:0] ds_exc_bus_r;  
+
+    logic es_in_fire;
+    logic skid_valid;
+    logic [`DS_ES_WIDTH-1:0] skid_ds_to_es_bus;
+    logic skid_ds_flush;
+    logic [`EXC_WIDTH-1:0] skid_ds_exc_bus;
+    logic [31:0] skid_exe_result;
+    logic [31:0] skid_csr_wdata;
+    logic [31:0] skid_mem_result;
+    logic [31:0] skid_reg_fpu_data3;
+    assign es_in_fire = ds_to_es_valid && es_allowin;
+
+    always_comb begin
+        es_skid_valid_next = skid_valid;
+        if (exception_flag) begin
+            es_skid_valid_next = 1'b0;
+        end else if (es_core_allowin) begin
+            es_skid_valid_next = 1'b0;
+        end else if (es_in_fire && !skid_valid) begin
+            es_skid_valid_next = 1'b1;
+        end
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            es_valid <= 1'b0;
+            es_allowin_r <= 1'b1;
             ds_to_es_bus_r <= '0;
             exe_result_reg <= '0;
             csr_wdata_reg <= '0;
+            reg_fpu_data3_reg <= '0;
             ds_flush_r <= 1'b0;
             ds_exc_bus_r <= '0;
-        end else if (ds_to_es_valid && es_allowin) begin
-            ds_flush_r <= ds_flush;
-            ds_to_es_bus_r <= ds_to_es_bus;
-            ds_exc_bus_r <= ds_exc_bus;
-            exe_result_reg <= exe_result;
-            csr_wdata_reg <= csr_wdata;
-        end else begin
-            exe_result_reg <= exe_result_reg;
-            csr_wdata_reg <= csr_wdata_reg;
-        end
-    end
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
             mem_result_reg <= '0;
-        end else if (ds_to_es_valid && es_allowin) begin
-            mem_result_reg <= mem_result;
+            skid_valid <= 1'b0;
+            skid_ds_to_es_bus <= '0;
+            skid_ds_flush <= 1'b0;
+            skid_ds_exc_bus <= '0;
+            skid_exe_result <= '0;
+            skid_csr_wdata <= '0;
+            skid_mem_result <= '0;
+            skid_reg_fpu_data3 <= '0;
         end else begin
-            mem_result_reg <= mem_result_reg;
+            skid_valid <= es_skid_valid_next;
+            es_allowin_r <= !es_skid_valid_next;
+
+            if (es_core_allowin) begin
+                if (skid_valid) begin
+                    es_valid <= 1'b1;
+                    ds_flush_r <= skid_ds_flush;
+                    ds_to_es_bus_r <= skid_ds_to_es_bus;
+                    ds_exc_bus_r <= skid_ds_exc_bus;
+                    exe_result_reg <= skid_exe_result;
+                    csr_wdata_reg <= skid_csr_wdata;
+                    mem_result_reg <= skid_mem_result;
+                    reg_fpu_data3_reg <= skid_reg_fpu_data3;
+                end else begin
+                    es_valid <= es_in_fire;
+                    if (es_in_fire) begin
+                        ds_flush_r <= ds_flush;
+                        ds_to_es_bus_r <= ds_to_es_bus;
+                        ds_exc_bus_r <= ds_exc_bus;
+                        exe_result_reg <= exe_result;
+                        csr_wdata_reg <= csr_wdata;
+                        mem_result_reg <= mem_result;
+                        reg_fpu_data3_reg <= reg_fpu_data3;
+                    end
+                end
+            end else if (es_in_fire && !skid_valid) begin
+                skid_ds_flush <= ds_flush;
+                skid_ds_to_es_bus <= ds_to_es_bus;
+                skid_ds_exc_bus <= ds_exc_bus;
+                skid_exe_result <= exe_result;
+                skid_csr_wdata <= csr_wdata;
+                skid_mem_result <= mem_result;
+                skid_reg_fpu_data3 <= reg_fpu_data3;
+            end
         end
     end
     assign es_flush = rst_n && (ds_flush_r || exception_flag);
@@ -333,7 +385,7 @@ module exe_stage(
                       fpu_src2;
     assign src3_fpu = (fpu_src3_fwd == 2'b01) ? exe_result_reg :
                       (fpu_src3_fwd == 2'b10) ? mem_result_reg :
-                      reg_fpu_data3;
+                      reg_fpu_data3_reg;
     fpu u_fpu (
         .clk(clk),
         .rst_n(rst_n),
@@ -391,7 +443,7 @@ module exe_stage(
             endcase
         end
     end
-    assign dmem_en = |mem_op && !es_flush;
+    assign dmem_en = es_valid && |mem_op && !es_flush;
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
@@ -401,7 +453,7 @@ module exe_stage(
     assign inst_csrrwi = csr_op == 3'b100 && csr_imm_sel == 1'b1;
     assign inst_csrrsi = csr_op == 3'b010 && csr_imm_sel == 1'b1;
     assign inst_csrrci = csr_op == 3'b001 && csr_imm_sel == 1'b1;
-    assign exe_csr_wen = csr_wen;
+    assign exe_csr_wen = es_valid && csr_wen && !es_flush;
     assign exe_csr_addr = csr_waddr;
     assign csr_wdata = inst_csrrw ? src1 :
                        inst_csrrs ? (csr_data | src1) :
@@ -483,8 +535,11 @@ module exe_stage(
 
     //数据前递接口
     assign exe_dest_addr = rd_addr;
-    assign exe_regfile_wen = regfile_wen && !es_flush;
-    assign exe_reg_fpu_wen = reg_fpu_wen && !es_flush;
+    assign exe_regfile_wen = es_valid && regfile_wen && !es_flush;
+    assign exe_reg_fpu_wen = es_valid && reg_fpu_wen && !es_flush;
+    assign exe_load_pending = es_valid && !es_flush && exe_result_sel[0] &&
+                              (regfile_wen || reg_fpu_wen);
+    assign exe_result_pending = es_valid && !es_flush && !es_ready_go;
 
     //输出到下一级
     assign es_to_ms_bus = {

@@ -32,6 +32,10 @@ coremark测试结果.png    FPGA 实现上的 CoreMark 测试截图
 - `mul.sv`、`divider.sv`、`fpu.sv`：运算单元
 - `defines.svh`：核心参数、总线宽度与宏定义
 
+当前 `main` 分支的五级流水线已经将级间 `allowin` 反压路径注册化：IF->ID、ID->EXE、EXE->MEM、MEM->WB 边界均通过上游可见的打一拍 `allowin` 配合 1-entry skid buffer 传递数据。该结构拆断了原先跨多级的组合 ready 链；下游突发停顿时，上游允许多送入的一拍会进入边界暂存寄存器，下一拍起反压逐级生效。
+
+ID 阶段的冒险判断同步改为显式依赖 EXE 输出的 pending/load-use 信息。ID->EXE 边界会缓存必要的前递快照，包括 MEM/WB 前递结果、CSR 写数据以及 FPU 三源操作数，避免指令在 skid buffer 中停留期间被 ID 侧地址变化污染。
+
 ## SoC 与外设
 
 `rtl/my_cpu` 提供 CPU 外围系统封装，主要包括：
@@ -48,7 +52,7 @@ coremark测试结果.png    FPGA 实现上的 CoreMark 测试截图
 根目录 `markdown.md` 中记录了一个基础编译命令：
 
 ```text
-vlog rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.sv rtl/my_cpu/*.svh test/*.sv
+vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.svh rtl/my_cpu/*.sv test/*.sv
 ```
 
 常用测试平台位于 `test/`：
@@ -58,6 +62,15 @@ vlog rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.sv rtl/my_cpu/*.svh test/*.
 - `tb_UART.sv`、`tb_PLIC.sv`、`tb_timer.sv`：外设测试
 
 仿真输入镜像位于 `hex/`，其中 `hex/riscv-tests/` 保存了多组 RISC-V 指令测试用例。
+
+常用回归命令：
+
+```text
+.\run_all.bat base
+.\run_all.bat all
+```
+
+最近一次流水线级间握手改造后，已完成纯编译、`base` 回归和 `all` 回归验证。
 
 ## FPGA 软件支持
 

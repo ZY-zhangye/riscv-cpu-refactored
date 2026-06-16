@@ -37,6 +37,8 @@ module id_stage (
     input logic exe_reg_fpu_wen,
     input logic [11:0] exe_csr_addr,
     input logic exe_csr_wen,
+    input logic exe_load_pending,
+    input logic exe_result_pending,
     input logic es_valid,
     //数据前递接口--访存阶段--仅前递地址，数据选择统一在exe_stage完成
     input logic [4:0] mem_dest_addr,
@@ -52,35 +54,70 @@ module id_stage (
 
     logic ds_valid;
     logic ds_ready_go;
+    logic ds_core_allowin;
+    logic ds_allowin_r;
+    logic fs_in_fire;
+    logic ds_skid_valid;
+    logic ds_skid_valid_next;
+    logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_skid;
+    logic [`EXC_WIDTH-1:0] fs_exc_bus_skid;
     logic load_use_hazard;
     logic raw_hazard;
     assign ds_ready_go = !load_use_hazard; 
-    assign ds_allowin = !ds_valid || ds_ready_go && es_allowin;
+    assign ds_core_allowin = !ds_valid || ds_ready_go && es_allowin;
+    assign ds_allowin = ds_allowin_r;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
-    //握手协议
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            ds_valid <= 1'b0;
-        end else if (ds_allowin) begin
-            ds_valid <= fs_to_ds_valid;
-        end else begin
-            ds_valid <= ds_valid;
-        end
-    end
+    assign fs_in_fire = fs_to_ds_valid && ds_allowin;
 
     //锁存数据
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_r;
     logic [`EXC_WIDTH-1:0] fs_exc_bus_r;
-    always_ff @(posedge clk) begin
+
+    always_comb begin
+        ds_skid_valid_next = ds_skid_valid;
+        if (exception_flag || br_taken) begin
+            ds_skid_valid_next = 1'b0;
+        end else if (ds_core_allowin) begin
+            ds_skid_valid_next = 1'b0;
+        end else if (fs_in_fire && !ds_skid_valid) begin
+            ds_skid_valid_next = 1'b1;
+        end
+    end
+
+    //握手协议
+    always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            ds_valid <= 1'b0;
+            ds_allowin_r <= 1'b1;
+            ds_skid_valid <= 1'b0;
             fs_to_ds_bus_r <= '0;
             fs_exc_bus_r <= '0;
-        end else if (fs_to_ds_valid && ds_allowin) begin
-            fs_to_ds_bus_r <= fs_to_ds_bus;
-            fs_exc_bus_r <= fs_exc_bus;
+            fs_to_ds_bus_skid <= '0;
+            fs_exc_bus_skid <= '0;
+        end else if (exception_flag || br_taken) begin
+            ds_valid <= 1'b0;
+            ds_skid_valid <= 1'b0;
+            ds_allowin_r <= 1'b1;
         end else begin
-            fs_to_ds_bus_r <= fs_to_ds_bus_r;
-            fs_exc_bus_r <= fs_exc_bus_r;
+            ds_skid_valid <= ds_skid_valid_next;
+            ds_allowin_r <= !ds_skid_valid_next;
+
+            if (ds_core_allowin) begin
+                if (ds_skid_valid) begin
+                    ds_valid <= 1'b1;
+                    fs_to_ds_bus_r <= fs_to_ds_bus_skid;
+                    fs_exc_bus_r <= fs_exc_bus_skid;
+                end else begin
+                    ds_valid <= fs_in_fire;
+                    if (fs_in_fire) begin
+                        fs_to_ds_bus_r <= fs_to_ds_bus;
+                        fs_exc_bus_r <= fs_exc_bus;
+                    end
+                end
+            end else if (fs_in_fire && !ds_skid_valid) begin
+                fs_to_ds_bus_skid <= fs_to_ds_bus;
+                fs_exc_bus_skid <= fs_exc_bus;
+            end
         end
     end
     always_comb begin
@@ -591,15 +628,17 @@ module id_stage (
     //异常处理
     logic [6:0] exc_code;
     logic [31:0] exc_mtval;
+    logic ds_inst_valid;
+    assign ds_inst_valid = ds_valid && !ds_flush;
     assign exc_code = ds_flush ? 7'b0 :
-                      (inst_ecall && ds_allowin) ? 7'b0101011 :   //环境调用异常
-                      (inst_ebreak && ds_allowin) ? 7'b0100011 :  //断点异常
-                      (inst_mret && ds_allowin) ? 7'b1000000 :   //机器模式返回异常
+                      (inst_ecall && ds_inst_valid) ? 7'b0101011 :   //环境调用异常
+                      (inst_ebreak && ds_inst_valid) ? 7'b0100011 :  //断点异常
+                      (inst_mret && ds_inst_valid) ? 7'b1000000 :   //机器模式返回异常
                       fs_exc_bus_r[38:32];  //来自取指阶段的异常
     assign exc_mtval = ds_flush ? 32'b0 :
-                       (inst_ecall && ds_allowin) ? 32'b0 :
-                       (inst_ebreak && ds_allowin) ? 32'b0 :
-                       (inst_mret && ds_allowin) ? 32'b0 :
+                       (inst_ecall && ds_inst_valid) ? 32'b0 :
+                       (inst_ebreak && ds_inst_valid) ? 32'b0 :
+                       (inst_mret && ds_inst_valid) ? 32'b0 :
                        fs_exc_bus_r[31:0];
     assign ds_exc_bus = {exc_code, exc_mtval};
     
@@ -608,21 +647,32 @@ module id_stage (
     logic exe_load_use_hazard;
     assign need_rs1 = is_op_reg || is_op_imm || is_load || is_store || is_branch || inst_jalr || is_fpu || inst_csrrw || inst_csrrs || inst_csrrc;
     assign need_rs2 = is_op_reg || is_store || is_branch || is_fpu;
-    logic prev_load;
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            prev_load <= 1'b0;
-        end else if (ds_allowin) begin
-            prev_load <= is_load || inst_flw; //仅当当前指令为加载指令时才更新prev_load信号
-        end
-    end
+    logic exe_forward_pending;
+    logic exe_rs1_hazard;
+    logic exe_rs2_hazard;
+    logic exe_frs1_hazard;
+    logic exe_frs2_hazard;
+    logic exe_frs3_hazard;
+    logic exe_csr_hazard;
+    assign exe_forward_pending = exe_load_pending || exe_result_pending;
+    assign exe_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
+                            (rs1_addr == exe_dest_addr) &&
+                            es_valid && exe_regfile_wen;
+    assign exe_rs2_hazard = need_rs2 && (rs2_addr != 5'b0) &&
+                            (rs2_addr == exe_dest_addr) &&
+                            es_valid && exe_regfile_wen;
+    assign exe_frs1_hazard = (fpu_src1_fwd == 2'b01);
+    assign exe_frs2_hazard = (fpu_src2_fwd == 2'b01);
+    assign exe_frs3_hazard = (fpu_src3_fwd == 2'b01);
+    assign exe_csr_hazard = csr_rdata_fwd && exe_csr_wen;
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
         end else begin
-            exe_load_use_hazard = ((need_rs1 && (rs1_addr != 5'b0) && (rs1_addr == exe_dest_addr)) ||
-                                  (need_rs2 && (rs2_addr != 5'b0) && (rs2_addr == exe_dest_addr))) &&
-                                  es_valid && exe_regfile_wen && prev_load;
+            exe_load_use_hazard = exe_forward_pending &&
+                                  (exe_rs1_hazard || exe_rs2_hazard ||
+                                   exe_frs1_hazard || exe_frs2_hazard ||
+                                   exe_frs3_hazard || exe_csr_hazard);
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;

@@ -37,29 +37,67 @@ module mem_stage (
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_r;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus_r;
     logic ms_ready_go;
+    logic ms_core_allowin;
+    logic ms_allowin_r;
+    logic ms_in_fire;
+    logic ms_skid_valid;
+    logic ms_skid_valid_next;
+    logic [`ES_MS_WIDTH-1:0] es_ms_bus_skid;
+    logic [`EXE_EXC_BUS-1:0] exe_exc_bus_skid;
+    logic es_flush_skid;
     logic es_flush_r;
     logic ms_flush;
     assign ms_ready_go = 1'b1;
-    assign ms_allowin = !ms_valid || ms_ready_go && ws_allowin;
+    assign ms_core_allowin = !ms_valid || ms_ready_go && ws_allowin;
+    assign ms_allowin = ms_allowin_r;
     assign ms_to_ws_valid = ms_valid && ms_ready_go;
+    assign ms_in_fire = es_to_ms_valid && ms_allowin;
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ms_valid <= 1'b0;
-        end else if (ms_allowin) begin
-            ms_valid <= es_to_ms_valid;
+    always_comb begin
+        ms_skid_valid_next = ms_skid_valid;
+        if (exception_flag) begin
+            ms_skid_valid_next = 1'b0;
+        end else if (ms_core_allowin) begin
+            ms_skid_valid_next = 1'b0;
+        end else if (ms_in_fire && !ms_skid_valid) begin
+            ms_skid_valid_next = 1'b1;
         end
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            ms_valid <= 1'b0;
+            ms_allowin_r <= 1'b1;
+            ms_skid_valid <= 1'b0;
             es_ms_bus_r <= '0;
             exe_exc_bus_r <= '0;
             es_flush_r <= 1'b0;
-        end else if (es_to_ms_valid && ms_allowin) begin
-            es_ms_bus_r <= es_to_ms_bus;
-            exe_exc_bus_r <= exe_exc_bus;
-            es_flush_r <= es_flush;
+            es_ms_bus_skid <= '0;
+            exe_exc_bus_skid <= '0;
+            es_flush_skid <= 1'b0;
+        end else begin
+            ms_skid_valid <= ms_skid_valid_next;
+            ms_allowin_r <= !ms_skid_valid_next;
+
+            if (ms_core_allowin) begin
+                if (ms_skid_valid) begin
+                    ms_valid <= 1'b1;
+                    es_ms_bus_r <= es_ms_bus_skid;
+                    exe_exc_bus_r <= exe_exc_bus_skid;
+                    es_flush_r <= es_flush_skid;
+                end else begin
+                    ms_valid <= ms_in_fire;
+                    if (ms_in_fire) begin
+                        es_ms_bus_r <= es_to_ms_bus;
+                        exe_exc_bus_r <= exe_exc_bus;
+                        es_flush_r <= es_flush;
+                    end
+                end
+            end else if (ms_in_fire && !ms_skid_valid) begin
+                es_ms_bus_skid <= es_to_ms_bus;
+                exe_exc_bus_skid <= exe_exc_bus;
+                es_flush_skid <= es_flush;
+            end
         end
     end
     assign ms_flush = rst_n && es_flush_r;
@@ -155,9 +193,9 @@ end
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
-    assign mem_regfile_wen = regfile_wen && !ms_flush && !exception_flag;
-    assign mem_reg_fpu_wen = reg_fpu_wen && !ms_flush && !exception_flag;
-    assign csr_we = csr_wen & ~ms_flush & ~exception_code[5];
+    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush && !exception_flag;
+    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush && !exception_flag;
+    assign csr_we = ms_valid && csr_wen && !ms_flush && !exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
@@ -188,15 +226,15 @@ end
     logic exception_sam;
     logic sync_exception;
     logic take_irq;
-    assign exception_iam = (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
+    assign exception_iam = ms_valid && (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
     logic is_word_access;
     logic is_half_access;
     assign is_word_access = (load_inst == `LW) || (load_inst == `SW);
     assign is_half_access = (load_inst == `LH) || (load_inst == `LHU) || (load_inst == `SH);
-    assign exception_lam = !ms_flush &&
+    assign exception_lam = ms_valid && !ms_flush &&
                        (((load_inst == `LW) && (data_offest != 2'b00)) ||
                         (((load_inst == `LH) || (load_inst == `LHU)) && data_offest[0]));
-    assign exception_sam = !ms_flush &&
+    assign exception_sam = ms_valid && !ms_flush &&
                        (((load_inst == `SW) && (data_offest != 2'b00)) ||
                         ((load_inst == `SH) && data_offest[0]));
     assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];

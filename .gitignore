@@ -3,5 +3,9 @@ work/
 transcript
 results/
 
+# Local build and Vivado generated artifacts
+build/
+vivado-project/
+
 # Claude Code local settings
 .claude/

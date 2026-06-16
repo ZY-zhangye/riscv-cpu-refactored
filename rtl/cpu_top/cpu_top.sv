@@ -70,6 +70,8 @@ module cpu_top (
     logic exe_reg_fpu_wen;
     logic [11:0] exe_csr_addr;
     logic exe_csr_wen;
+    logic exe_load_pending;
+    logic exe_result_pending;
     logic [4:0] mem_dest_addr;
     logic mem_regfile_wen;
     logic mem_reg_fpu_wen;
@@ -151,6 +153,8 @@ module cpu_top (
         .exe_reg_fpu_wen(exe_reg_fpu_wen),
         .exe_csr_addr(exe_csr_addr),
         .exe_csr_wen(exe_csr_wen),
+        .exe_load_pending(exe_load_pending),
+        .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
         .mem_dest_addr(mem_dest_addr),
         .mem_regfile_wen(mem_regfile_wen),
@@ -182,6 +186,8 @@ module cpu_top (
         .exe_reg_fpu_wen(exe_reg_fpu_wen),
         .exe_csr_addr(exe_csr_addr),
         .exe_csr_wen(exe_csr_wen),
+        .exe_load_pending(exe_load_pending),
+        .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
         .ds_exc_bus(ds_exc_bus),
         .exception_flag(exception_flag),
