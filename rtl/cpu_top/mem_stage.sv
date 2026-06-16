@@ -64,7 +64,7 @@ module mem_stage (
         end
     end
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             ms_valid <= 1'b0;
             ms_allowin_r <= 1'b1;

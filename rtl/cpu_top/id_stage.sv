@@ -85,7 +85,7 @@ module id_stage (
     end
 
     //握手协议
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             ds_valid <= 1'b0;
             ds_allowin_r <= 1'b1;

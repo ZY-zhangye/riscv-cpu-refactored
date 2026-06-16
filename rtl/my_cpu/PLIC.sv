@@ -102,7 +102,7 @@ module PLIC (
         end
     endtask
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         integer i;
         logic [`PLIC_NUM_INTERRUPTS-1:0] pending_next;
         logic [`PLIC_NUM_INTERRUPTS-1:0] in_service_next;

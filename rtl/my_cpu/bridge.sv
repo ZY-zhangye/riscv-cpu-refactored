@@ -42,23 +42,26 @@ module bridge (
     localparam logic [31:0] UART_BASE  = `MY_CPU_UART_BASE_ADDR;
     localparam logic [31:0] TIMER_BASE = `MY_CPU_TIMER_BASE_ADDR;
     localparam logic [31:0] LEDS_BASE  = `MY_CPU_LEDS_BASE_ADDR;
+    localparam logic [15:0] PLIC_BASE_HI = 16'h8030;
+    localparam logic [3:0]  PLIC_LAST_PAGE = 4'h5;
 
     logic cpu_write;
     logic cpu_read;
     logic ram_sel;
+    logic ram_boot_sel;
+    logic ram_coremark_sel;
+    logic ram_ext_sel;
     logic io_region_sel;
     logic plic_region_sel;
     logic [1:0] read_target_r;
-    logic [31:0] ram_rdata_r;
 
     assign cpu_write = cpu_dmem_en && (cpu_dmem_wen != 4'b0000);
     assign cpu_read = cpu_dmem_en && (cpu_dmem_wen == 4'b0000);
 
-    assign ram_sel = cpu_dmem_en &&
-                     ((cpu_dmem_addr[31:28] == 4'h6) ||
-                      (cpu_dmem_addr[31:16] == 16'h8000) ||
-                      ((cpu_dmem_addr >= 32'h8010_0000) &&
-                       (cpu_dmem_addr <= 32'h8013_FFFF)));
+    assign ram_boot_sel = (cpu_dmem_addr[31:28] == 4'h6);
+    assign ram_coremark_sel = (cpu_dmem_addr[31:16] == 16'h8000);
+    assign ram_ext_sel = (cpu_dmem_addr[31:18] == 14'b1000_0000_0001_00);
+    assign ram_sel = cpu_dmem_en && (ram_boot_sel || ram_coremark_sel || ram_ext_sel);
 
     assign io_region_sel = cpu_dmem_en &&
                            ((cpu_dmem_addr[31:16] == UART_BASE[31:16]) ||
@@ -66,8 +69,8 @@ module bridge (
                             (cpu_dmem_addr[31:16] == LEDS_BASE[31:16]));
 
     assign plic_region_sel = cpu_dmem_en &&
-                             (cpu_dmem_addr >= `PLIC_PRIORITY_BASE_ADDR) &&
-                             (cpu_dmem_addr <= (`PLIC_IN_SERVICE_BASE_ADDR + 32'd4));
+                             (cpu_dmem_addr[31:16] == PLIC_BASE_HI) &&
+                             (cpu_dmem_addr[15:12] <= PLIC_LAST_PAGE);
 
     assign ram_en = ram_sel;
     assign ram_addr = cpu_dmem_addr;
@@ -86,12 +89,10 @@ module bridge (
     assign plic_addr = cpu_dmem_addr;
     assign plic_wdata = cpu_dmem_wdata;
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             read_target_r <= TARGET_NONE;
-            ram_rdata_r <= 32'd0;
         end else if (cpu_dmem_en) begin
-            ram_rdata_r <= ram_rdata;
             unique case (1'b1)
                 ram_sel:         read_target_r <= TARGET_RAM;
                 io_region_sel:   read_target_r <= TARGET_IO;
@@ -105,7 +106,7 @@ module bridge (
 
     always_comb begin
         unique case (read_target_r)
-            TARGET_RAM:  cpu_dmem_rdata = ram_rdata_r;
+            TARGET_RAM:  cpu_dmem_rdata = ram_rdata;
             TARGET_IO:   cpu_dmem_rdata = io_rdata;
             TARGET_PLIC: cpu_dmem_rdata = plic_rdata;
             default:     cpu_dmem_rdata = 32'd0;

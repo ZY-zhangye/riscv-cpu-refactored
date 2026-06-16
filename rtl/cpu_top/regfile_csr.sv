@@ -26,7 +26,7 @@ module regfile_csr (
     assign mret_flag = exception_code == 7'b100_0000; //仅当异常代码为MRET指令引起的异常时mret_flag才为1
     assign external_irq_flag = exception_code == `PLIC_IRQ_BIT;
     logic [31:0] cycle,br_cnt,exception_cnt,instret;
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             cycle <= 32'b0;
             br_cnt <= 32'b0;
@@ -47,7 +47,7 @@ module regfile_csr (
     end
 
     //CSR寄存器写逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             mstatus <= 32'b0;
             misa <= 32'b0;
@@ -119,7 +119,7 @@ module regfile_csr (
     end
 
     //异常标志和异常地址逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             prev_exception_flag <= 1'b0;
         end else if (exception_code[5]) begin
