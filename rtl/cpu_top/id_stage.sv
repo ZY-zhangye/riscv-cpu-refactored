@@ -57,10 +57,12 @@ module id_stage (
     logic ds_core_allowin;
     logic ds_allowin_r;
     logic fs_in_fire;
+    logic pipe_flush;
     logic ds_skid_valid;
     logic ds_skid_valid_next;
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_skid;
     logic [`EXC_WIDTH-1:0] fs_exc_bus_skid;
+    logic ds_flush_skid;
     logic load_use_hazard;
     logic raw_hazard;
     assign ds_ready_go = !load_use_hazard; 
@@ -68,16 +70,16 @@ module id_stage (
     assign ds_allowin = ds_allowin_r;
     assign ds_to_es_valid = ds_valid && ds_ready_go;
     assign fs_in_fire = fs_to_ds_valid && ds_allowin;
+    assign pipe_flush = exception_flag || br_taken;
 
     //锁存数据
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_r;
     logic [`EXC_WIDTH-1:0] fs_exc_bus_r;
+    logic ds_flush_r;
 
     always_comb begin
         ds_skid_valid_next = ds_skid_valid;
-        if (exception_flag || br_taken) begin
-            ds_skid_valid_next = 1'b0;
-        end else if (ds_core_allowin) begin
+        if (ds_core_allowin) begin
             ds_skid_valid_next = 1'b0;
         end else if (fs_in_fire && !ds_skid_valid) begin
             ds_skid_valid_next = 1'b1;
@@ -94,10 +96,8 @@ module id_stage (
             fs_exc_bus_r <= '0;
             fs_to_ds_bus_skid <= '0;
             fs_exc_bus_skid <= '0;
-        end else if (exception_flag || br_taken) begin
-            ds_valid <= 1'b0;
-            ds_skid_valid <= 1'b0;
-            ds_allowin_r <= 1'b1;
+            ds_flush_r <= 1'b0;
+            ds_flush_skid <= 1'b0;
         end else begin
             ds_skid_valid <= ds_skid_valid_next;
             ds_allowin_r <= !ds_skid_valid_next;
@@ -107,16 +107,27 @@ module id_stage (
                     ds_valid <= 1'b1;
                     fs_to_ds_bus_r <= fs_to_ds_bus_skid;
                     fs_exc_bus_r <= fs_exc_bus_skid;
+                    ds_flush_r <= ds_flush_skid || pipe_flush;
                 end else begin
                     ds_valid <= fs_in_fire;
                     if (fs_in_fire) begin
                         fs_to_ds_bus_r <= fs_to_ds_bus;
                         fs_exc_bus_r <= fs_exc_bus;
+                        ds_flush_r <= pipe_flush;
+                    end else begin
+                        ds_flush_r <= 1'b0;
                     end
                 end
             end else if (fs_in_fire && !ds_skid_valid) begin
                 fs_to_ds_bus_skid <= fs_to_ds_bus;
                 fs_exc_bus_skid <= fs_exc_bus;
+                ds_flush_skid <= pipe_flush;
+                if (pipe_flush) begin
+                    ds_flush_r <= 1'b1;
+                end
+            end else if (pipe_flush) begin
+                ds_flush_r <= ds_flush_r || ds_valid;
+                ds_flush_skid <= ds_flush_skid || ds_skid_valid;
             end
         end
     end
@@ -124,11 +135,7 @@ module id_stage (
         if (!rst_n) begin
             ds_flush = 1'b0;
         end else begin
-            if (exception_flag || br_taken) begin
-                ds_flush <= 1'b1;
-            end else begin
-                ds_flush <= 1'b0;
-            end
+            ds_flush = pipe_flush || ds_flush_r;
         end
     end
 

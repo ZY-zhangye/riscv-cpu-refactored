@@ -54,6 +54,9 @@ module bridge (
     logic io_region_sel;
     logic plic_region_sel;
     logic [1:0] read_target_r;
+    logic [31:0] ram_rdata_r;
+    logic [31:0] io_rdata_r;
+    logic [31:0] plic_rdata_r;
 
     assign cpu_write = cpu_dmem_en && (cpu_dmem_wen != 4'b0000);
     assign cpu_read = cpu_dmem_en && (cpu_dmem_wen == 4'b0000);
@@ -104,11 +107,29 @@ module bridge (
         end
     end
 
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            ram_rdata_r <= 32'd0;
+            io_rdata_r <= 32'd0;
+            plic_rdata_r <= 32'd0;
+        end else if (cpu_read) begin
+            if (ram_sel) begin
+                ram_rdata_r <= ram_rdata;
+            end
+            if (io_region_sel) begin
+                io_rdata_r <= io_rdata;
+            end
+            if (plic_region_sel) begin
+                plic_rdata_r <= plic_rdata;
+            end
+        end
+    end
+
     always_comb begin
         unique case (read_target_r)
-            TARGET_RAM:  cpu_dmem_rdata = ram_rdata;
-            TARGET_IO:   cpu_dmem_rdata = io_rdata;
-            TARGET_PLIC: cpu_dmem_rdata = plic_rdata;
+            TARGET_RAM:  cpu_dmem_rdata = ram_rdata_r;
+            TARGET_IO:   cpu_dmem_rdata = io_rdata_r;
+            TARGET_PLIC: cpu_dmem_rdata = plic_rdata_r;
             default:     cpu_dmem_rdata = 32'd0;
         endcase
     end
