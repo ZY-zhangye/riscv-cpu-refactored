@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A 仿真优化检查点已于 2026-07-10 完成；实现与验证记录见 `multi_issue_l3a_checkpoint.md`。完整 L3 的 Fmax、资源和每秒有效指令数收敛仍等待目标 FPGA 综合环境。
+状态：L3A 仿真优化检查点已于 2026-07-10 完成；L3B 时序清理候选已完成 RTL 回归并等待云端后路由复测。记录见 `multi_issue_l3a_checkpoint.md` 与 `multi_issue_l3b_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 

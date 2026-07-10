@@ -104,8 +104,9 @@ module issue_stage (
     logic [2:0] consume_count;
     logic [2:0] incoming_count;
     logic [2:0] remaining_count;
-    logic [2:0] free_after_issue;
-    logic [2:0] required_slots;
+    logic can_accept_one;
+    logic can_accept_two;
+    logic queue_full_event_now;
 
     assign buf0 = queue0;
     assign buf1 = queue1;
@@ -261,10 +262,30 @@ module issue_stage (
     assign incoming_count = fs_to_is_valid0 ?
                             (fs_to_is_valid1 ? 3'd2 : 3'd1) : 3'd0;
     assign remaining_count = queue_count - consume_count;
-    assign free_after_issue = 3'd4 - remaining_count;
+    // 深度固定为4，显式容量判断避免在EX反压到IF路径上推导减法/比较进位链。
+    always_comb begin
+        can_accept_one = 1'b0;
+        can_accept_two = 1'b0;
+        unique case (queue_count)
+            3'd0, 3'd1, 3'd2: begin
+                can_accept_one = 1'b1;
+                can_accept_two = 1'b1;
+            end
+            3'd3: begin
+                can_accept_one = 1'b1;
+                can_accept_two = (consume_count != 3'd0);
+            end
+            3'd4: begin
+                can_accept_one = (consume_count != 3'd0);
+                can_accept_two = (consume_count == 3'd2);
+            end
+            default: ;
+        endcase
+    end
     // IF当前尚无有效packet时为下一次双字返回预留两个槽位。
-    assign required_slots = fs_to_is_valid0 ? incoming_count : 3'd2;
-    assign is_allowin = global_flush || (free_after_issue >= required_slots);
+    assign is_allowin = global_flush ||
+                        ((!fs_to_is_valid0 || fs_to_is_valid1) ?
+                         can_accept_two : can_accept_one);
     assign packet_accept = fs_to_is_valid0 && is_allowin && !global_flush;
 
     assign dual_issue_event = lane1_fire;
@@ -277,7 +298,7 @@ module issue_stage (
     assign issue_lane1_control_event = lane1_fire && info1.control;
     assign issue_bitman_pair_event = lane1_fire && (info0.bitman || info1.bitman);
     assign issue_cross_packet_pair_event = lane1_fire && (queue_tag0 != queue_tag1);
-    assign issue_queue_full_event = fs_to_is_valid0 && !is_allowin && !global_flush;
+    assign queue_full_event_now = fs_to_is_valid0 && !is_allowin && !global_flush;
 
     always_comb begin
         next_queue0 = queue0;
@@ -411,6 +432,7 @@ module issue_stage (
             queue_info3 <= '0;
             queue_count <= 3'd0;
             next_packet_tag <= 1'b0;
+            issue_queue_full_event <= 1'b0;
         end else begin
             queue0 <= next_queue0;
             queue1 <= next_queue1;
@@ -426,6 +448,8 @@ module issue_stage (
             queue_info3 <= next_queue_info3;
             queue_count <= next_queue_count;
             next_packet_tag <= next_next_packet_tag;
+            // 性能观测事件延迟一拍，切断issue/EX反压到CSR计数器的长布线路径。
+            issue_queue_full_event <= queue_full_event_now;
         end
     end
 
