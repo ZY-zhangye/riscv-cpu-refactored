@@ -24,6 +24,22 @@ module my_cpu (
     output logic        debug_commit_csr_wen,
     output logic [11:0] debug_commit_csr_addr,
     output logic [31:0] debug_commit_csr_data,
+    output logic [31:0] debug_wb_pc1,
+    output logic [4:0]  debug_wb_rf_addr1,
+    output logic [31:0] debug_wb_rf_data1,
+    output logic        debug_wb_rf_wen1,
+    output logic        debug_wb_fpu_rf_wen1,
+    output logic        debug_commit_valid1,
+    output logic [31:0] debug_commit_inst1,
+    output logic        debug_commit_csr_wen1,
+    output logic [11:0] debug_commit_csr_addr1,
+    output logic [31:0] debug_commit_csr_data1,
+    output logic [31:0] debug_issue_inst0,
+    output logic [31:0] debug_issue_pc0,
+    output logic        debug_issue_valid0,
+    output logic [31:0] debug_issue_inst1,
+    output logic [31:0] debug_issue_pc1,
+    output logic        debug_issue_valid1,
     output logic        debug_store_valid,
     output logic [31:0] debug_store_pc,
     output logic [31:0] debug_store_addr,
@@ -35,6 +51,9 @@ module my_cpu (
     logic [31:0] imem_rdata;
     logic [31:0] imem_addr;
     logic        imem_en;
+    logic [31:0] imem_rdata1;
+    logic [31:0] imem_addr1;
+    logic        imem_en1;
 
     logic [31:0] cpu_dmem_rdata;
     logic [31:0] cpu_dmem_addr;
@@ -73,6 +92,9 @@ module my_cpu (
         .imem_rdata(imem_rdata),
         .imem_addr(imem_addr),
         .imem_en(imem_en),
+        .imem_rdata1(imem_rdata1),
+        .imem_addr1(imem_addr1),
+        .imem_en1(imem_en1),
         .dmem_rdata(cpu_dmem_rdata),
         .dmem_addr(cpu_dmem_addr),
         .dmem_wen(cpu_dmem_wen),
@@ -92,6 +114,22 @@ module my_cpu (
         .debug_commit_csr_wen(debug_commit_csr_wen),
         .debug_commit_csr_addr(debug_commit_csr_addr),
         .debug_commit_csr_data(debug_commit_csr_data),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1),
+        .debug_commit_valid1(debug_commit_valid1),
+        .debug_commit_inst1(debug_commit_inst1),
+        .debug_commit_csr_wen1(debug_commit_csr_wen1),
+        .debug_commit_csr_addr1(debug_commit_csr_addr1),
+        .debug_commit_csr_data1(debug_commit_csr_data1),
+        .debug_issue_inst0(debug_issue_inst0),
+        .debug_issue_pc0(debug_issue_pc0),
+        .debug_issue_valid0(debug_issue_valid0),
+        .debug_issue_inst1(debug_issue_inst1),
+        .debug_issue_pc1(debug_issue_pc1),
+        .debug_issue_valid1(debug_issue_valid1),
         .debug_store_valid(debug_store_valid),
         .debug_store_pc(debug_store_pc),
         .debug_store_addr(debug_store_addr),
@@ -108,7 +146,10 @@ module my_cpu (
         .clk(clk),
         .addr(imem_addr),
         .en(imem_en),
-        .rdata(imem_rdata)
+        .rdata(imem_rdata),
+        .addr1(imem_addr1),
+        .en1(imem_en1),
+        .rdata1(imem_rdata1)
     );
 
     soc_data_ram u_data_ram (
@@ -184,7 +225,10 @@ module soc_inst_ram #(
     input  logic        clk,
     input  logic [31:0] addr,
     input  logic        en,
-    output logic [31:0] rdata
+    output logic [31:0] rdata,
+    input  logic [31:0] addr1,
+    input  logic        en1,
+    output logic [31:0] rdata1
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
@@ -193,6 +237,9 @@ module soc_inst_ram #(
     always_ff @(posedge clk) begin
         if (en) begin
             rdata <= mem[addr[INDEX_WIDTH+1:2]];
+        end
+        if (en1) begin
+            rdata1 <= mem[addr1[INDEX_WIDTH+1:2]];
         end
     end
 `else

@@ -198,6 +198,11 @@ PLIC 是电平式 pending：如果外设中断源在 complete 后仍保持为 1�
 | `perf_loaduse` | `0x7C7` | load-use 冒险停顿周期数 |
 | `perf_exstall` | `0x7C8` | 乘除法等执行级停顿周期数 |
 | `perf_exception` | `0x7C9` | 同步异常和外部中断进入 trap 的次数 |
+| `perf_dual_issue` | `0x7CA` | 成功双发射的周期数 |
+| `perf_single_issue` | `0x7CB` | 仅发射 lane0 的周期数 |
+| `perf_issue_raw` | `0x7CC` | 因包内 RAW 拒绝双发的次数 |
+| `perf_issue_waw` | `0x7CD` | 因包内 WAW 拒绝双发的次数 |
+| `perf_issue_struct` | `0x7CE` | 因复杂指令或结构限制拒绝双发的次数 |
 
 ### 当前 trap 语义
 

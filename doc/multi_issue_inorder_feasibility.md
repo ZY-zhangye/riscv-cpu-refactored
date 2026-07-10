@@ -188,6 +188,8 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.4 长期阶段 L1：保守 2-wide 整数双发
 
+状态：已于 2026-07-10 完成。实现与验证记录见 `multi_issue_l1_checkpoint.md`。
+
 目标是得到第一个可长期维护的双发版本。
 
 1. 双字取指、4~8 项 fetch queue 和 2-entry 以上的顺序 issue buffer。

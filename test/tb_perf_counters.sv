@@ -16,6 +16,11 @@ module tb_perf_counters;
     logic branch_mispredict_event;
     logic load_use_stall_event;
     logic execute_stall_event;
+    logic dual_issue_event;
+    logic single_issue_event;
+    logic issue_raw_reject_event;
+    logic issue_waw_reject_event;
+    logic issue_struct_reject_event;
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
@@ -35,6 +40,11 @@ module tb_perf_counters;
         .branch_mispredict_event(branch_mispredict_event),
         .load_use_stall_event(load_use_stall_event),
         .execute_stall_event(execute_stall_event),
+        .dual_issue_event(dual_issue_event),
+        .single_issue_event(single_issue_event),
+        .issue_raw_reject_event(issue_raw_reject_event),
+        .issue_waw_reject_event(issue_waw_reject_event),
+        .issue_struct_reject_event(issue_struct_reject_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
@@ -109,6 +119,11 @@ module tb_perf_counters;
         branch_mispredict_event = 1'b0;
         load_use_stall_event = 1'b0;
         execute_stall_event = 1'b0;
+        dual_issue_event = 1'b0;
+        single_issue_event = 1'b0;
+        issue_raw_reject_event = 1'b0;
+        issue_waw_reject_event = 1'b0;
+        issue_struct_reject_event = 1'b0;
 
         repeat (2) @(posedge clk);
         #1 rst_n = 1'b1;
@@ -153,6 +168,29 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_INSTRET,   32'd0, "cleared_perf_instret");
         expect_csr(`CSR_PERF_BRANCH,    32'd0, "cleared_perf_branch");
         expect_csr(`CSR_PERF_EXCEPTION, 32'd0, "cleared_perf_exception");
+
+        drive_cycle(1'b1, `CSR_PERF_CTRL, 32'h0000_0001,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        dual_issue_event = 1'b1;
+        drive_cycle(1'b0, 12'b0, 32'b0,
+                    2'd2, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        dual_issue_event = 1'b0;
+        single_issue_event = 1'b1;
+        issue_raw_reject_event = 1'b1;
+        issue_waw_reject_event = 1'b1;
+        issue_struct_reject_event = 1'b1;
+        drive_cycle(1'b0, 12'b0, 32'b0,
+                    2'd1, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        single_issue_event = 1'b0;
+        issue_raw_reject_event = 1'b0;
+        issue_waw_reject_event = 1'b0;
+        issue_struct_reject_event = 1'b0;
+
+        expect_csr(`CSR_PERF_DUAL_ISSUE,   32'd1, "perf_dual_issue");
+        expect_csr(`CSR_PERF_SINGLE_ISSUE, 32'd1, "perf_single_issue");
+        expect_csr(`CSR_PERF_ISSUE_RAW,    32'd1, "perf_issue_raw");
+        expect_csr(`CSR_PERF_ISSUE_WAW,    32'd1, "perf_issue_waw");
+        expect_csr(`CSR_PERF_ISSUE_STRUCT, 32'd1, "perf_issue_struct");
 
         $display("PERF COUNTER TEST PASSED");
         $finish;

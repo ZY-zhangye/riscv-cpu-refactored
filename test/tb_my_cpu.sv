@@ -15,6 +15,7 @@ module tb_my_cpu;
     logic [31:0] led;
     logic plic_irq;
     logic [`PLIC_NUM_INTERRUPTS-1:0] external_interrupts;
+    integer dual_issue_cycles;
 
 `ifdef DEBUG_EN
     logic [31:0] debug_inst_pc;
@@ -29,6 +30,22 @@ module tb_my_cpu;
     logic        debug_commit_csr_wen;
     logic [11:0] debug_commit_csr_addr;
     logic [31:0] debug_commit_csr_data;
+    logic [31:0] debug_wb_pc1;
+    logic [4:0]  debug_wb_rf_addr1;
+    logic [31:0] debug_wb_rf_data1;
+    logic        debug_wb_rf_wen1;
+    logic        debug_wb_fpu_rf_wen1;
+    logic        debug_commit_valid1;
+    logic [31:0] debug_commit_inst1;
+    logic        debug_commit_csr_wen1;
+    logic [11:0] debug_commit_csr_addr1;
+    logic [31:0] debug_commit_csr_data1;
+    logic [31:0] debug_issue_inst0;
+    logic [31:0] debug_issue_pc0;
+    logic        debug_issue_valid0;
+    logic [31:0] debug_issue_inst1;
+    logic [31:0] debug_issue_pc1;
+    logic        debug_issue_valid1;
     logic        debug_store_valid;
     logic [31:0] debug_store_pc;
     logic [31:0] debug_store_addr;
@@ -62,6 +79,22 @@ module tb_my_cpu;
         .debug_commit_csr_wen(debug_commit_csr_wen),
         .debug_commit_csr_addr(debug_commit_csr_addr),
         .debug_commit_csr_data(debug_commit_csr_data),
+        .debug_wb_pc1(debug_wb_pc1),
+        .debug_wb_rf_addr1(debug_wb_rf_addr1),
+        .debug_wb_rf_data1(debug_wb_rf_data1),
+        .debug_wb_rf_wen1(debug_wb_rf_wen1),
+        .debug_wb_fpu_rf_wen1(debug_wb_fpu_rf_wen1),
+        .debug_commit_valid1(debug_commit_valid1),
+        .debug_commit_inst1(debug_commit_inst1),
+        .debug_commit_csr_wen1(debug_commit_csr_wen1),
+        .debug_commit_csr_addr1(debug_commit_csr_addr1),
+        .debug_commit_csr_data1(debug_commit_csr_data1),
+        .debug_issue_inst0(debug_issue_inst0),
+        .debug_issue_pc0(debug_issue_pc0),
+        .debug_issue_valid0(debug_issue_valid0),
+        .debug_issue_inst1(debug_issue_inst1),
+        .debug_issue_pc1(debug_issue_pc1),
+        .debug_issue_valid1(debug_issue_valid1),
         .debug_store_valid(debug_store_valid),
         .debug_store_pc(debug_store_pc),
         .debug_store_addr(debug_store_addr),
@@ -97,6 +130,14 @@ module tb_my_cpu;
 `ifdef DEBUG_EN
     always_ff @(posedge clk) begin
         if (!rst_n) begin
+            dual_issue_cycles <= 0;
+        end else if (u_my_cpu.u_cpu_top.dual_issue_event) begin
+            dual_issue_cycles <= dual_issue_cycles + 1;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
             $display("Time: %0t, Reset asserted", $time);
         end else begin
             $display("Time: %0t", $time);
@@ -112,11 +153,19 @@ module tb_my_cpu;
             $display("--------------------------------------------------");
 
             if (debug_commit_valid) begin
-                $display("COMMIT pc=%08h inst=%08h gpr_wen=%0b gpr_addr=%0d gpr_data=%08h fpr_wen=%0b csr_wen=%0b csr_addr=%03h csr_data=%08h",
+                $display("COMMIT0 pc=%08h inst=%08h gpr_wen=%0b gpr_addr=%0d gpr_data=%08h fpr_wen=%0b csr_wen=%0b csr_addr=%03h csr_data=%08h",
                          debug_wb_pc, debug_commit_inst, debug_wb_rf_wen,
                          debug_wb_rf_addr, debug_wb_rf_data, debug_wb_fpu_rf_wen,
                          debug_commit_csr_wen, debug_commit_csr_addr,
                          debug_commit_csr_data);
+            end
+
+            if (debug_commit_valid1) begin
+                $display("COMMIT1 pc=%08h inst=%08h gpr_wen=%0b gpr_addr=%0d gpr_data=%08h fpr_wen=%0b csr_wen=%0b csr_addr=%03h csr_data=%08h",
+                         debug_wb_pc1, debug_commit_inst1, debug_wb_rf_wen1,
+                         debug_wb_rf_addr1, debug_wb_rf_data1,
+                         debug_wb_fpu_rf_wen1, debug_commit_csr_wen1,
+                         debug_commit_csr_addr1, debug_commit_csr_data1);
             end
 
             if (debug_store_valid) begin
@@ -128,13 +177,17 @@ module tb_my_cpu;
     end
 
     always_ff @(posedge clk) begin
-        if (rst_n && debug_commit_valid && (debug_wb_pc == 32'h8000_0044)) begin
+        if (rst_n && ((debug_commit_valid && (debug_wb_pc == 32'h8000_0044)) ||
+                      (debug_commit_valid1 && (debug_wb_pc1 == 32'h8000_0044)))) begin
             $display("---------------------------------------------");
             $display("Time: %0t", $time);
             $display("Simulation finished.");
+            $display("Dual-issue cycles: %0d", dual_issue_cycles);
             $display("----------------------------------------------");
-            if (debug_data == 32'h0000_0001) begin
+            if ((debug_data == 32'h0000_0001) && (dual_issue_cycles > 0)) begin
                 $display("Test passed.");
+            end else if (dual_issue_cycles == 0) begin
+                $display("Test failed. No dual-issue cycle was observed.");
             end else begin
                 $display("Test failed. Expected 1 in x10, got %08h", debug_data);
             end

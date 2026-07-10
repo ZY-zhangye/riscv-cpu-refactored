@@ -101,6 +101,11 @@ static inline uint32_t mmio_read32(uint32_t addr) {
 #define CSR_PERF_LOADUSE   0x7C7
 #define CSR_PERF_EXSTALL   0x7C8
 #define CSR_PERF_EXCEPTION 0x7C9
+#define CSR_PERF_DUAL_ISSUE 0x7CA
+#define CSR_PERF_SINGLE_ISSUE 0x7CB
+#define CSR_PERF_ISSUE_RAW 0x7CC
+#define CSR_PERF_ISSUE_WAW 0x7CD
+#define CSR_PERF_ISSUE_STRUCT 0x7CE
 
 /* CSR_PERF_CTRL: bit0=enable, bit1=write-one-to-clear counters. */
 #define PERF_CTRL_ENABLE   (1u << 0)

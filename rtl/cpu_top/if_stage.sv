@@ -6,10 +6,15 @@ module if_stage (
     output logic [`ADDR_WIDTH-1:0] pc_out,
     output logic inst_ren,
     input logic [`DATA_WIDTH-1:0] inst_in,
-    //与译码阶段的数据接口
+    output logic [`ADDR_WIDTH-1:0] pc_out1,
+    output logic inst_ren1,
+    input logic [`DATA_WIDTH-1:0] inst_in1,
+    //与issue阶段的数据接口
     input logic ds_allowin,
     output logic fs_to_ds_valid,
+    output logic fs_to_ds_valid1,
     output logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus,
+    output logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus1,
     //分支跳转接口
     input logic br_taken,
     input logic [`ADDR_WIDTH-1:0] br_target,
@@ -55,7 +60,8 @@ module if_stage (
     assign bp_pred_taken = bp_hit && bp_taken[bp_lookup_index];
     assign bp_pred_target = bp_target[bp_lookup_index];
 
-    assign seq_pc = fs_out_pc + 4;
+    logic fetch_kill;
+    assign seq_pc = fs_out_pc + 8;
     assign next_pc = exception_flag ? exception_addr :
                      br_taken_reg ? br_target_reg :
                      bp_pred_taken ? bp_pred_target :
@@ -65,7 +71,10 @@ module if_stage (
     logic fs_allowin;
     assign fs_ready_go = 1'b1;
     assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
-    assign fs_to_ds_valid = fs_valid && fs_ready_go;
+    assign fetch_kill = br_taken || br_taken_reg || exception_flag;
+    assign fs_to_ds_valid = fs_valid && fs_ready_go && !fetch_kill;
+    //L1只预测lane0；若lane0预测跳转，顺序取回的lane1无效。
+    assign fs_to_ds_valid1 = fs_to_ds_valid && !bp_pred_taken;
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             fs_valid <= 1'b0;
@@ -73,7 +82,7 @@ module if_stage (
             fs_valid <= 1'b1;
         end
         if (!rst_n) begin
-            fs_pc <= `PC_START - 4;
+            fs_pc <= `PC_START - 8;
         end else if (fs_allowin) begin
             fs_pc <= next_pc;
         end
@@ -110,6 +119,9 @@ module if_stage (
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag), bp_pred_target};
+    assign pc_out1 = next_pc + 32'd4;
+    assign inst_ren1 = fs_allowin;
+    assign fs_to_ds_bus1 = {inst_in1, fs_out_pc + 32'd4, 1'b0, 32'b0};
 
     /*logic exception_iam;
     assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/
