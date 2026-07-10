@@ -26,7 +26,10 @@ module issue_stage (
     output logic issue_waw_reject_event,
     output logic issue_struct_reject_event,
     output logic issue_lsu_pair_event,
-    output logic issue_lane1_control_event
+    output logic issue_lane1_control_event,
+    output logic issue_bitman_pair_event,
+    output logic issue_cross_packet_pair_event,
+    output logic issue_queue_full_event
     `ifdef DEBUG_EN
     ,
     output logic [31:0] debug_issue_inst0,
@@ -48,16 +51,41 @@ module issue_stage (
         logic simple_int;
         logic lsu;
         logic control;
+        logic bitman;
     } issue_info_t;
 
+    logic [`FS_DS_WIDTH-1:0] queue0;
+    logic [`FS_DS_WIDTH-1:0] queue1;
+    logic [`FS_DS_WIDTH-1:0] queue2;
+    logic [`FS_DS_WIDTH-1:0] queue3;
+    logic [`FS_DS_WIDTH-1:0] next_queue0;
+    logic [`FS_DS_WIDTH-1:0] next_queue1;
+    logic [`FS_DS_WIDTH-1:0] next_queue2;
+    logic [`FS_DS_WIDTH-1:0] next_queue3;
+    logic [2:0] queue_count;
+    logic [2:0] next_queue_count;
+    logic queue_tag0;
+    logic queue_tag1;
+    logic queue_tag2;
+    logic queue_tag3;
+    logic next_queue_tag0;
+    logic next_queue_tag1;
+    logic next_queue_tag2;
+    logic next_queue_tag3;
+    logic next_packet_tag;
+    logic next_next_packet_tag;
+    issue_info_t queue_info0;
+    issue_info_t queue_info1;
+    issue_info_t queue_info2;
+    issue_info_t queue_info3;
+    issue_info_t next_queue_info0;
+    issue_info_t next_queue_info1;
+    issue_info_t next_queue_info2;
+    issue_info_t next_queue_info3;
     logic [`FS_DS_WIDTH-1:0] buf0;
     logic [`FS_DS_WIDTH-1:0] buf1;
     logic buf_valid0;
     logic buf_valid1;
-    logic [`FS_DS_WIDTH-1:0] next_buf0;
-    logic [`FS_DS_WIDTH-1:0] next_buf1;
-    logic next_buf_valid0;
-    logic next_buf_valid1;
 
     logic [31:0] buf_inst0;
     logic [31:0] buf_inst1;
@@ -72,8 +100,17 @@ module issue_stage (
     logic can_pair;
     logic lane0_fire;
     logic lane1_fire;
-    logic buffer_will_empty;
     logic packet_accept;
+    logic [2:0] consume_count;
+    logic [2:0] incoming_count;
+    logic [2:0] remaining_count;
+    logic [2:0] free_after_issue;
+    logic [2:0] required_slots;
+
+    assign buf0 = queue0;
+    assign buf1 = queue1;
+    assign buf_valid0 = (queue_count != 3'd0);
+    assign buf_valid1 = (queue_count >= 3'd2);
 
     assign buf_inst0 = buf0[`FS_DS_WIDTH-1 -: 32];
     assign buf_inst1 = buf1[`FS_DS_WIDTH-1 -: 32];
@@ -99,6 +136,8 @@ module issue_stage (
         logic legal_load;
         logic legal_store;
         logic legal_branch;
+        logic bitman_any;
+        logic bitman_rs2;
         begin
             opcode = inst[6:0];
             funct3 = inst[14:12];
@@ -139,29 +178,63 @@ module issue_stage (
                                          (funct3 == 3'b101) ||
                                          (funct3 == 3'b110) ||
                                          (funct3 == 3'b111));
+            bitman_rs2 =
+                (is_op_reg && (funct7 == 7'b0010000) &&
+                 ((funct3 == 3'b010) || (funct3 == 3'b100) || (funct3 == 3'b110))) ||
+                (is_op_reg && (funct7 == 7'b0100000) &&
+                 ((funct3 == 3'b111) || (funct3 == 3'b110) || (funct3 == 3'b100))) ||
+                (is_op_reg && (funct7 == 7'b0000101) &&
+                 ((funct3 == 3'b100) || (funct3 == 3'b101) ||
+                  (funct3 == 3'b110) || (funct3 == 3'b111))) ||
+                (is_op_reg && (funct7 == 7'b0000100) &&
+                 (((funct3 == 3'b100) && (inst[24:20] != 5'b00000)) ||
+                  (funct3 == 3'b111))) ||
+                (is_op_reg &&
+                 (((funct7 == 7'b0100100) &&
+                   ((funct3 == 3'b001) || (funct3 == 3'b101))) ||
+                  ((funct7 == 7'b0110100) && (funct3 == 3'b001)) ||
+                  ((funct7 == 7'b0010100) && (funct3 == 3'b001))));
+            bitman_any = bitman_rs2 ||
+                (is_op_imm && (inst[31:20] == 12'h604) && (funct3 == 3'b001)) ||
+                (is_op_imm && (inst[31:20] == 12'h605) && (funct3 == 3'b001)) ||
+                (is_op_reg && (funct7 == 7'b0000100) &&
+                 (inst[24:20] == 5'b00000) && (funct3 == 3'b100)) ||
+                (is_op_imm && (inst[31:20] == 12'h287) && (funct3 == 3'b101)) ||
+                (is_op_imm && (inst[31:20] == 12'h698) && (funct3 == 3'b101)) ||
+                (is_op_imm && (inst[31:20] == 12'h687) && (funct3 == 3'b101)) ||
+                (is_op_imm && (funct7 == 7'b0000100) &&
+                 (inst[24:20] == 5'b01111) &&
+                 ((funct3 == 3'b001) || (funct3 == 3'b101))) ||
+                (is_op_imm &&
+                 (((funct7 == 7'b0100100) &&
+                   ((funct3 == 3'b001) || (funct3 == 3'b101))) ||
+                  ((funct7 == 7'b0110100) && (funct3 == 3'b001)) ||
+                  ((funct7 == 7'b0010100) && (funct3 == 3'b001))));
 
             info = '0;
             info.rs1 = inst[19:15];
             info.rs2 = inst[24:20];
             info.rd = inst[11:7];
             info.need_rs1 = is_op_imm || is_op_reg || legal_load ||
-                            legal_store || legal_branch || is_jalr;
-            info.need_rs2 = is_op_reg || legal_store || legal_branch;
+                            legal_store || legal_branch || is_jalr || bitman_any;
+            info.need_rs2 = is_op_reg || legal_store || legal_branch || bitman_rs2;
             info.write_gpr = (is_op_imm && legal_op_imm) ||
                              (is_op_reg && legal_op_reg) ||
                              is_lui || is_auipc || legal_load ||
-                             is_jal || is_jalr;
+                             is_jal || is_jalr || bitman_any;
             info.simple_int = (is_op_imm && legal_op_imm) ||
                               (is_op_reg && legal_op_reg) ||
-                              is_lui || is_auipc;
+                              is_lui || is_auipc || bitman_any;
             info.lsu = legal_load || legal_store;
             info.control = legal_branch || is_jal || is_jalr;
+            info.bitman = bitman_any;
             decode_issue_info = info;
         end
     endfunction
 
-    assign info0 = decode_issue_info(buf_inst0);
-    assign info1 = decode_issue_info(buf_inst1);
+    // 最终issue选择只读取入队时锁存的轻量预译码，避免重复穿过完整指令识别逻辑。
+    assign info0 = queue_info0;
+    assign info1 = queue_info1;
     assign pair_raw = info0.write_gpr && (info0.rd != 5'b0) &&
                       ((info1.need_rs1 && (info1.rs1 == info0.rd)) ||
                        (info1.need_rs2 && (info1.rs2 == info0.rd)));
@@ -184,9 +257,14 @@ module issue_stage (
 
     assign lane0_fire = is_to_ds_valid0 && ds_bundle_allowin;
     assign lane1_fire = is_to_ds_valid1 && ds_bundle_allowin;
-    assign buffer_will_empty = !buf_valid0 ||
-                               (lane0_fire && (!buf_valid1 || lane1_fire));
-    assign is_allowin = global_flush || buffer_will_empty;
+    assign consume_count = lane1_fire ? 3'd2 : lane0_fire ? 3'd1 : 3'd0;
+    assign incoming_count = fs_to_is_valid0 ?
+                            (fs_to_is_valid1 ? 3'd2 : 3'd1) : 3'd0;
+    assign remaining_count = queue_count - consume_count;
+    assign free_after_issue = 3'd4 - remaining_count;
+    // IF当前尚无有效packet时为下一次双字返回预留两个槽位。
+    assign required_slots = fs_to_is_valid0 ? incoming_count : 3'd2;
+    assign is_allowin = global_flush || (free_after_issue >= required_slots);
     assign packet_accept = fs_to_is_valid0 && is_allowin && !global_flush;
 
     assign dual_issue_event = lane1_fire;
@@ -197,51 +275,157 @@ module issue_stage (
                                        !pair_class_ok;
     assign issue_lsu_pair_event = lane1_fire && (info0.lsu || info1.lsu);
     assign issue_lane1_control_event = lane1_fire && info1.control;
+    assign issue_bitman_pair_event = lane1_fire && (info0.bitman || info1.bitman);
+    assign issue_cross_packet_pair_event = lane1_fire && (queue_tag0 != queue_tag1);
+    assign issue_queue_full_event = fs_to_is_valid0 && !is_allowin && !global_flush;
 
     always_comb begin
-        next_buf0 = buf0;
-        next_buf1 = buf1;
-        next_buf_valid0 = buf_valid0;
-        next_buf_valid1 = buf_valid1;
+        next_queue0 = queue0;
+        next_queue1 = queue1;
+        next_queue2 = queue2;
+        next_queue3 = queue3;
+        next_queue_tag0 = queue_tag0;
+        next_queue_tag1 = queue_tag1;
+        next_queue_tag2 = queue_tag2;
+        next_queue_tag3 = queue_tag3;
+        next_queue_info0 = queue_info0;
+        next_queue_info1 = queue_info1;
+        next_queue_info2 = queue_info2;
+        next_queue_info3 = queue_info3;
+        next_queue_count = queue_count;
+        next_next_packet_tag = next_packet_tag;
 
         if (global_flush) begin
-            next_buf0 = '0;
-            next_buf1 = '0;
-            next_buf_valid0 = 1'b0;
-            next_buf_valid1 = 1'b0;
+            next_queue0 = '0;
+            next_queue1 = '0;
+            next_queue2 = '0;
+            next_queue3 = '0;
+            next_queue_tag0 = 1'b0;
+            next_queue_tag1 = 1'b0;
+            next_queue_tag2 = 1'b0;
+            next_queue_tag3 = 1'b0;
+            next_queue_info0 = '0;
+            next_queue_info1 = '0;
+            next_queue_info2 = '0;
+            next_queue_info3 = '0;
+            next_queue_count = 3'd0;
+            next_next_packet_tag = 1'b0;
         end else begin
-            if (lane1_fire) begin
-                next_buf0 = '0;
-                next_buf1 = '0;
-                next_buf_valid0 = 1'b0;
-                next_buf_valid1 = 1'b0;
-            end else if (lane0_fire) begin
-                next_buf0 = buf1;
-                next_buf1 = '0;
-                next_buf_valid0 = buf_valid1;
-                next_buf_valid1 = 1'b0;
-            end
+            unique case (consume_count)
+                3'd1: begin
+                    next_queue0 = queue1;
+                    next_queue1 = queue2;
+                    next_queue2 = queue3;
+                    next_queue3 = '0;
+                    next_queue_tag0 = queue_tag1;
+                    next_queue_tag1 = queue_tag2;
+                    next_queue_tag2 = queue_tag3;
+                    next_queue_tag3 = 1'b0;
+                    next_queue_info0 = queue_info1;
+                    next_queue_info1 = queue_info2;
+                    next_queue_info2 = queue_info3;
+                    next_queue_info3 = '0;
+                end
+                3'd2: begin
+                    next_queue0 = queue2;
+                    next_queue1 = queue3;
+                    next_queue2 = '0;
+                    next_queue3 = '0;
+                    next_queue_tag0 = queue_tag2;
+                    next_queue_tag1 = queue_tag3;
+                    next_queue_tag2 = 1'b0;
+                    next_queue_tag3 = 1'b0;
+                    next_queue_info0 = queue_info2;
+                    next_queue_info1 = queue_info3;
+                    next_queue_info2 = '0;
+                    next_queue_info3 = '0;
+                end
+                default: ;
+            endcase
+            next_queue_count = remaining_count;
 
             if (packet_accept) begin
-                next_buf0 = fs_to_is_bus0;
-                next_buf1 = fs_to_is_bus1;
-                next_buf_valid0 = 1'b1;
-                next_buf_valid1 = fs_to_is_valid1;
+                unique case (remaining_count)
+                    3'd0: begin
+                        next_queue0 = fs_to_is_bus0;
+                        next_queue_tag0 = next_packet_tag;
+                        next_queue_info0 = decode_issue_info(
+                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                        if (fs_to_is_valid1) begin
+                            next_queue1 = fs_to_is_bus1;
+                            next_queue_tag1 = next_packet_tag;
+                            next_queue_info1 = decode_issue_info(
+                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
+                        end
+                    end
+                    3'd1: begin
+                        next_queue1 = fs_to_is_bus0;
+                        next_queue_tag1 = next_packet_tag;
+                        next_queue_info1 = decode_issue_info(
+                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                        if (fs_to_is_valid1) begin
+                            next_queue2 = fs_to_is_bus1;
+                            next_queue_tag2 = next_packet_tag;
+                            next_queue_info2 = decode_issue_info(
+                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
+                        end
+                    end
+                    3'd2: begin
+                        next_queue2 = fs_to_is_bus0;
+                        next_queue_tag2 = next_packet_tag;
+                        next_queue_info2 = decode_issue_info(
+                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                        if (fs_to_is_valid1) begin
+                            next_queue3 = fs_to_is_bus1;
+                            next_queue_tag3 = next_packet_tag;
+                            next_queue_info3 = decode_issue_info(
+                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
+                        end
+                    end
+                    default: begin
+                        next_queue3 = fs_to_is_bus0;
+                        next_queue_tag3 = next_packet_tag;
+                        next_queue_info3 = decode_issue_info(
+                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                    end
+                endcase
+                next_queue_count = remaining_count + incoming_count;
+                next_next_packet_tag = ~next_packet_tag;
             end
         end
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            buf0 <= '0;
-            buf1 <= '0;
-            buf_valid0 <= 1'b0;
-            buf_valid1 <= 1'b0;
+            queue0 <= '0;
+            queue1 <= '0;
+            queue2 <= '0;
+            queue3 <= '0;
+            queue_tag0 <= 1'b0;
+            queue_tag1 <= 1'b0;
+            queue_tag2 <= 1'b0;
+            queue_tag3 <= 1'b0;
+            queue_info0 <= '0;
+            queue_info1 <= '0;
+            queue_info2 <= '0;
+            queue_info3 <= '0;
+            queue_count <= 3'd0;
+            next_packet_tag <= 1'b0;
         end else begin
-            buf0 <= next_buf0;
-            buf1 <= next_buf1;
-            buf_valid0 <= next_buf_valid0;
-            buf_valid1 <= next_buf_valid1;
+            queue0 <= next_queue0;
+            queue1 <= next_queue1;
+            queue2 <= next_queue2;
+            queue3 <= next_queue3;
+            queue_tag0 <= next_queue_tag0;
+            queue_tag1 <= next_queue_tag1;
+            queue_tag2 <= next_queue_tag2;
+            queue_tag3 <= next_queue_tag3;
+            queue_info0 <= next_queue_info0;
+            queue_info1 <= next_queue_info1;
+            queue_info2 <= next_queue_info2;
+            queue_info3 <= next_queue_info3;
+            queue_count <= next_queue_count;
+            next_packet_tag <= next_next_packet_tag;
         end
     end
 

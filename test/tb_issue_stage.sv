@@ -24,6 +24,9 @@ module tb_issue_stage;
     logic issue_struct_reject_event;
     logic issue_lsu_pair_event;
     logic issue_lane1_control_event;
+    logic issue_bitman_pair_event;
+    logic issue_cross_packet_pair_event;
+    logic issue_queue_full_event;
     logic [31:0] debug_issue_inst0;
     logic [31:0] debug_issue_pc0;
     logic debug_issue_valid0;
@@ -41,6 +44,11 @@ module tb_issue_stage;
     localparam logic [31:0] SW_X3_0_X0 = 32'h0030_2023;
     localparam logic [31:0] BEQ_X1_X2_8 = 32'h0020_8463;
     localparam logic [31:0] CSRRW_X3_MSTATUS_X1 = 32'h3000_91f3;
+    localparam logic [31:0] ADDI_X3_X0_3 = 32'h0030_0193;
+    localparam logic [31:0] ADDI_X4_X3_4 = 32'h0041_8213;
+    localparam logic [31:0] ADDI_X5_X0_5 = 32'h0050_0293;
+    localparam logic [31:0] ADDI_X6_X0_6 = 32'h0060_0313;
+    localparam logic [31:0] SH1ADD_X3_X1_X2 = 32'h2020_a1b3;
 
     issue_stage dut (
         .clk(clk),
@@ -65,6 +73,9 @@ module tb_issue_stage;
         .issue_struct_reject_event(issue_struct_reject_event),
         .issue_lsu_pair_event(issue_lsu_pair_event),
         .issue_lane1_control_event(issue_lane1_control_event),
+        .issue_bitman_pair_event(issue_bitman_pair_event),
+        .issue_cross_packet_pair_event(issue_cross_packet_pair_event),
+        .issue_queue_full_event(issue_queue_full_event),
         .debug_issue_inst0(debug_issue_inst0),
         .debug_issue_pc0(debug_issue_pc0),
         .debug_issue_valid0(debug_issue_valid0),
@@ -200,6 +211,44 @@ module tb_issue_stage;
         #1;
         check("CSR younger preserved", is_to_ds_valid0 &&
               (bus_inst(is_to_ds_bus0) == CSRRW_X3_MSTATUS_X1));
+
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, SH1ADD_X3_X1_X2);
+        check("ALU to bitman RAW blocked", !is_to_ds_valid1);
+        check("ALU to bitman RAW event", issue_raw_reject_event);
+
+        reset_dut();
+        send_pair(ADDI_X5_X0_5, SH1ADD_X3_X1_X2);
+        check("ALU plus bitman lane1", is_to_ds_valid1);
+        check("bitman pair event", issue_bitman_pair_event);
+
+        // 四项队列允许保留的包尾指令与下一fetch packet队首重新配对。
+        reset_dut();
+        ds_bundle_allowin = 1'b0;
+        send_pair(ADDI_X1_X0_1, ADDI_X2_X1_2);
+        send_pair(ADDI_X3_X0_3, ADDI_X4_X3_4);
+        @(negedge clk);
+        fs_to_is_valid0 = 1'b1;
+        fs_to_is_valid1 = 1'b1;
+        fs_to_is_bus0 = packet(ADDI_X5_X0_5, 32'h8000_0008);
+        fs_to_is_bus1 = packet(ADDI_X6_X0_6, 32'h8000_000c);
+        #1;
+        check("four-entry queue full", !is_allowin);
+        check("queue full event", issue_queue_full_event);
+        ds_bundle_allowin = 1'b1;
+        #1;
+        check("oldest RAW emits single", single_issue_event);
+        @(posedge clk);
+        #1;
+        check("cross-packet pair lane0", bus_inst(is_to_ds_bus0) == ADDI_X2_X1_2);
+        check("cross-packet pair lane1", bus_inst(is_to_ds_bus1) == ADDI_X3_X0_3);
+        check("cross-packet dual", dual_issue_event);
+        check("cross-packet event", issue_cross_packet_pair_event);
+        check("pending packet accepted", is_allowin);
+        @(posedge clk);
+        #1;
+        fs_to_is_valid0 = 1'b0;
+        fs_to_is_valid1 = 1'b0;
 
         reset_dut();
         ds_bundle_allowin = 1'b0;

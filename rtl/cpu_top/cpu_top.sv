@@ -110,6 +110,9 @@ module cpu_top (
     logic issue_struct_reject_event;
     logic issue_lsu_pair_event;
     logic issue_lane1_control_event;
+    logic issue_bitman_pair_event;
+    logic issue_cross_packet_pair_event;
+    logic issue_queue_full_event;
 
     // GPR 4R2W
     logic [4:0] rs1_addr0;
@@ -338,7 +341,10 @@ module cpu_top (
         .issue_waw_reject_event(issue_waw_reject_event),
         .issue_struct_reject_event(issue_struct_reject_event),
         .issue_lsu_pair_event(issue_lsu_pair_event),
-        .issue_lane1_control_event(issue_lane1_control_event)
+        .issue_lane1_control_event(issue_lane1_control_event),
+        .issue_bitman_pair_event(issue_bitman_pair_event),
+        .issue_cross_packet_pair_event(issue_cross_packet_pair_event),
+        .issue_queue_full_event(issue_queue_full_event)
         `ifdef DEBUG_EN
         ,
         .debug_issue_inst0(debug_issue_inst0),
@@ -816,6 +822,9 @@ module cpu_top (
         .issue_lsu_pair_event(issue_lsu_pair_event),
         .issue_lane1_control_event(issue_lane1_control_event),
         .lsu_conflict_event(lsu_store_load_conflict),
+        .issue_bitman_pair_event(issue_bitman_pair_event),
+        .issue_cross_packet_pair_event(issue_cross_packet_pair_event),
+        .issue_queue_full_event(issue_queue_full_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)

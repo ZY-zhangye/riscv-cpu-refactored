@@ -26,6 +26,9 @@ module regfile_csr (
     input logic issue_lsu_pair_event,
     input logic issue_lane1_control_event,
     input logic lsu_conflict_event,
+    input logic issue_bitman_pair_event,
+    input logic issue_cross_packet_pair_event,
+    input logic issue_queue_full_event,
     output logic exception_flag,
     output logic [31:0] exception_addr,
     output logic external_irq_enable
@@ -58,6 +61,9 @@ module regfile_csr (
     logic [31:0] perf_lsu_pair;
     logic [31:0] perf_lane1_control;
     logic [31:0] perf_lsu_conflict;
+    logic [31:0] perf_bitman_pair;
+    logic [31:0] perf_cross_packet;
+    logic [31:0] perf_issue_qfull;
 
     assign perf_clear = csr_wen && (csr_waddr == `CSR_PERF_CTRL) && csr_wdata[1];
 
@@ -93,6 +99,9 @@ module regfile_csr (
             perf_lsu_pair <= 32'b0;
             perf_lane1_control <= 32'b0;
             perf_lsu_conflict <= 32'b0;
+            perf_bitman_pair <= 32'b0;
+            perf_cross_packet <= 32'b0;
+            perf_issue_qfull <= 32'b0;
         end else begin
             if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 perf_enable <= csr_wdata[0];
@@ -116,6 +125,9 @@ module regfile_csr (
                 perf_lsu_pair <= 32'b0;
                 perf_lane1_control <= 32'b0;
                 perf_lsu_conflict <= 32'b0;
+                perf_bitman_pair <= 32'b0;
+                perf_cross_packet <= 32'b0;
+                perf_issue_qfull <= 32'b0;
             end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 //控制写本身不计入测量窗口。
             end else if (perf_enable) begin
@@ -162,6 +174,15 @@ module regfile_csr (
                 end
                 if (lsu_conflict_event) begin
                     perf_lsu_conflict <= perf_lsu_conflict + 1'b1;
+                end
+                if (issue_bitman_pair_event) begin
+                    perf_bitman_pair <= perf_bitman_pair + 1'b1;
+                end
+                if (issue_cross_packet_pair_event) begin
+                    perf_cross_packet <= perf_cross_packet + 1'b1;
+                end
+                if (issue_queue_full_event) begin
+                    perf_issue_qfull <= perf_issue_qfull + 1'b1;
                 end
             end
         end
@@ -252,6 +273,9 @@ module regfile_csr (
             `CSR_PERF_LSU_PAIR: csr_rdata = perf_lsu_pair;
             `CSR_PERF_LANE1_CTRL: csr_rdata = perf_lane1_control;
             `CSR_PERF_LSU_CONFLICT: csr_rdata = perf_lsu_conflict;
+            `CSR_PERF_BITMAN_PAIR: csr_rdata = perf_bitman_pair;
+            `CSR_PERF_CROSS_PACKET: csr_rdata = perf_cross_packet;
+            `CSR_PERF_ISSUE_QFULL: csr_rdata = perf_issue_qfull;
             default: csr_rdata = 32'b0;
         endcase
         end
