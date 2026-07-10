@@ -78,6 +78,21 @@ static inline uint32_t mmio_read32(uint32_t addr) {
 #define CSR_CYCLE                  0xC00u
 #define CSR_INSTRET                0xC02u
 
+#define CSR_PERF_CTRL              0x7C0u
+#define CSR_PERF_CYCLE             0x7C1u
+#define CSR_PERF_INSTRET           0x7C2u
+#define CSR_PERF_BRANCH            0x7C3u
+#define CSR_PERF_BRMISP            0x7C4u
+#define CSR_PERF_BPHIT             0x7C5u
+#define CSR_PERF_BPMISS            0x7C6u
+#define CSR_PERF_LOADUSE           0x7C7u
+#define CSR_PERF_EXSTALL           0x7C8u
+#define CSR_PERF_EXCEPTION         0x7C9u
+
+/* CSR_PERF_CTRL: bit0=enable, bit1=write-one-to-clear counters. */
+#define PERF_CTRL_ENABLE           (1u << 0)
+#define PERF_CTRL_CLEAR            (1u << 1)
+
 #define MSTATUS_MIE                (1u << 3)
 #define MSTATUS_MPIE               (1u << 7)
 #define MIE_MEIE                   (1u << 11)

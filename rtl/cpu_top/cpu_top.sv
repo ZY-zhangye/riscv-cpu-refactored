@@ -22,7 +22,17 @@ module cpu_top (
     output logic [31:0] debug_wb_rf_data,
     output logic debug_wb_rf_wen,
     output logic debug_wb_fpu_rf_wen,
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+    output logic debug_commit_valid,
+    output logic [31:0] debug_commit_inst,
+    output logic debug_commit_csr_wen,
+    output logic [11:0] debug_commit_csr_addr,
+    output logic [31:0] debug_commit_csr_data,
+    output logic debug_store_valid,
+    output logic [31:0] debug_store_pc,
+    output logic [31:0] debug_store_addr,
+    output logic [3:0] debug_store_wen,
+    output logic [31:0] debug_store_wdata
     `endif
 );
 
@@ -76,6 +86,7 @@ module cpu_top (
     logic mem_regfile_wen;
     logic mem_reg_fpu_wen;
     logic [`EXC_WIDTH-1:0] ds_exc_bus;
+    logic load_use_stall_event;
 
     //连接es模块
     logic es_valid;
@@ -86,6 +97,14 @@ module cpu_top (
     logic [31:0] mem_result;
     logic [31:0] reg_fpu_data3;
     logic [`EXE_EXC_BUS - 1:0] exe_exc_bus;
+    logic branch_event;
+    logic branch_mispredict_event;
+    logic execute_stall_event;
+    logic store_event;
+    logic [31:0] store_pc;
+    logic [31:0] store_addr;
+    logic [3:0] store_wen;
+    logic [31:0] store_wdata;
 
     //连接ms模块
     logic ms_valid;
@@ -97,8 +116,7 @@ module cpu_top (
     logic [31:0] csr_wdata;
     logic [6:0] exception_code;
     logic [31:0] exception_mtval;
-    logic valid_inst;
-    assign valid_inst = br_taken;
+    logic [1:0] retire_count;
 
     //实例化
     if_stage u_if_stage (
@@ -163,7 +181,8 @@ module cpu_top (
         .br_taken(br_redirect),
         .exception_flag(exception_flag),
         .fs_exc_bus(fs_exc_bus),
-        .ds_exc_bus(ds_exc_bus)
+        .ds_exc_bus(ds_exc_bus),
+        .load_use_stall_event(load_use_stall_event)
     );
 
     exe_stage u_exe_stage (
@@ -200,6 +219,14 @@ module cpu_top (
         .bp_update_taken(bp_update_taken),
         .bp_update_target(bp_update_target),
         .bp_update_is_jalr(bp_update_is_jalr),
+        .branch_event(branch_event),
+        .branch_mispredict_event(branch_mispredict_event),
+        .execute_stall_event(execute_stall_event),
+        .store_event(store_event),
+        .store_pc(store_pc),
+        .store_addr(store_addr),
+        .store_wen(store_wen),
+        .store_wdata(store_wdata),
         .mem_result(mem_result),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus)
@@ -229,7 +256,8 @@ module cpu_top (
         .csr_waddr(csr_waddr),
         .csr_wdata(csr_wdata),
         .exception_code(exception_code),
-        .exception_mtval(exception_mtval)
+        .exception_mtval(exception_mtval),
+        .retire_count(retire_count)
     );
 
     wb_stage u_wb_stage (
@@ -248,7 +276,12 @@ module cpu_top (
         .debug_wb_rf_addr(debug_wb_rf_addr),
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
-        .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen)
+        .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
+        .debug_commit_valid(debug_commit_valid),
+        .debug_commit_inst(debug_commit_inst),
+        .debug_commit_csr_wen(debug_commit_csr_wen),
+        .debug_commit_csr_addr(debug_commit_csr_addr),
+        .debug_commit_csr_data(debug_commit_csr_data)
         `endif
     );
 
@@ -293,12 +326,23 @@ module cpu_top (
         .csr_rdata(csr_data),
         .exception_code(exception_code),
         .exception_mtval(exception_mtval),
-        .br_taken(br_redirect),
-        .ms_to_ws_valid(ms_to_ws_valid),
+        .retire_count(retire_count),
+        .branch_event(branch_event),
+        .branch_mispredict_event(branch_mispredict_event),
+        .load_use_stall_event(load_use_stall_event),
+        .execute_stall_event(execute_stall_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
     );
+
+    `ifdef DEBUG_EN
+    assign debug_store_valid = store_event;
+    assign debug_store_pc = store_pc;
+    assign debug_store_addr = store_addr;
+    assign debug_store_wen = store_wen;
+    assign debug_store_wdata = store_wdata;
+    `endif
 
 
 

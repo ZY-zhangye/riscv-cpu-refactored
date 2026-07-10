@@ -187,7 +187,17 @@ PLIC 是电平式 pending：如果外设中断源在 complete 后仍保持为 1�
 | `mtval` | `0x343` | 同步异常附加信息；外部中断为 0 |
 | `mip` | `0x344` | 可读写，但当前外部中断响应不依赖此寄存器 |
 | `cycle` | `0xC00` | 32 位周期计数 |
-| `instret` | `0xC02` | 32 位指令计数 |
+| `instret` | `0xC02` | 32 位精确退休指令计数 |
+| `perf_ctrl` | `0x7C0` | bit0 使能性能窗口；bit1 写 1 清零全部性能计数器 |
+| `perf_cycle` | `0x7C1` | 性能窗口内周期数 |
+| `perf_instret` | `0x7C2` | 性能窗口内精确退休指令数 |
+| `perf_branch` | `0x7C3` | 已解析的 branch/jump 数量 |
+| `perf_brmisp` | `0x7C4` | 产生 redirect 的预测错误数量 |
+| `perf_bphit` | `0x7C5` | 未产生 redirect 的正确预测数量 |
+| `perf_bpmiss` | `0x7C6` | 预测错误数量，当前与 `perf_brmisp` 同义 |
+| `perf_loaduse` | `0x7C7` | load-use 冒险停顿周期数 |
+| `perf_exstall` | `0x7C8` | 乘除法等执行级停顿周期数 |
+| `perf_exception` | `0x7C9` | 同步异常和外部中断进入 trap 的次数 |
 
 ### 当前 trap 语义
 

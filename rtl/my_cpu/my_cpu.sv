@@ -18,7 +18,17 @@ module my_cpu (
     output logic [31:0] debug_wb_rf_data,
     output logic        debug_wb_rf_wen,
     output logic        debug_wb_fpu_rf_wen,
-    output logic [31:0] debug_data
+    output logic [31:0] debug_data,
+    output logic        debug_commit_valid,
+    output logic [31:0] debug_commit_inst,
+    output logic        debug_commit_csr_wen,
+    output logic [11:0] debug_commit_csr_addr,
+    output logic [31:0] debug_commit_csr_data,
+    output logic        debug_store_valid,
+    output logic [31:0] debug_store_pc,
+    output logic [31:0] debug_store_addr,
+    output logic [3:0]  debug_store_wen,
+    output logic [31:0] debug_store_wdata
     `endif
 );
 
@@ -76,7 +86,17 @@ module my_cpu (
         .debug_wb_rf_data(debug_wb_rf_data),
         .debug_wb_rf_wen(debug_wb_rf_wen),
         .debug_wb_fpu_rf_wen(debug_wb_fpu_rf_wen),
-        .debug_data(debug_data)
+        .debug_data(debug_data),
+        .debug_commit_valid(debug_commit_valid),
+        .debug_commit_inst(debug_commit_inst),
+        .debug_commit_csr_wen(debug_commit_csr_wen),
+        .debug_commit_csr_addr(debug_commit_csr_addr),
+        .debug_commit_csr_data(debug_commit_csr_data),
+        .debug_store_valid(debug_store_valid),
+        .debug_store_pc(debug_store_pc),
+        .debug_store_addr(debug_store_addr),
+        .debug_store_wen(debug_store_wen),
+        .debug_store_wdata(debug_store_wdata)
         `endif
     );
 

@@ -12,8 +12,12 @@ module regfile_csr (
     //异常信息接口
     input logic [6:0] exception_code,
     input logic [31:0] exception_mtval,
-    input logic br_taken,
-    input logic ms_to_ws_valid,
+    //退休与性能事件接口。retire_count预留双发的0/1/2计数。
+    input logic [1:0] retire_count,
+    input logic branch_event,
+    input logic branch_mispredict_event,
+    input logic load_use_stall_event,
+    input logic execute_stall_event,
     output logic exception_flag,
     output logic [31:0] exception_addr,
     output logic external_irq_enable
@@ -25,23 +29,84 @@ module regfile_csr (
     logic prev_exception_flag;
     assign mret_flag = exception_code == 7'b100_0000; //仅当异常代码为MRET指令引起的异常时mret_flag才为1
     assign external_irq_flag = exception_code == `PLIC_IRQ_BIT;
-    logic [31:0] cycle,br_cnt,exception_cnt,instret;
+    logic [31:0] cycle;
+    logic [31:0] instret;
+    logic perf_enable;
+    logic perf_clear;
+    logic [31:0] perf_cycle;
+    logic [31:0] perf_instret;
+    logic [31:0] perf_branch;
+    logic [31:0] perf_brmisp;
+    logic [31:0] perf_bphit;
+    logic [31:0] perf_bpmiss;
+    logic [31:0] perf_loaduse;
+    logic [31:0] perf_exstall;
+    logic [31:0] perf_exception;
+
+    assign perf_clear = csr_wen && (csr_waddr == `CSR_PERF_CTRL) && csr_wdata[1];
+
+    //标准cycle/instret始终运行；instret只统计真正退休的指令。
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             cycle <= 32'b0;
-            br_cnt <= 32'b0;
-            exception_cnt <= 32'b0;
             instret <= 32'b0;
         end else begin
             cycle <= cycle + 1'b1; //每个时钟周期cycle自增
-            if (br_taken) begin
-                br_cnt <= br_cnt + 1'b1; //每当发生分支跳转时br_cnt自增
+            instret <= instret + {{30{1'b0}}, retire_count};
+        end
+    end
+
+    //0x7C0性能计数窗口：bit0使能，bit1写1清零。
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            perf_enable <= 1'b1;
+            perf_cycle <= 32'b0;
+            perf_instret <= 32'b0;
+            perf_branch <= 32'b0;
+            perf_brmisp <= 32'b0;
+            perf_bphit <= 32'b0;
+            perf_bpmiss <= 32'b0;
+            perf_loaduse <= 32'b0;
+            perf_exstall <= 32'b0;
+            perf_exception <= 32'b0;
+        end else begin
+            if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
+                perf_enable <= csr_wdata[0];
             end
-            if (exception_code[5]) begin
-                exception_cnt <= exception_cnt + 1'b1; //每当发生异常时exception_cnt自增
-            end
-            if (ms_to_ws_valid) begin
-                instret <= instret + 1'b1; //每当指令写回阶段有效时instret自增
+
+            if (perf_clear) begin
+                perf_cycle <= 32'b0;
+                perf_instret <= 32'b0;
+                perf_branch <= 32'b0;
+                perf_brmisp <= 32'b0;
+                perf_bphit <= 32'b0;
+                perf_bpmiss <= 32'b0;
+                perf_loaduse <= 32'b0;
+                perf_exstall <= 32'b0;
+                perf_exception <= 32'b0;
+            end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
+                //控制写本身不计入测量窗口。
+            end else if (perf_enable) begin
+                perf_cycle <= perf_cycle + 1'b1;
+                perf_instret <= perf_instret + {{30{1'b0}}, retire_count};
+                if (branch_event) begin
+                    perf_branch <= perf_branch + 1'b1;
+                    if (branch_mispredict_event) begin
+                        perf_brmisp <= perf_brmisp + 1'b1;
+                        perf_bpmiss <= perf_bpmiss + 1'b1;
+                    end else begin
+                        perf_bphit <= perf_bphit + 1'b1;
+                    end
+                end
+                if (load_use_stall_event) begin
+                    perf_loaduse <= perf_loaduse + 1'b1;
+                end
+                if (execute_stall_event) begin
+                    perf_exstall <= perf_exstall + 1'b1;
+                end
+                if (exception_code[5]) begin
+                    perf_exception <= perf_exception + 1'b1;
+                end
             end
         end
     end
@@ -112,7 +177,17 @@ module regfile_csr (
             `CSR_MIMPID: csr_rdata = mimpid;
             `CSR_MSCRATCH: csr_rdata = mscratch;
             `CSR_CYCLE: csr_rdata = cycle;
-            `CSR_INSTRET: csr_rdata = instret - (exception_cnt * 3) - (br_cnt * 3); //假设每条指令都占用一个周期，异常和分支指令不计入指令计数
+            `CSR_INSTRET: csr_rdata = instret;
+            `CSR_PERF_CTRL: csr_rdata = {31'b0, perf_enable};
+            `CSR_PERF_CYCLE: csr_rdata = perf_cycle;
+            `CSR_PERF_INSTRET: csr_rdata = perf_instret;
+            `CSR_PERF_BRANCH: csr_rdata = perf_branch;
+            `CSR_PERF_BRMISP: csr_rdata = perf_brmisp;
+            `CSR_PERF_BPHIT: csr_rdata = perf_bphit;
+            `CSR_PERF_BPMISS: csr_rdata = perf_bpmiss;
+            `CSR_PERF_LOADUSE: csr_rdata = perf_loaduse;
+            `CSR_PERF_EXSTALL: csr_rdata = perf_exstall;
+            `CSR_PERF_EXCEPTION: csr_rdata = perf_exception;
             default: csr_rdata = 32'b0;
         endcase
         end

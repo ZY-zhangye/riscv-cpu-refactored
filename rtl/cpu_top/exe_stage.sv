@@ -44,7 +44,17 @@ module exe_stage(
     output logic [31:0] bp_update_pc,
     output logic bp_update_taken,
     output logic [31:0] bp_update_target,
-    output logic bp_update_is_jalr
+    output logic bp_update_is_jalr,
+    //性能计数事件
+    output logic branch_event,
+    output logic branch_mispredict_event,
+    output logic execute_stall_event,
+    //实际数据存储写事件，用于调试trace
+    output logic store_event,
+    output logic [31:0] store_pc,
+    output logic [31:0] store_addr,
+    output logic [3:0] store_wen,
+    output logic [31:0] store_wdata
 );
 
     logic es_ready_go;
@@ -216,7 +226,8 @@ module exe_stage(
     logic is_multicycle;
     logic [1:0] exe_result_sel;
     logic [31:0] exe_pc;
-    assign {exe_pc, exe_result_sel,is_bitman, is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp, rd_addr, regfile_wen, reg_fpu_wen, is_multicycle} = ctrl_packet;
+    logic [31:0] exe_inst;
+    assign {exe_pc, exe_inst, exe_result_sel, is_bitman, is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp, rd_addr, regfile_wen, reg_fpu_wen, is_multicycle} = ctrl_packet;
     //SRC_PACKET解包
     logic [31:0] reg_src1;
     logic [31:0] reg_src2;
@@ -517,6 +528,8 @@ module exe_stage(
     assign bp_update_taken = br_taken;
     assign bp_update_target = br_target;
     assign bp_update_is_jalr = is_jalr;
+    assign branch_event = es_to_ms_valid && ms_allowin && !es_flush && is_br_jmp;
+    assign branch_mispredict_event = branch_event && br_redirect;
     //结果选择
     always_comb begin
         exe_result = 32'b0;
@@ -540,10 +553,18 @@ module exe_stage(
     assign exe_load_pending = es_valid && !es_flush && exe_result_sel[0] &&
                               (regfile_wen || reg_fpu_wen);
     assign exe_result_pending = es_valid && !es_flush && !es_ready_go;
+    assign execute_stall_event = exe_result_pending;
+
+    assign store_event = dmem_en && (dmem_wen != 4'b0000);
+    assign store_pc = exe_pc;
+    assign store_addr = dmem_addr;
+    assign store_wen = dmem_wen;
+    assign store_wdata = dmem_wdata;
 
     //输出到下一级
     assign es_to_ms_bus = {
         exe_pc,     //32
+        exe_inst,   //32
         exe_result, //32
         load_inst,  //6
         rd_addr,

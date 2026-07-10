@@ -19,7 +19,12 @@ module wb_stage (
     output logic [4:0] debug_wb_rf_addr,
     output logic [31:0] debug_wb_rf_data,
     output logic debug_wb_rf_wen,
-    output logic debug_wb_fpu_rf_wen
+    output logic debug_wb_fpu_rf_wen,
+    output logic debug_commit_valid,
+    output logic [31:0] debug_commit_inst,
+    output logic debug_commit_csr_wen,
+    output logic [11:0] debug_commit_csr_addr,
+    output logic [31:0] debug_commit_csr_data
     `endif
 );
 
@@ -51,9 +56,23 @@ module wb_stage (
     logic [31:0] wb_result;
     logic [4:0] wb_dst_addr;
     logic [31:0] wb_pc;
+    logic [31:0] wb_inst;
     logic wb_regfile_wen;
     logic wb_fpu_regfile_wen;
-    assign {wb_pc, wb_result, wb_dst_addr, wb_regfile_wen, wb_fpu_regfile_wen} = ms_ws_bus_r;
+    logic wb_csr_wen;
+    logic [11:0] wb_csr_addr;
+    logic [31:0] wb_csr_data;
+    assign {
+        wb_pc,
+        wb_inst,
+        wb_result,
+        wb_dst_addr,
+        wb_regfile_wen,
+        wb_fpu_regfile_wen,
+        wb_csr_wen,
+        wb_csr_addr,
+        wb_csr_data
+    } = ms_ws_bus_r;
     assign regfile_wen = ws_valid && wb_regfile_wen;
     assign reg_fpu_wen = ws_valid && wb_fpu_regfile_wen;
     assign regfile_addr = wb_dst_addr;
@@ -64,6 +83,11 @@ module wb_stage (
     assign debug_wb_rf_data = wb_result;
     assign debug_wb_rf_wen = ws_valid && wb_regfile_wen;
     assign debug_wb_fpu_rf_wen = ws_valid && wb_fpu_regfile_wen;
+    assign debug_commit_valid = ws_valid;
+    assign debug_commit_inst = wb_inst;
+    assign debug_commit_csr_wen = ws_valid && wb_csr_wen;
+    assign debug_commit_csr_addr = wb_csr_addr;
+    assign debug_commit_csr_data = wb_csr_data;
     `endif
 
 endmodule

@@ -49,7 +49,9 @@ module id_stage (
     input logic br_taken,
     input logic exception_flag,
     input logic [`EXC_WIDTH-1:0] fs_exc_bus,
-    output logic [`EXC_WIDTH-1:0] ds_exc_bus
+    output logic [`EXC_WIDTH-1:0] ds_exc_bus,
+    //性能计数事件：每个因load-use相关而停顿的周期拉高
+    output logic load_use_stall_event
 );  
 
     logic ds_valid;
@@ -604,7 +606,7 @@ module id_stage (
     assign wb_exe_result = is_alu_inst || is_fpu_inst || is_mul_inst || is_csr_inst || is_jal || is_jalr || is_bitman_inst;
     assign wb_mem_result = is_mem_inst;
     assign exe_result_sel = {wb_exe_result, wb_mem_result};
-    assign ctrl_packet = {id_pc,exe_result_sel,is_bitman_inst, is_alu_inst, is_fpu_inst, is_mul_inst, is_mem_inst, is_csr_inst, is_br_jmp_inst, ctrl_rd_addr, ctrl_regfile_wen, ctrl_reg_fpu_wen, is_multicycle_inst};
+    assign ctrl_packet = {id_pc, id_inst, exe_result_sel, is_bitman_inst, is_alu_inst, is_fpu_inst, is_mul_inst, is_mem_inst, is_csr_inst, is_br_jmp_inst, ctrl_rd_addr, ctrl_regfile_wen, ctrl_reg_fpu_wen, is_multicycle_inst};
 
     //SRC_PACKET打包
     logic [`SRC_PACKET_WIDTH-1:0] src_packet;
@@ -683,6 +685,7 @@ module id_stage (
         end
     end
     assign load_use_hazard = exe_load_use_hazard && ds_valid;
+    assign load_use_stall_event = load_use_hazard;
 
 
 endmodule

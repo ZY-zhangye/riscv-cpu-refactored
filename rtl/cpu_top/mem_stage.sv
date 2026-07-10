@@ -31,7 +31,9 @@ module mem_stage (
     output logic [11:0] csr_waddr,
     output logic [31:0] csr_wdata,
     output logic [6:0] exception_code,
-    output logic [31:0] exception_mtval
+    output logic [31:0] exception_mtval,
+    //未来双发可直接扩展为0/1/2，本阶段只会输出0或1
+    output logic [1:0] retire_count
 );
 
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_r;
@@ -50,7 +52,7 @@ module mem_stage (
     assign ms_ready_go = 1'b1;
     assign ms_core_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_allowin = ms_allowin_r;
-    assign ms_to_ws_valid = ms_valid && ms_ready_go;
+    assign ms_to_ws_valid = ms_valid && ms_ready_go && !ms_flush && !exception_code[5];
     assign ms_in_fire = es_to_ms_valid && ms_allowin;
 
     always_comb begin
@@ -104,6 +106,7 @@ module mem_stage (
 
     //解包
     logic [31:0] mem_pc;
+    logic [31:0] mem_inst;
     logic [31:0] exe_result;
     logic [5:0] load_inst;
     logic [4:0] rd_addr;
@@ -115,6 +118,7 @@ module mem_stage (
     logic [31:0] csr_data;
     assign {
         mem_pc,
+        mem_inst,
         exe_result,
         load_inst,
         rd_addr,
@@ -200,10 +204,14 @@ end
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
         mem_pc,
+        mem_inst,
         mem_result,
         rd_addr,
         mem_regfile_wen,
-        mem_reg_fpu_wen
+        mem_reg_fpu_wen,
+        csr_we,
+        csr_waddr,
+        csr_wdata
     };
     //异常相关信息
     //解包异常信息包
@@ -250,5 +258,6 @@ end
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :
                             exc_mtval;
+    assign retire_count = {1'b0, ms_to_ws_valid};
 
 endmodule

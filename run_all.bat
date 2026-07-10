@@ -26,6 +26,10 @@ if not exist results (
 )
 echo.
 
+REM === L0 measurement infrastructure unit test ===
+call :run_unit_test tb_perf_counters perf_counters "PERF COUNTER TEST PASSED"
+if errorlevel 1 goto :fail
+
 if /I "%MODE%"=="z" goto :run_z_only
 if /I "%MODE%"=="zba" goto :run_zba_only
 if /I "%MODE%"=="zbb" goto :run_zbb_only
@@ -180,6 +184,21 @@ for %%i in (%TEST_LIST%) do (
     )
 )
 echo.
+exit /b 0
+
+:run_unit_test
+set "UNIT_TB=%~1"
+set "UNIT_RESULT=%~2"
+set "UNIT_PASS=%~3"
+echo ====== Running unit test %UNIT_TB% ======
+vsim -c -do "run -all; quit -force" %UNIT_TB% > "results\%UNIT_RESULT%.txt"
+findstr /C:"%UNIT_PASS%" "results\%UNIT_RESULT%.txt" >nul
+if errorlevel 1 (
+    powershell -Command "Write-Host '[FAILED] %UNIT_TB%' -ForegroundColor Red"
+    type "results\%UNIT_RESULT%.txt"
+    exit /b 1
+)
+powershell -Command "Write-Host '[PASSED] %UNIT_TB%' -ForegroundColor Green"
 exit /b 0
 
 :fail
