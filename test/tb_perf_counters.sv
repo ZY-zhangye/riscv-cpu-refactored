@@ -21,6 +21,9 @@ module tb_perf_counters;
     logic issue_raw_reject_event;
     logic issue_waw_reject_event;
     logic issue_struct_reject_event;
+    logic issue_lsu_pair_event;
+    logic issue_lane1_control_event;
+    logic lsu_conflict_event;
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
@@ -45,6 +48,9 @@ module tb_perf_counters;
         .issue_raw_reject_event(issue_raw_reject_event),
         .issue_waw_reject_event(issue_waw_reject_event),
         .issue_struct_reject_event(issue_struct_reject_event),
+        .issue_lsu_pair_event(issue_lsu_pair_event),
+        .issue_lane1_control_event(issue_lane1_control_event),
+        .lsu_conflict_event(lsu_conflict_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
@@ -124,6 +130,9 @@ module tb_perf_counters;
         issue_raw_reject_event = 1'b0;
         issue_waw_reject_event = 1'b0;
         issue_struct_reject_event = 1'b0;
+        issue_lsu_pair_event = 1'b0;
+        issue_lane1_control_event = 1'b0;
+        lsu_conflict_event = 1'b0;
 
         repeat (2) @(posedge clk);
         #1 rst_n = 1'b1;
@@ -172,9 +181,15 @@ module tb_perf_counters;
         drive_cycle(1'b1, `CSR_PERF_CTRL, 32'h0000_0001,
                     2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
         dual_issue_event = 1'b1;
+        issue_lsu_pair_event = 1'b1;
+        issue_lane1_control_event = 1'b1;
+        lsu_conflict_event = 1'b1;
         drive_cycle(1'b0, 12'b0, 32'b0,
                     2'd2, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
         dual_issue_event = 1'b0;
+        issue_lsu_pair_event = 1'b0;
+        issue_lane1_control_event = 1'b0;
+        lsu_conflict_event = 1'b0;
         single_issue_event = 1'b1;
         issue_raw_reject_event = 1'b1;
         issue_waw_reject_event = 1'b1;
@@ -191,6 +206,9 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_ISSUE_RAW,    32'd1, "perf_issue_raw");
         expect_csr(`CSR_PERF_ISSUE_WAW,    32'd1, "perf_issue_waw");
         expect_csr(`CSR_PERF_ISSUE_STRUCT, 32'd1, "perf_issue_struct");
+        expect_csr(`CSR_PERF_LSU_PAIR,     32'd1, "perf_lsu_pair");
+        expect_csr(`CSR_PERF_LANE1_CTRL,   32'd1, "perf_lane1_control");
+        expect_csr(`CSR_PERF_LSU_CONFLICT, 32'd1, "perf_lsu_conflict");
 
         $display("PERF COUNTER TEST PASSED");
         $finish;

@@ -66,9 +66,7 @@ module cpu_top (
     logic issue_allowin;
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
 
-    // branch/exception redirect，仅lane0可产生控制流和异常
-    logic br_taken;
-    logic [31:0] br_target;
+    // branch/exception redirect：每个bundle最多一条控制流，按lane年龄选择
     logic br_redirect;
     logic [31:0] br_redirect_target;
     logic bp_update_valid;
@@ -79,6 +77,24 @@ module cpu_top (
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
+    logic br_taken0;
+    logic [31:0] br_target0;
+    logic br_redirect0;
+    logic [31:0] br_redirect_target0;
+    logic bp_update_valid0;
+    logic [31:0] bp_update_pc0;
+    logic bp_update_taken0;
+    logic [31:0] bp_update_target0;
+    logic bp_update_is_jalr0;
+    logic br_taken1;
+    logic [31:0] br_target1;
+    logic br_redirect1;
+    logic [31:0] br_redirect_target1;
+    logic bp_update_valid1;
+    logic [31:0] bp_update_pc1;
+    logic bp_update_taken1;
+    logic [31:0] bp_update_target1;
+    logic bp_update_is_jalr1;
 
     // issue -> ID bundle
     logic is_to_ds_valid0;
@@ -92,6 +108,8 @@ module cpu_top (
     logic issue_raw_reject_event;
     logic issue_waw_reject_event;
     logic issue_struct_reject_event;
+    logic issue_lsu_pair_event;
+    logic issue_lane1_control_event;
 
     // GPR 4R2W
     logic [4:0] rs1_addr0;
@@ -183,22 +201,22 @@ module cpu_top (
     logic ex_bundle_advance;
     logic ex_lanes_ready;
 
-    // lane1不使用的执行副作用/控制流输出
-    logic [31:0] unused_dmem_addr1;
-    logic [31:0] unused_dmem_wdata1;
-    logic [3:0] unused_dmem_wen1;
-    logic unused_dmem_en1;
-    logic unused_br_taken1;
-    logic [31:0] unused_br_target1;
-    logic unused_br_redirect1;
-    logic [31:0] unused_br_redirect_target1;
-    logic unused_bp_update_valid1;
-    logic [31:0] unused_bp_update_pc1;
-    logic unused_bp_update_taken1;
-    logic [31:0] unused_bp_update_target1;
-    logic unused_bp_update_is_jalr1;
-    logic unused_branch_event1;
-    logic unused_branch_mispredict_event1;
+    // 双EX lane访存请求，顶层仲裁到单路数据存储器
+    logic [31:0] ex_dmem_addr0;
+    logic [31:0] ex_dmem_wdata0;
+    logic [3:0] ex_dmem_wen0;
+    logic ex_dmem_en0;
+    logic [31:0] ex_dmem_addr1;
+    logic [31:0] ex_dmem_wdata1;
+    logic [3:0] ex_dmem_wen1;
+    logic ex_dmem_en1;
+    logic ex_load_request0;
+    logic ex_load_request1;
+    logic ex_load_request;
+    logic mem_store_request;
+    logic lsu_store_load_conflict;
+    logic branch_event1;
+    logic branch_mispredict_event1;
     logic unused_store_event1;
     logic [31:0] unused_store_pc1;
     logic [31:0] unused_store_addr1;
@@ -210,6 +228,8 @@ module cpu_top (
     logic [31:0] store_addr0;
     logic [3:0] store_wen0;
     logic [31:0] store_wdata0;
+    logic [31:0] exe_forward_result0;
+    logic [31:0] exe_forward_result1;
 
     // MEM lane0/lane1
     logic ms_allowin0_raw;
@@ -233,17 +253,34 @@ module cpu_top (
     logic [31:0] csr_wdata0;
     logic [6:0] exception_code0;
     logic [31:0] exception_mtval0;
+    logic [6:0] exception_code1;
+    logic [31:0] exception_mtval1;
     logic [1:0] retire_count0;
     logic [1:0] retire_count1;
     logic ws_bundle_allowin;
     logic ws_allowin0_raw;
     logic ws_allowin1_raw;
 
-    logic unused_csr_we1;
-    logic [11:0] unused_csr_waddr1;
-    logic [31:0] unused_csr_wdata1;
-    logic [6:0] unused_exception_code1;
-    logic [31:0] unused_exception_mtval1;
+    logic csr_we1;
+    logic [11:0] csr_waddr1;
+    logic [31:0] csr_wdata1;
+    logic [6:0] selected_exception_code;
+    logic [31:0] selected_exception_mtval;
+    logic selected_csr_we;
+    logic [11:0] selected_csr_waddr;
+    logic [31:0] selected_csr_wdata;
+    logic lane0_redirect_event;
+    logic lane1_commit_kill;
+    logic store_commit_valid0;
+    logic [31:0] store_commit_pc0;
+    logic [31:0] store_commit_addr0;
+    logic [3:0] store_commit_wen0;
+    logic [31:0] store_commit_wdata0;
+    logic store_commit_valid1;
+    logic [31:0] store_commit_pc1;
+    logic [31:0] store_commit_addr1;
+    logic [3:0] store_commit_wen1;
+    logic [31:0] store_commit_wdata1;
 
     logic [1:0] retire_count_total;
     logic irq_pending;
@@ -299,7 +336,9 @@ module cpu_top (
         .single_issue_event(single_issue_event),
         .issue_raw_reject_event(issue_raw_reject_event),
         .issue_waw_reject_event(issue_waw_reject_event),
-        .issue_struct_reject_event(issue_struct_reject_event)
+        .issue_struct_reject_event(issue_struct_reject_event),
+        .issue_lsu_pair_event(issue_lsu_pair_event),
+        .issue_lane1_control_event(issue_lane1_control_event)
         `ifdef DEBUG_EN
         ,
         .debug_issue_inst0(debug_issue_inst0),
@@ -320,9 +359,7 @@ module cpu_top (
     assign ds_to_es_valid0 = ds_to_es_valid0_raw && id_bundle_advance;
     assign ds_to_es_valid1 = ds_to_es_valid1_raw && id_bundle_advance;
 
-    id_stage #(
-        .STALL_PRIMARY_FORWARDING(1'b0)
-    ) u_id_stage0 (
+    id_stage u_id_stage0 (
         .clk(clk),
         .rst_n(rst_n),
         .fs_to_ds_valid(is_to_ds_valid0 && ds_bundle_allowin),
@@ -366,6 +403,8 @@ module cpu_top (
         .ms_valid(ms_valid0),
         .secondary_exe_dest_addr(exe_dest_addr1),
         .secondary_exe_regfile_wen(exe_regfile_wen1),
+        .secondary_exe_load_pending(exe_load_pending1),
+        .secondary_exe_result_pending(exe_result_pending1),
         .secondary_es_valid(es_valid1),
         .secondary_mem_dest_addr(mem_dest_addr1),
         .secondary_mem_regfile_wen(mem_regfile_wen1),
@@ -378,9 +417,7 @@ module cpu_top (
         .ds_valid_out(ds_valid0)
     );
 
-    id_stage #(
-        .STALL_PRIMARY_FORWARDING(1'b1)
-    ) u_id_stage1 (
+    id_stage u_id_stage1 (
         .clk(clk),
         .rst_n(rst_n),
         .fs_to_ds_valid(is_to_ds_valid1 && ds_bundle_allowin),
@@ -424,6 +461,8 @@ module cpu_top (
         .ms_valid(ms_valid0),
         .secondary_exe_dest_addr(exe_dest_addr1),
         .secondary_exe_regfile_wen(exe_regfile_wen1),
+        .secondary_exe_load_pending(exe_load_pending1),
+        .secondary_exe_result_pending(exe_result_pending1),
         .secondary_es_valid(es_valid1),
         .secondary_mem_dest_addr(mem_dest_addr1),
         .secondary_mem_regfile_wen(mem_regfile_wen1),
@@ -440,9 +479,18 @@ module cpu_top (
     assign ex_lanes_ready = (!es_valid0 || es_to_ms_valid0_raw) &&
                             (!es_valid1 || es_to_ms_valid1_raw);
     assign ex_bundle_advance = ms_allowin0_raw && ms_allowin1_raw &&
-                               ex_lanes_ready;
+                               ex_lanes_ready && !lsu_store_load_conflict;
     assign es_to_ms_valid0 = es_to_ms_valid0_raw && ex_bundle_advance;
     assign es_to_ms_valid1 = es_to_ms_valid1_raw && ex_bundle_advance;
+
+    // lane0控制流年龄更老；当前配对规则不会让两个lane同时包含控制流。
+    assign br_redirect = br_redirect0 || br_redirect1;
+    assign br_redirect_target = br_redirect0 ? br_redirect_target0 : br_redirect_target1;
+    assign bp_update_valid = bp_update_valid0 || bp_update_valid1;
+    assign bp_update_pc = bp_update_valid0 ? bp_update_pc0 : bp_update_pc1;
+    assign bp_update_taken = bp_update_valid0 ? bp_update_taken0 : bp_update_taken1;
+    assign bp_update_target = bp_update_valid0 ? bp_update_target0 : bp_update_target1;
+    assign bp_update_is_jalr = bp_update_valid0 ? bp_update_is_jalr0 : bp_update_is_jalr1;
 
     exe_stage u_exe_stage0 (
         .clk(clk),
@@ -455,12 +503,15 @@ module cpu_top (
         .ds_to_es_bus(ds_to_es_bus0),
         .es_to_ms_bus(es_to_ms_bus0),
         .es_flush(es_flush0),
-        .mem_result(mem_result0),
+        .forward_ex_result0(exe_forward_result0),
+        .forward_ex_result1(exe_forward_result1),
+        .forward_mem_result0(mem_result0),
+        .forward_mem_result1(mem_result1),
         .reg_fpu_data3(reg_fpu_data3),
-        .dmem_addr(dmem_addr),
-        .dmem_wdata(dmem_wdata),
-        .dmem_wen(dmem_wen),
-        .dmem_en(dmem_en),
+        .dmem_addr(ex_dmem_addr0),
+        .dmem_wdata(ex_dmem_wdata0),
+        .dmem_wen(ex_dmem_wen0),
+        .dmem_en(ex_dmem_en0),
         .exe_dest_addr(exe_dest_addr0),
         .exe_regfile_wen(exe_regfile_wen0),
         .exe_reg_fpu_wen(exe_reg_fpu_wen0),
@@ -472,15 +523,15 @@ module cpu_top (
         .ds_exc_bus(ds_exc_bus0),
         .exe_exc_bus(exe_exc_bus0),
         .exception_flag(exception_flag),
-        .br_taken(br_taken),
-        .br_target(br_target),
-        .br_redirect(br_redirect),
-        .br_redirect_target(br_redirect_target),
-        .bp_update_valid(bp_update_valid),
-        .bp_update_pc(bp_update_pc),
-        .bp_update_taken(bp_update_taken),
-        .bp_update_target(bp_update_target),
-        .bp_update_is_jalr(bp_update_is_jalr),
+        .br_taken(br_taken0),
+        .br_target(br_target0),
+        .br_redirect(br_redirect0),
+        .br_redirect_target(br_redirect_target0),
+        .bp_update_valid(bp_update_valid0),
+        .bp_update_pc(bp_update_pc0),
+        .bp_update_taken(bp_update_taken0),
+        .bp_update_target(bp_update_target0),
+        .bp_update_is_jalr(bp_update_is_jalr0),
         .branch_event(ex_branch_event),
         .branch_mispredict_event(ex_branch_mispredict_event),
         .execute_stall_event(execute_stall_event0),
@@ -488,7 +539,8 @@ module cpu_top (
         .store_pc(store_pc0),
         .store_addr(store_addr0),
         .store_wen(store_wen0),
-        .store_wdata(store_wdata0)
+        .store_wdata(store_wdata0),
+        .exe_forward_result(exe_forward_result0)
     );
 
     exe_stage u_exe_stage1 (
@@ -502,12 +554,15 @@ module cpu_top (
         .ds_to_es_bus(ds_to_es_bus1),
         .es_to_ms_bus(es_to_ms_bus1),
         .es_flush(es_flush1),
-        .mem_result(mem_result1),
+        .forward_ex_result0(exe_forward_result0),
+        .forward_ex_result1(exe_forward_result1),
+        .forward_mem_result0(mem_result0),
+        .forward_mem_result1(mem_result1),
         .reg_fpu_data3(32'b0),
-        .dmem_addr(unused_dmem_addr1),
-        .dmem_wdata(unused_dmem_wdata1),
-        .dmem_wen(unused_dmem_wen1),
-        .dmem_en(unused_dmem_en1),
+        .dmem_addr(ex_dmem_addr1),
+        .dmem_wdata(ex_dmem_wdata1),
+        .dmem_wen(ex_dmem_wen1),
+        .dmem_en(ex_dmem_en1),
         .exe_dest_addr(exe_dest_addr1),
         .exe_regfile_wen(exe_regfile_wen1),
         .exe_reg_fpu_wen(exe_reg_fpu_wen1),
@@ -519,23 +574,24 @@ module cpu_top (
         .ds_exc_bus(ds_exc_bus1),
         .exe_exc_bus(exe_exc_bus1),
         .exception_flag(exception_flag),
-        .br_taken(unused_br_taken1),
-        .br_target(unused_br_target1),
-        .br_redirect(unused_br_redirect1),
-        .br_redirect_target(unused_br_redirect_target1),
-        .bp_update_valid(unused_bp_update_valid1),
-        .bp_update_pc(unused_bp_update_pc1),
-        .bp_update_taken(unused_bp_update_taken1),
-        .bp_update_target(unused_bp_update_target1),
-        .bp_update_is_jalr(unused_bp_update_is_jalr1),
-        .branch_event(unused_branch_event1),
-        .branch_mispredict_event(unused_branch_mispredict_event1),
+        .br_taken(br_taken1),
+        .br_target(br_target1),
+        .br_redirect(br_redirect1),
+        .br_redirect_target(br_redirect_target1),
+        .bp_update_valid(bp_update_valid1),
+        .bp_update_pc(bp_update_pc1),
+        .bp_update_taken(bp_update_taken1),
+        .bp_update_target(bp_update_target1),
+        .bp_update_is_jalr(bp_update_is_jalr1),
+        .branch_event(branch_event1),
+        .branch_mispredict_event(branch_mispredict_event1),
         .execute_stall_event(execute_stall_event1),
         .store_event(unused_store_event1),
         .store_pc(unused_store_pc1),
         .store_addr(unused_store_addr1),
         .store_wen(unused_store_wen1),
-        .store_wdata(unused_store_wdata1)
+        .store_wdata(unused_store_wdata1),
+        .exe_forward_result(exe_forward_result1)
     );
 
     // 外部中断只在bundle边界交给lane0；若当前有lane1退休则先记为pending。
@@ -551,6 +607,9 @@ module cpu_top (
     assign plic_irq_at_bundle_boundary = (plic_irq || irq_pending) && !ms_valid1;
 
     assign ws_bundle_allowin = ws_allowin0_raw && ws_allowin1_raw;
+    assign lane0_redirect_event = exception_code0[5] ||
+                                  (exception_code0 == 7'b100_0000);
+    assign lane1_commit_kill = lane0_redirect_event;
 
     mem_stage u_mem_stage0 (
         .clk(clk),
@@ -564,6 +623,12 @@ module cpu_top (
         .ws_allowin(ws_bundle_allowin),
         .ms_valid(ms_valid0),
         .dmem_rdata(dmem_rdata),
+        .commit_kill(1'b0),
+        .store_commit_valid(store_commit_valid0),
+        .store_commit_pc(store_commit_pc0),
+        .store_commit_addr(store_commit_addr0),
+        .store_commit_wen(store_commit_wen0),
+        .store_commit_wdata(store_commit_wdata0),
         .mem_dst_addr(mem_dest_addr0),
         .mem_regfile_wen(mem_regfile_wen0),
         .mem_reg_fpu_wen(mem_reg_fpu_wen0),
@@ -591,7 +656,13 @@ module cpu_top (
         .ms_allowin(ms_allowin1_raw),
         .ws_allowin(ws_bundle_allowin),
         .ms_valid(ms_valid1),
-        .dmem_rdata(32'b0),
+        .dmem_rdata(dmem_rdata),
+        .commit_kill(lane1_commit_kill),
+        .store_commit_valid(store_commit_valid1),
+        .store_commit_pc(store_commit_pc1),
+        .store_commit_addr(store_commit_addr1),
+        .store_commit_wen(store_commit_wen1),
+        .store_commit_wdata(store_commit_wdata1),
         .mem_dst_addr(mem_dest_addr1),
         .mem_regfile_wen(mem_regfile_wen1),
         .mem_reg_fpu_wen(mem_reg_fpu_wen1),
@@ -600,13 +671,28 @@ module cpu_top (
         .exe_exc_bus(exe_exc_bus1),
         .plic_irq(1'b0),
         .external_irq_enable(1'b0),
-        .csr_we(unused_csr_we1),
-        .csr_waddr(unused_csr_waddr1),
-        .csr_wdata(unused_csr_wdata1),
-        .exception_code(unused_exception_code1),
-        .exception_mtval(unused_exception_mtval1),
+        .csr_we(csr_we1),
+        .csr_waddr(csr_waddr1),
+        .csr_wdata(csr_wdata1),
+        .exception_code(exception_code1),
+        .exception_mtval(exception_mtval1),
         .retire_count(retire_count1)
     );
+
+    // 单LSU仲裁。已到MEM且确认提交的store优先于年轻EX load；冲突时冻结整个EX bundle一拍。
+    assign ex_load_request0 = ex_dmem_en0 && (ex_dmem_wen0 == 4'b0000);
+    assign ex_load_request1 = ex_dmem_en1 && (ex_dmem_wen1 == 4'b0000);
+    assign ex_load_request = ex_load_request0 || ex_load_request1;
+    assign mem_store_request = store_commit_valid0 || store_commit_valid1;
+    assign lsu_store_load_conflict = mem_store_request && ex_load_request;
+    assign dmem_en = mem_store_request || (ex_load_request && ex_bundle_advance);
+    assign dmem_addr = store_commit_valid0 ? store_commit_addr0 :
+                       store_commit_valid1 ? store_commit_addr1 :
+                       ex_load_request0 ? ex_dmem_addr0 : ex_dmem_addr1;
+    assign dmem_wen = store_commit_valid0 ? store_commit_wen0 :
+                      store_commit_valid1 ? store_commit_wen1 : 4'b0000;
+    assign dmem_wdata = store_commit_valid0 ? store_commit_wdata0 :
+                        store_commit_valid1 ? store_commit_wdata1 : 32'b0;
 
     wb_stage u_wb_stage0 (
         .clk(clk),
@@ -698,19 +784,28 @@ module cpu_top (
 
     assign retire_count_total = retire_count0 + retire_count1;
 
+    // oldest-first异常选择：lane0异常/返回优先；lane1异常仍允许lane0正常提交。
+    assign selected_exception_code = lane0_redirect_event ? exception_code0 : exception_code1;
+    assign selected_exception_mtval = lane0_redirect_event ? exception_mtval0 : exception_mtval1;
+    assign selected_csr_we = csr_we0 || csr_we1;
+    assign selected_csr_waddr = csr_we0 ? csr_waddr0 : csr_waddr1;
+    assign selected_csr_wdata = lane0_redirect_event ? csr_wdata0 :
+                                exception_code1[5] ? csr_wdata1 :
+                                csr_we0 ? csr_wdata0 : csr_wdata1;
+
     regfile_csr u_regfile_csr (
         .clk(clk),
         .rst_n(rst_n),
-        .csr_wen(csr_we0),
-        .csr_waddr(csr_waddr0),
-        .csr_wdata(csr_wdata0),
+        .csr_wen(selected_csr_we),
+        .csr_waddr(selected_csr_waddr),
+        .csr_wdata(selected_csr_wdata),
         .csr_raddr(csr_addr0),
         .csr_rdata(csr_data0),
-        .exception_code(exception_code0),
-        .exception_mtval(exception_mtval0),
+        .exception_code(selected_exception_code),
+        .exception_mtval(selected_exception_mtval),
         .retire_count(retire_count_total),
-        .branch_event(ex_branch_event),
-        .branch_mispredict_event(ex_branch_mispredict_event),
+        .branch_event(ex_branch_event || branch_event1),
+        .branch_mispredict_event(ex_branch_mispredict_event || branch_mispredict_event1),
         .load_use_stall_event(load_use_stall_event0 || load_use_stall_event1),
         .execute_stall_event(execute_stall_event0 || execute_stall_event1),
         .dual_issue_event(dual_issue_event),
@@ -718,17 +813,20 @@ module cpu_top (
         .issue_raw_reject_event(issue_raw_reject_event),
         .issue_waw_reject_event(issue_waw_reject_event),
         .issue_struct_reject_event(issue_struct_reject_event),
+        .issue_lsu_pair_event(issue_lsu_pair_event),
+        .issue_lane1_control_event(issue_lane1_control_event),
+        .lsu_conflict_event(lsu_store_load_conflict),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
     );
 
     `ifdef DEBUG_EN
-    assign debug_store_valid = store_event0;
-    assign debug_store_pc = store_pc0;
-    assign debug_store_addr = store_addr0;
-    assign debug_store_wen = store_wen0;
-    assign debug_store_wdata = store_wdata0;
+    assign debug_store_valid = store_commit_valid0 || store_commit_valid1;
+    assign debug_store_pc = store_commit_valid0 ? store_commit_pc0 : store_commit_pc1;
+    assign debug_store_addr = store_commit_valid0 ? store_commit_addr0 : store_commit_addr1;
+    assign debug_store_wen = store_commit_valid0 ? store_commit_wen0 : store_commit_wen1;
+    assign debug_store_wdata = store_commit_valid0 ? store_commit_wdata0 : store_commit_wdata1;
     `endif
 
 endmodule

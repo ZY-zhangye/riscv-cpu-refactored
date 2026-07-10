@@ -23,6 +23,9 @@ module regfile_csr (
     input logic issue_raw_reject_event,
     input logic issue_waw_reject_event,
     input logic issue_struct_reject_event,
+    input logic issue_lsu_pair_event,
+    input logic issue_lane1_control_event,
+    input logic lsu_conflict_event,
     output logic exception_flag,
     output logic [31:0] exception_addr,
     output logic external_irq_enable
@@ -52,6 +55,9 @@ module regfile_csr (
     logic [31:0] perf_issue_raw;
     logic [31:0] perf_issue_waw;
     logic [31:0] perf_issue_struct;
+    logic [31:0] perf_lsu_pair;
+    logic [31:0] perf_lane1_control;
+    logic [31:0] perf_lsu_conflict;
 
     assign perf_clear = csr_wen && (csr_waddr == `CSR_PERF_CTRL) && csr_wdata[1];
 
@@ -84,6 +90,9 @@ module regfile_csr (
             perf_issue_raw <= 32'b0;
             perf_issue_waw <= 32'b0;
             perf_issue_struct <= 32'b0;
+            perf_lsu_pair <= 32'b0;
+            perf_lane1_control <= 32'b0;
+            perf_lsu_conflict <= 32'b0;
         end else begin
             if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 perf_enable <= csr_wdata[0];
@@ -104,6 +113,9 @@ module regfile_csr (
                 perf_issue_raw <= 32'b0;
                 perf_issue_waw <= 32'b0;
                 perf_issue_struct <= 32'b0;
+                perf_lsu_pair <= 32'b0;
+                perf_lane1_control <= 32'b0;
+                perf_lsu_conflict <= 32'b0;
             end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 //控制写本身不计入测量窗口。
             end else if (perf_enable) begin
@@ -141,6 +153,15 @@ module regfile_csr (
                 end
                 if (issue_struct_reject_event) begin
                     perf_issue_struct <= perf_issue_struct + 1'b1;
+                end
+                if (issue_lsu_pair_event) begin
+                    perf_lsu_pair <= perf_lsu_pair + 1'b1;
+                end
+                if (issue_lane1_control_event) begin
+                    perf_lane1_control <= perf_lane1_control + 1'b1;
+                end
+                if (lsu_conflict_event) begin
+                    perf_lsu_conflict <= perf_lsu_conflict + 1'b1;
                 end
             end
         end
@@ -228,6 +249,9 @@ module regfile_csr (
             `CSR_PERF_ISSUE_RAW: csr_rdata = perf_issue_raw;
             `CSR_PERF_ISSUE_WAW: csr_rdata = perf_issue_waw;
             `CSR_PERF_ISSUE_STRUCT: csr_rdata = perf_issue_struct;
+            `CSR_PERF_LSU_PAIR: csr_rdata = perf_lsu_pair;
+            `CSR_PERF_LANE1_CTRL: csr_rdata = perf_lane1_control;
+            `CSR_PERF_LSU_CONFLICT: csr_rdata = perf_lsu_conflict;
             default: csr_rdata = 32'b0;
         endcase
         end

@@ -1,7 +1,5 @@
 `include "defines.svh"
-module id_stage #(
-    parameter bit STALL_PRIMARY_FORWARDING = 1'b0
-) (
+module id_stage (
     input logic clk,
     input logic rst_n,
     //与if_stage的数据接口
@@ -54,6 +52,8 @@ module id_stage #(
     //第二执行lane的结果在L1阶段不做跨lane前递，相关指令等待到WB。
     input logic [4:0] secondary_exe_dest_addr,
     input logic secondary_exe_regfile_wen,
+    input logic secondary_exe_load_pending,
+    input logic secondary_exe_result_pending,
     input logic secondary_es_valid,
     input logic [4:0] secondary_mem_dest_addr,
     input logic secondary_mem_regfile_wen,
@@ -630,17 +630,27 @@ module id_stage #(
     //SRC_PACKET打包
     logic [`SRC_PACKET_WIDTH-1:0] src_packet;
     logic [31:0] reg_src1, reg_src2;
-    logic [1:0] src1_fwd, src2_fwd;
-    assign src1_fwd = STALL_PRIMARY_FORWARDING ? 2'b00 :
-                      (inst_lui || inst_auipc) ? 2'b00 :
+    logic [2:0] src1_fwd, src2_fwd;
+    // 000=寄存器值，001=EX0，010=EX1，011=MEM0，100=MEM1。
+    // EX优先于MEM，因为它代表更年轻、但仍早于当前消费者的生产者。
+    assign src1_fwd = (inst_lui || inst_auipc) ? 3'b000 :
                       (rs1_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00;
-    assign src2_fwd = STALL_PRIMARY_FORWARDING ? 2'b00 :
-                      (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) ? 2'b00 :
+                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 3'b001 :
+                       (secondary_exe_regfile_wen &&
+                        (secondary_exe_dest_addr == rs1_addr) && secondary_es_valid) ? 3'b010 :
+                       (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 3'b011 :
+                       (secondary_mem_regfile_wen &&
+                        (secondary_mem_dest_addr == rs1_addr) && secondary_ms_valid) ? 3'b100 : 3'b000) : 3'b000;
+    assign src2_fwd =
+                      (alu_src2_imm_sel || inst_bitman_imm_inst ||
+                       (inst_bitman_any && !inst_bitman_rs2_inst)) ? 3'b000 :
                       (rs2_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
-                       (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
+                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 3'b001 :
+                       (secondary_exe_regfile_wen &&
+                        (secondary_exe_dest_addr == rs2_addr) && secondary_es_valid) ? 3'b010 :
+                       (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 3'b011 :
+                       (secondary_mem_regfile_wen &&
+                        (secondary_mem_dest_addr == rs2_addr) && secondary_ms_valid) ? 3'b100 : 3'b000) : 3'b000;
     assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
                       inst_auipc ? id_pc : src1;
@@ -684,13 +694,8 @@ module id_stage #(
     logic exe_frs2_hazard;
     logic exe_frs3_hazard;
     logic exe_csr_hazard;
-    logic primary_mem_rs1_hazard;
-    logic primary_mem_rs2_hazard;
     logic secondary_exe_rs1_hazard;
     logic secondary_exe_rs2_hazard;
-    logic secondary_mem_rs1_hazard;
-    logic secondary_mem_rs2_hazard;
-    logic stall_only_hazard;
     assign exe_forward_pending = exe_load_pending || exe_result_pending;
     assign exe_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
                             (rs1_addr == exe_dest_addr) &&
@@ -702,41 +707,26 @@ module id_stage #(
     assign exe_frs2_hazard = (fpu_src2_fwd == 2'b01);
     assign exe_frs3_hazard = (fpu_src3_fwd == 2'b01);
     assign exe_csr_hazard = csr_rdata_fwd && exe_csr_wen;
-    assign primary_mem_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
-                                    (rs1_addr == mem_dest_addr) &&
-                                    ms_valid && mem_regfile_wen;
-    assign primary_mem_rs2_hazard = need_rs2 && (rs2_addr != 5'b0) &&
-                                    (rs2_addr == mem_dest_addr) &&
-                                    ms_valid && mem_regfile_wen;
     assign secondary_exe_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
                                       (rs1_addr == secondary_exe_dest_addr) &&
                                       secondary_es_valid && secondary_exe_regfile_wen;
     assign secondary_exe_rs2_hazard = need_rs2 && (rs2_addr != 5'b0) &&
                                       (rs2_addr == secondary_exe_dest_addr) &&
                                       secondary_es_valid && secondary_exe_regfile_wen;
-    assign secondary_mem_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
-                                      (rs1_addr == secondary_mem_dest_addr) &&
-                                      secondary_ms_valid && secondary_mem_regfile_wen;
-    assign secondary_mem_rs2_hazard = need_rs2 && (rs2_addr != 5'b0) &&
-                                      (rs2_addr == secondary_mem_dest_addr) &&
-                                      secondary_ms_valid && secondary_mem_regfile_wen;
-    assign stall_only_hazard =
-        (STALL_PRIMARY_FORWARDING &&
-         (exe_rs1_hazard || exe_rs2_hazard ||
-          primary_mem_rs1_hazard || primary_mem_rs2_hazard)) ||
-        secondary_exe_rs1_hazard || secondary_exe_rs2_hazard ||
-        secondary_mem_rs1_hazard || secondary_mem_rs2_hazard;
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
         end else begin
-            exe_load_use_hazard = exe_forward_pending &&
-                                  (exe_rs1_hazard || exe_rs2_hazard ||
-                                   exe_frs1_hazard || exe_frs2_hazard ||
-                                   exe_frs3_hazard || exe_csr_hazard);
+            exe_load_use_hazard =
+                (exe_forward_pending &&
+                 (exe_rs1_hazard || exe_rs2_hazard ||
+                  exe_frs1_hazard || exe_frs2_hazard ||
+                  exe_frs3_hazard || exe_csr_hazard)) ||
+                ((secondary_exe_load_pending || secondary_exe_result_pending) &&
+                 (secondary_exe_rs1_hazard || secondary_exe_rs2_hazard));
         end
     end
-    assign load_use_hazard = (exe_load_use_hazard || stall_only_hazard) && ds_valid;
+    assign load_use_hazard = exe_load_use_hazard && ds_valid;
     assign load_use_stall_event = load_use_hazard;
 
 

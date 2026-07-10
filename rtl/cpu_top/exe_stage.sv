@@ -13,8 +13,11 @@ module exe_stage(
     //输出到MEM阶段的信息
     output logic [`ES_MS_WIDTH-1:0] es_to_ms_bus,
     output logic es_flush,
-    //mem阶段数据前递接口
-    input logic [31:0] mem_result,
+    //双EX/MEM生产者前递快照
+    input logic [31:0] forward_ex_result0,
+    input logic [31:0] forward_ex_result1,
+    input logic [31:0] forward_mem_result0,
+    input logic [31:0] forward_mem_result1,
     //reg_fpu数据3接口，仅在部分情况使用
     input logic [31:0] reg_fpu_data3,
     //DMEM接口
@@ -49,12 +52,13 @@ module exe_stage(
     output logic branch_event,
     output logic branch_mispredict_event,
     output logic execute_stall_event,
-    //实际数据存储写事件，用于调试trace
+    //EX只生成访存请求信息；store副作用在MEM确认提交后产生
     output logic store_event,
     output logic [31:0] store_pc,
     output logic [31:0] store_addr,
     output logic [3:0] store_wen,
-    output logic [31:0] store_wdata
+    output logic [31:0] store_wdata,
+    output logic [31:0] exe_forward_result
 );
 
     logic es_ready_go;
@@ -76,6 +80,8 @@ module exe_stage(
     logic [31:0] csr_wdata_reg;
     logic [31:0] mem_result_reg;
     logic [31:0] exe_result_reg; 
+    logic [31:0] exe_result1_reg;
+    logic [31:0] mem_result1_reg;
     logic [31:0] reg_fpu_data3_reg;
     logic [`EXC_WIDTH-1:0] ds_exc_bus_r;  
 
@@ -87,6 +93,8 @@ module exe_stage(
     logic [31:0] skid_exe_result;
     logic [31:0] skid_csr_wdata;
     logic [31:0] skid_mem_result;
+    logic [31:0] skid_exe_result1;
+    logic [31:0] skid_mem_result1;
     logic [31:0] skid_reg_fpu_data3;
     assign es_in_fire = ds_to_es_valid && es_allowin;
 
@@ -107,11 +115,13 @@ module exe_stage(
             es_allowin_r <= 1'b1;
             ds_to_es_bus_r <= '0;
             exe_result_reg <= '0;
+            exe_result1_reg <= '0;
             csr_wdata_reg <= '0;
             reg_fpu_data3_reg <= '0;
             ds_flush_r <= 1'b0;
             ds_exc_bus_r <= '0;
             mem_result_reg <= '0;
+            mem_result1_reg <= '0;
             skid_valid <= 1'b0;
             skid_ds_to_es_bus <= '0;
             skid_ds_flush <= 1'b0;
@@ -119,6 +129,8 @@ module exe_stage(
             skid_exe_result <= '0;
             skid_csr_wdata <= '0;
             skid_mem_result <= '0;
+            skid_exe_result1 <= '0;
+            skid_mem_result1 <= '0;
             skid_reg_fpu_data3 <= '0;
         end else begin
             skid_valid <= es_skid_valid_next;
@@ -131,8 +143,10 @@ module exe_stage(
                     ds_to_es_bus_r <= skid_ds_to_es_bus;
                     ds_exc_bus_r <= skid_ds_exc_bus;
                     exe_result_reg <= skid_exe_result;
+                    exe_result1_reg <= skid_exe_result1;
                     csr_wdata_reg <= skid_csr_wdata;
                     mem_result_reg <= skid_mem_result;
+                    mem_result1_reg <= skid_mem_result1;
                     reg_fpu_data3_reg <= skid_reg_fpu_data3;
                 end else begin
                     es_valid <= es_in_fire;
@@ -140,9 +154,11 @@ module exe_stage(
                         ds_flush_r <= ds_flush;
                         ds_to_es_bus_r <= ds_to_es_bus;
                         ds_exc_bus_r <= ds_exc_bus;
-                        exe_result_reg <= exe_result;
+                        exe_result_reg <= forward_ex_result0;
+                        exe_result1_reg <= forward_ex_result1;
                         csr_wdata_reg <= csr_wdata;
-                        mem_result_reg <= mem_result;
+                        mem_result_reg <= forward_mem_result0;
+                        mem_result1_reg <= forward_mem_result1;
                         reg_fpu_data3_reg <= reg_fpu_data3;
                     end
                 end
@@ -150,9 +166,11 @@ module exe_stage(
                 skid_ds_flush <= ds_flush;
                 skid_ds_to_es_bus <= ds_to_es_bus;
                 skid_ds_exc_bus <= ds_exc_bus;
-                skid_exe_result <= exe_result;
+                skid_exe_result <= forward_ex_result0;
+                skid_exe_result1 <= forward_ex_result1;
                 skid_csr_wdata <= csr_wdata;
-                skid_mem_result <= mem_result;
+                skid_mem_result <= forward_mem_result0;
+                skid_mem_result1 <= forward_mem_result1;
                 skid_reg_fpu_data3 <= reg_fpu_data3;
             end
         end
@@ -231,8 +249,8 @@ module exe_stage(
     //SRC_PACKET解包
     logic [31:0] reg_src1;
     logic [31:0] reg_src2;
-    logic [1:0] src1_fwd;
-    logic [1:0] src2_fwd;
+    logic [2:0] src1_fwd;
+    logic [2:0] src2_fwd;
     assign {reg_src1, reg_src2, src1_fwd, src2_fwd} = src_packet;
 
     //操作数选择（除FPU，其它都在这里完成）
@@ -240,17 +258,21 @@ module exe_stage(
     logic [31:0] csr_data;
     always_comb begin
         src1 = 32'b0;
-        unique case (1'b1)
-            src1_fwd[0]: src1 = exe_result_reg;
-            src1_fwd[1]: src1 = mem_result_reg;
+        unique case (src1_fwd)
+            3'b001: src1 = exe_result_reg;
+            3'b010: src1 = exe_result1_reg;
+            3'b011: src1 = mem_result_reg;
+            3'b100: src1 = mem_result1_reg;
             default: src1 = reg_src1;
         endcase
     end
     always_comb begin
         src2 = 32'b0;
-        unique case (1'b1)
-            src2_fwd[0]: src2 = exe_result_reg;
-            src2_fwd[1]: src2 = mem_result_reg;
+        unique case (src2_fwd)
+            3'b001: src2 = exe_result_reg;
+            3'b010: src2 = exe_result1_reg;
+            3'b011: src2 = mem_result_reg;
+            3'b100: src2 = mem_result1_reg;
             default: src2 = reg_src2;
         endcase
     end
@@ -508,7 +530,8 @@ module exe_stage(
     logic is_branch;
     assign is_branch = |br_jmp_opcode;
 
-    assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
+    assign br_taken = (!es_valid || es_flush) ? 1'b0 :
+                      (is_jal | is_jalr | (is_branch & br_cond_raw));
 
     // 4. 计算目标地址
     // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
@@ -518,7 +541,7 @@ module exe_stage(
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
-    assign br_redirect = !es_flush && is_br_jmp &&
+    assign br_redirect = es_valid && !es_flush && is_br_jmp &&
                          ((br_taken != bp_pred_taken) ||
                           (br_taken && (br_target != bp_pred_target)));
     assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
@@ -560,6 +583,7 @@ module exe_stage(
     assign store_addr = dmem_addr;
     assign store_wen = dmem_wen;
     assign store_wdata = dmem_wdata;
+    assign exe_forward_result = exe_result;
 
     //输出到下一级
     assign es_to_ms_bus = {
@@ -567,6 +591,8 @@ module exe_stage(
         exe_inst,   //32
         exe_result, //32
         load_inst,  //6
+        dmem_wen,   //4，store写掩码，仅随流水线传递
+        dmem_wdata, //32，store写数据，仅随流水线传递
         rd_addr,
         regfile_wen,
         reg_fpu_wen,

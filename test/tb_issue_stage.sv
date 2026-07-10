@@ -22,6 +22,8 @@ module tb_issue_stage;
     logic issue_raw_reject_event;
     logic issue_waw_reject_event;
     logic issue_struct_reject_event;
+    logic issue_lsu_pair_event;
+    logic issue_lane1_control_event;
     logic [31:0] debug_issue_inst0;
     logic [31:0] debug_issue_pc0;
     logic debug_issue_valid0;
@@ -35,6 +37,10 @@ module tb_issue_stage;
     localparam logic [31:0] ADDI_X2_X1_2 = 32'h0020_8113;
     localparam logic [31:0] ADDI_X1_X0_2 = 32'h0020_0093;
     localparam logic [31:0] LW_X3_0_X0 = 32'h0000_2183;
+    localparam logic [31:0] LW_X1_0_X0 = 32'h0000_2083;
+    localparam logic [31:0] SW_X3_0_X0 = 32'h0030_2023;
+    localparam logic [31:0] BEQ_X1_X2_8 = 32'h0020_8463;
+    localparam logic [31:0] CSRRW_X3_MSTATUS_X1 = 32'h3000_91f3;
 
     issue_stage dut (
         .clk(clk),
@@ -57,6 +63,8 @@ module tb_issue_stage;
         .issue_raw_reject_event(issue_raw_reject_event),
         .issue_waw_reject_event(issue_waw_reject_event),
         .issue_struct_reject_event(issue_struct_reject_event),
+        .issue_lsu_pair_event(issue_lsu_pair_event),
+        .issue_lane1_control_event(issue_lane1_control_event),
         .debug_issue_inst0(debug_issue_inst0),
         .debug_issue_pc0(debug_issue_pc0),
         .debug_issue_valid0(debug_issue_valid0),
@@ -153,12 +161,45 @@ module tb_issue_stage;
 
         reset_dut();
         send_pair(ADDI_X1_X0_1, LW_X3_0_X0);
-        check("complex lane1 blocked", !is_to_ds_valid1);
-        check("struct reject event", issue_struct_reject_event);
+        check("ALU plus load lane0", is_to_ds_valid0);
+        check("ALU plus load lane1", is_to_ds_valid1);
+        check("ALU plus load dual event", dual_issue_event);
+
+        reset_dut();
+        send_pair(LW_X3_0_X0, ADDI_X1_X0_1);
+        check("load plus ALU lane0", is_to_ds_valid0);
+        check("load plus ALU lane1", is_to_ds_valid1);
+
+        reset_dut();
+        send_pair(SW_X3_0_X0, ADDI_X1_X0_1);
+        check("store plus ALU lane1", is_to_ds_valid1);
+
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, SW_X3_0_X0);
+        check("ALU plus store lane1", is_to_ds_valid1);
+
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, BEQ_X1_X2_8);
+        check("ALU to branch RAW blocked", !is_to_ds_valid1);
+        check("ALU to branch RAW event", issue_raw_reject_event);
+
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, 32'h0021_8463);
+        check("ALU plus independent branch lane1", is_to_ds_valid1);
+
+        reset_dut();
+        send_pair(LW_X1_0_X0, ADDI_X2_X1_2);
+        check("load to ALU RAW blocked", !is_to_ds_valid1);
+        check("load to ALU RAW event", issue_raw_reject_event);
+
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, CSRRW_X3_MSTATUS_X1);
+        check("CSR lane1 blocked", !is_to_ds_valid1);
+        check("CSR struct reject event", issue_struct_reject_event);
         @(posedge clk);
         #1;
-        check("complex younger preserved", is_to_ds_valid0 &&
-              (bus_inst(is_to_ds_bus0) == LW_X3_0_X0));
+        check("CSR younger preserved", is_to_ds_valid0 &&
+              (bus_inst(is_to_ds_bus0) == CSRRW_X3_MSTATUS_X1));
 
         reset_dut();
         ds_bundle_allowin = 1'b0;

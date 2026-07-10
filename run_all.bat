@@ -31,6 +31,10 @@ call :run_unit_test tb_perf_counters perf_counters "PERF COUNTER TEST PASSED"
 if errorlevel 1 goto :fail
 call :run_unit_test tb_issue_stage issue_stage "ISSUE_STAGE_TEST_PASSED"
 if errorlevel 1 goto :fail
+call :run_unit_test tb_mem_commit mem_commit "MEM_COMMIT_TEST_PASSED"
+if errorlevel 1 goto :fail
+call :run_unit_test tb_multi_issue_l2 multi_issue_l2 "MULTI_ISSUE_L2_TEST_PASSED"
+if errorlevel 1 goto :fail
 
 if /I "%MODE%"=="z" goto :run_z_only
 if /I "%MODE%"=="zba" goto :run_zba_only

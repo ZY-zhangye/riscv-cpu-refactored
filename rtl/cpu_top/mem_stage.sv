@@ -15,6 +15,12 @@ module mem_stage (
     output logic ms_valid,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
+    input logic commit_kill,
+    output logic store_commit_valid,
+    output logic [31:0] store_commit_pc,
+    output logic [31:0] store_commit_addr,
+    output logic [3:0] store_commit_wen,
+    output logic [31:0] store_commit_wdata,
     //数据前递接口
     output logic [4:0] mem_dst_addr,
     output logic mem_regfile_wen,
@@ -52,7 +58,8 @@ module mem_stage (
     assign ms_ready_go = 1'b1;
     assign ms_core_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_allowin = ms_allowin_r;
-    assign ms_to_ws_valid = ms_valid && ms_ready_go && !ms_flush && !exception_code[5];
+    assign ms_to_ws_valid = ms_valid && ms_ready_go && !ms_flush &&
+                            !exception_code[5] && !commit_kill;
     assign ms_in_fire = es_to_ms_valid && ms_allowin;
 
     always_comb begin
@@ -109,6 +116,8 @@ module mem_stage (
     logic [31:0] mem_inst;
     logic [31:0] exe_result;
     logic [5:0] load_inst;
+    logic [3:0] pending_store_wen;
+    logic [31:0] pending_store_wdata;
     logic [4:0] rd_addr;
     logic regfile_wen;
     logic reg_fpu_wen;
@@ -121,6 +130,8 @@ module mem_stage (
         mem_inst,
         exe_result,
         load_inst,
+        pending_store_wen,
+        pending_store_wdata,
         rd_addr,
         regfile_wen,
         reg_fpu_wen,
@@ -197,9 +208,12 @@ end
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
-    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush && !exception_flag;
-    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush && !exception_flag;
-    assign csr_we = ms_valid && csr_wen && !ms_flush && !exception_code[5];
+    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush &&
+                             !exception_code[5] && !commit_kill;
+    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush &&
+                             !exception_code[5] && !commit_kill;
+    assign csr_we = ms_valid && csr_wen && !ms_flush &&
+                    !exception_code[5] && !commit_kill;
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
     assign ms_to_ws_bus = {
@@ -258,6 +272,14 @@ end
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :
                             exc_mtval;
+    assign store_commit_valid = ms_valid && ms_ready_go && ws_allowin &&
+                                !ms_flush && !commit_kill &&
+                                !exception_code[5] &&
+                                (pending_store_wen != 4'b0000);
+    assign store_commit_pc = mem_pc;
+    assign store_commit_addr = exe_result;
+    assign store_commit_wen = store_commit_valid ? pending_store_wen : 4'b0000;
+    assign store_commit_wdata = pending_store_wdata;
     assign retire_count = {1'b0, ms_to_ws_valid};
 
 endmodule

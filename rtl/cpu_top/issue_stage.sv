@@ -24,7 +24,9 @@ module issue_stage (
     output logic single_issue_event,
     output logic issue_raw_reject_event,
     output logic issue_waw_reject_event,
-    output logic issue_struct_reject_event
+    output logic issue_struct_reject_event,
+    output logic issue_lsu_pair_event,
+    output logic issue_lane1_control_event
     `ifdef DEBUG_EN
     ,
     output logic [31:0] debug_issue_inst0,
@@ -44,6 +46,8 @@ module issue_stage (
         logic need_rs2;
         logic write_gpr;
         logic simple_int;
+        logic lsu;
+        logic control;
     } issue_info_t;
 
     logic [`FS_DS_WIDTH-1:0] buf0;
@@ -87,6 +91,14 @@ module issue_stage (
         logic is_auipc;
         logic legal_op_imm;
         logic legal_op_reg;
+        logic is_load;
+        logic is_store;
+        logic is_branch;
+        logic is_jal;
+        logic is_jalr;
+        logic legal_load;
+        logic legal_store;
+        logic legal_branch;
         begin
             opcode = inst[6:0];
             funct3 = inst[14:12];
@@ -95,6 +107,11 @@ module issue_stage (
             is_op_reg = (opcode == 7'b0110011);
             is_lui = (opcode == 7'b0110111);
             is_auipc = (opcode == 7'b0010111);
+            is_load = (opcode == 7'b0000011);
+            is_store = (opcode == 7'b0100011);
+            is_branch = (opcode == 7'b1100011);
+            is_jal = (opcode == 7'b1101111);
+            is_jalr = (opcode == 7'b1100111) && (funct3 == 3'b000);
 
             legal_op_imm = (funct3 == 3'b000) ||
                            (funct3 == 3'b010) ||
@@ -108,17 +125,37 @@ module issue_stage (
             legal_op_reg = (funct7 == 7'b0000000) ||
                            ((funct7 == 7'b0100000) &&
                             ((funct3 == 3'b000) || (funct3 == 3'b101)));
+            legal_load = is_load && ((funct3 == 3'b000) ||
+                                     (funct3 == 3'b001) ||
+                                     (funct3 == 3'b010) ||
+                                     (funct3 == 3'b100) ||
+                                     (funct3 == 3'b101));
+            legal_store = is_store && ((funct3 == 3'b000) ||
+                                       (funct3 == 3'b001) ||
+                                       (funct3 == 3'b010));
+            legal_branch = is_branch && ((funct3 == 3'b000) ||
+                                         (funct3 == 3'b001) ||
+                                         (funct3 == 3'b100) ||
+                                         (funct3 == 3'b101) ||
+                                         (funct3 == 3'b110) ||
+                                         (funct3 == 3'b111));
 
             info = '0;
             info.rs1 = inst[19:15];
             info.rs2 = inst[24:20];
             info.rd = inst[11:7];
-            info.need_rs1 = is_op_imm || is_op_reg;
-            info.need_rs2 = is_op_reg;
+            info.need_rs1 = is_op_imm || is_op_reg || legal_load ||
+                            legal_store || legal_branch || is_jalr;
+            info.need_rs2 = is_op_reg || legal_store || legal_branch;
             info.write_gpr = (is_op_imm && legal_op_imm) ||
                              (is_op_reg && legal_op_reg) ||
-                             is_lui || is_auipc;
-            info.simple_int = info.write_gpr;
+                             is_lui || is_auipc || legal_load ||
+                             is_jal || is_jalr;
+            info.simple_int = (is_op_imm && legal_op_imm) ||
+                              (is_op_reg && legal_op_reg) ||
+                              is_lui || is_auipc;
+            info.lsu = legal_load || legal_store;
+            info.control = legal_branch || is_jal || is_jalr;
             decode_issue_info = info;
         end
     endfunction
@@ -130,7 +167,10 @@ module issue_stage (
                        (info1.need_rs2 && (info1.rs2 == info0.rd)));
     assign pair_waw = info0.write_gpr && info1.write_gpr &&
                       (info0.rd != 5'b0) && (info0.rd == info1.rd);
-    assign pair_class_ok = info0.simple_int && info1.simple_int;
+    assign pair_class_ok = (info0.simple_int && info1.simple_int) ||
+                           (info0.lsu && info1.simple_int) ||
+                           (info0.simple_int && info1.lsu) ||
+                           (info0.simple_int && info1.control);
     assign can_pair = buf_valid0 && buf_valid1 && pair_class_ok &&
                       !pair_raw && !pair_waw;
 
@@ -155,6 +195,8 @@ module issue_stage (
     assign issue_waw_reject_event = single_issue_event && buf_valid1 && pair_waw;
     assign issue_struct_reject_event = single_issue_event && buf_valid1 &&
                                        !pair_class_ok;
+    assign issue_lsu_pair_event = lane1_fire && (info0.lsu || info1.lsu);
+    assign issue_lane1_control_event = lane1_fire && info1.control;
 
     always_comb begin
         next_buf0 = buf0;
