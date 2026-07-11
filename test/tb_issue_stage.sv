@@ -158,12 +158,17 @@ module tb_issue_stage;
         reset_dut();
         send_pair(ADDI_X1_X0_1, ADDI_X2_X1_2);
         check("RAW lane0 issues", is_to_ds_valid0);
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        check("bypassable RAW lane1 issues", is_to_ds_valid1);
+        check("bypassable RAW no reject", !issue_raw_reject_event);
+        `else
         check("RAW lane1 blocked", !is_to_ds_valid1);
         check("RAW reject event", issue_raw_reject_event);
         @(posedge clk);
         #1;
         check("RAW younger preserved", is_to_ds_valid0 &&
               (bus_inst(is_to_ds_bus0) == ADDI_X2_X1_2));
+        `endif
 
         reset_dut();
         send_pair(ADDI_X1_X0_1, ADDI_X1_X0_2);
@@ -225,7 +230,11 @@ module tb_issue_stage;
         // 四项队列允许保留的包尾指令与下一fetch packet队首重新配对。
         reset_dut();
         ds_bundle_allowin = 1'b0;
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        send_pair(LW_X1_0_X0, ADDI_X2_X1_2);
+        `else
         send_pair(ADDI_X1_X0_1, ADDI_X2_X1_2);
+        `endif
         send_pair(ADDI_X3_X0_3, ADDI_X4_X3_4);
         @(negedge clk);
         fs_to_is_valid0 = 1'b1;

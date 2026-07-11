@@ -140,7 +140,11 @@ module tb_multi_issue_l3;
         `ifdef L3_PERF_COUNTERS
         check("five lane1 branches", dut.u_regfile_csr.perf_branch == 32'd5);
         check("lane1 predictor misses", dut.u_regfile_csr.perf_brmisp == 32'd2);
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        check("bypass experiment cycle bound", cycles <= 27);
+        `else
         check("cross packet events", dut.u_regfile_csr.perf_cross_packet >= 32'd2);
+        `endif
         check("bitman pair events", dut.u_regfile_csr.perf_bitman_pair >= 32'd2);
         $display("L3_MEASURE cycles=%0d instret=%0d ipc_x1000=%0d cross_pairs=%0d bitman_pairs=%0d branch_miss=%0d",
                  cycles, dut.u_regfile_csr.instret,

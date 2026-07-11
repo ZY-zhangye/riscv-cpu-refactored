@@ -52,6 +52,10 @@ module issue_stage (
         logic lsu;
         logic control;
         logic bitman;
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        logic bypassable_producer;
+        logic bypassable_consumer;
+        `endif
     } issue_info_t;
 
     logic [`FS_DS_WIDTH-1:0] queue0;
@@ -229,6 +233,19 @@ module issue_stage (
             info.lsu = legal_load || legal_store;
             info.control = legal_branch || is_jal || is_jalr;
             info.bitman = bitman_any;
+            `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+            info.bypassable_producer = (is_op_imm && legal_op_imm) ||
+                                       (is_op_reg && legal_op_reg) ||
+                                       is_lui || is_auipc;
+            `ifdef L3F_BYPASS_LOGIC_ONLY
+            info.bypassable_consumer =
+                ((is_op_imm && legal_op_imm) || (is_op_reg && legal_op_reg)) &&
+                ((funct3 == 3'b100) || (funct3 == 3'b110) ||
+                 (funct3 == 3'b111));
+            `else
+            info.bypassable_consumer = info.bypassable_producer;
+            `endif
+            `endif
             decode_issue_info = info;
         end
     endfunction
@@ -245,8 +262,15 @@ module issue_stage (
                            (info0.lsu && info1.simple_int) ||
                            (info0.simple_int && info1.lsu) ||
                            (info0.simple_int && info1.control);
+    `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+    assign can_pair = buf_valid0 && buf_valid1 && pair_class_ok &&
+                      !pair_waw &&
+                      (!pair_raw || (info0.bypassable_producer &&
+                                     info1.bypassable_consumer));
+    `else
     assign can_pair = buf_valid0 && buf_valid1 && pair_class_ok &&
                       !pair_raw && !pair_waw;
+    `endif
 
     assign global_flush = br_redirect || exception_flag;
     assign issue_flush = global_flush;

@@ -233,6 +233,10 @@ module cpu_top (
     logic [31:0] store_wdata0;
     logic [31:0] exe_forward_result0;
     logic [31:0] exe_forward_result1;
+    `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+    logic same_cycle_alu_producer0;
+    logic same_cycle_alu_producer1;
+    `endif
 
     // MEM lane0/lane1
     logic ms_allowin0_raw;
@@ -547,6 +551,12 @@ module cpu_top (
         .store_wen(store_wen0),
         .store_wdata(store_wdata0),
         .exe_forward_result(exe_forward_result0)
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        ,
+        .same_cycle_bypass_valid(1'b0),
+        .same_cycle_bypass_addr(5'b0),
+        .same_cycle_alu_producer(same_cycle_alu_producer0)
+        `endif
     );
 
     exe_stage u_exe_stage1 (
@@ -598,6 +608,12 @@ module cpu_top (
         .store_wen(unused_store_wen1),
         .store_wdata(unused_store_wdata1),
         .exe_forward_result(exe_forward_result1)
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        ,
+        .same_cycle_bypass_valid(same_cycle_alu_producer0),
+        .same_cycle_bypass_addr(exe_dest_addr0),
+        .same_cycle_alu_producer(same_cycle_alu_producer1)
+        `endif
     );
 
     // 外部中断只在bundle边界交给lane0；若当前有lane1退休则先记为pending。

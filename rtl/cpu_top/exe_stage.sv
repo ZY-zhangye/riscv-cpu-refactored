@@ -59,6 +59,12 @@ module exe_stage(
     output logic [3:0] store_wen,
     output logic [31:0] store_wdata,
     output logic [31:0] exe_forward_result
+    `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+    ,
+    input logic same_cycle_bypass_valid,
+    input logic [4:0] same_cycle_bypass_addr,
+    output logic same_cycle_alu_producer
+    `endif
 );
 
     logic es_ready_go;
@@ -256,8 +262,22 @@ module exe_stage(
     //操作数选择（除FPU，其它都在这里完成）
     logic [31:0] src1, src2;
     logic [31:0] csr_data;
+    `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+    logic same_cycle_consumer_uses_rs1;
+    logic same_cycle_consumer_uses_rs2;
+    assign same_cycle_consumer_uses_rs1 =
+        (exe_inst[6:0] == 7'b0010011) || (exe_inst[6:0] == 7'b0110011);
+    assign same_cycle_consumer_uses_rs2 = (exe_inst[6:0] == 7'b0110011);
+    `endif
     always_comb begin
         src1 = 32'b0;
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        if (same_cycle_bypass_valid && same_cycle_consumer_uses_rs1 &&
+            (exe_inst[19:15] != 5'b0) &&
+            (exe_inst[19:15] == same_cycle_bypass_addr)) begin
+            src1 = forward_ex_result0;
+        end else begin
+        `endif
         unique case (src1_fwd)
             3'b001: src1 = exe_result_reg;
             3'b010: src1 = exe_result1_reg;
@@ -265,9 +285,19 @@ module exe_stage(
             3'b100: src1 = mem_result1_reg;
             default: src1 = reg_src1;
         endcase
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        end
+        `endif
     end
     always_comb begin
         src2 = 32'b0;
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        if (same_cycle_bypass_valid && same_cycle_consumer_uses_rs2 &&
+            (exe_inst[24:20] != 5'b0) &&
+            (exe_inst[24:20] == same_cycle_bypass_addr)) begin
+            src2 = forward_ex_result0;
+        end else begin
+        `endif
         unique case (src2_fwd)
             3'b001: src2 = exe_result_reg;
             3'b010: src2 = exe_result1_reg;
@@ -275,6 +305,9 @@ module exe_stage(
             3'b100: src2 = mem_result1_reg;
             default: src2 = reg_src2;
         endcase
+        `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        end
+        `endif
     end
     /*
     assign src1 = (src1_fwd == 2'b01) ? exe_result_reg :
@@ -584,6 +617,9 @@ module exe_stage(
     assign store_wen = dmem_wen;
     assign store_wdata = dmem_wdata;
     assign exe_forward_result = exe_result;
+    `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+    assign same_cycle_alu_producer = es_valid && !es_flush && is_alu && regfile_wen;
+    `endif
 
     //输出到下一级
     assign es_to_ms_bus = {
