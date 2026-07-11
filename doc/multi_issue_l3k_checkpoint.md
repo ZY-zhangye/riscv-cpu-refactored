@@ -96,3 +96,14 @@ mem_stage1/es_ms_bus_r_reg[95] → DRAM BRAM WEA[0]
 - 路由 6.380 ns（88.1%）。
 
 125 MHz 已满足硬时序要求，但只有 25 ps 裕量，应定义为临界通过档，而不是稳健签核档。由于最差路径以物理路由为主，下一步先使用高性能实现 directive 与 post-route physical optimization 尝试 130 MHz；同时可复跑高质量 125 MHz 以建立明确工程余量。在这些实现手段耗尽前不再修改访存协议。
+
+## 高 QoR 双频最终签核
+
+高 QoR placement/route 与 post-route physopt 最终使两档均通过：
+
+| 主频 | setup WNS | TNS | hold WNS | LUT | FF |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 125 MHz | +0.060 ns | 0 | +3.358 ns | 19,094 | 22,215 |
+| 130 MHz | +0.044 ns | 0 | +3.204 ns | 19,150 | 22,228 |
+
+两档均 0 setup/hold 失败、0 路由错误。125 MHz 定义为稳健档，130 MHz 定义为性能档；二者均为窄裕量签核。完整冻结信息与后续计划见 `multi_issue_l3k_signoff.md`。

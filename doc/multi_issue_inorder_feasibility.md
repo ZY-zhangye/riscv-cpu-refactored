@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理。L3G 的 2-bit 方向计数与 JALR 预测组合已完成双频后路由签核。L3H 的 128 项 BTB 曾在 125 MHz WNS -0.539 ns，最差路径为 `MEM/flush → bp_update_valid → 128项 counter/D`。L3I 的 8-depth 提交态/推测态 RAS 已默认开启。L3J 根据实际指令画像增加 MEXT 和精确依赖计数。L3K 在 IF 内把 BTB 更新请求寄存一拍后，125 MHz 标准 QoR 流程以 setup WNS +0.025 ns、hold WNS +3.358 ns 通过，原 BTB 更新路径簇消失；最差路径回到 `mem_stage1 → DRAM WEA`，路由占 88.1%。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3k_checkpoint.md`。
+状态：L3A 至 L3K 已完成当前高性能顺序 2-wide 主线。L3K `6760658` 采用 128 项 BTB、2-bit 方向计数、JALR 预测和 8-depth RAS，并把 BTB 更新请求寄存一拍。高 QoR placement/route + post-route physopt 后，125 MHz setup WNS +0.060 ns、hold WNS +3.358 ns；130 MHz setup WNS +0.044 ns、hold WNS +3.204 ns，均无 setup/hold 失败和路由错误。125 MHz 定义为稳健档，130 MHz 定义为性能档。最差路径均回到 CPU→DRAM BRAM `WEA`，路由占 83.6%~87.5%。完整冻结信息见 `multi_issue_l3k_signoff.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 
@@ -261,9 +261,10 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 7. L3I RAS 已默认开启；若出现问题可用 `L3I_DISABLE_RAS` 独立回退。
 8. 实际镜像静态控制流占 17.87%，继续支持 BTB/RAS 优先级；访存占 28.97%，但必须等待动态 trace 再判断 store buffer 优先级。
 9. RV32M 虽只占 1.76%，L3J MEXT 却产生 136,000 EX stall；下一步先分离 mul 与 div/rem 动态成本，再决定多周期单元优化。
-10. L3K 已确认原 `MEM/flush → bp_counter/D` 路径簇消失；125 MHz 标准流程仅有 25 ps 裕量，先运行高性能 directive、post-route phys_opt 和 130 MHz 尝试，不把临界通过视为稳健档。
-11. 当前最差路径重新落在 CPU→DRAM BRAM `WEA`，且 88.1% 为路由延迟。在高质量实现流程耗尽前不改变访存协议；若 128 项最终不能保持有竞争力的 `IPC × Fmax`，可用 `L3H_BTB_16_ENTRIES` 回退。
-12. 分支恢复气泡优化排在当前前端双频签核之后。
+10. L3K 已完成高 QoR 双频签核并封存：125 MHz 稳健档、130 MHz 性能档。后续阶段不得覆盖该基线。
+11. 下一主线为专门时序优化：先在 135/140 MHz 建立压力路径簇，再对 CPU→DRAM BRAM `WEA` 做层次、复制、局部控制和 placement 优化。
+12. 只有物理优化多轮无效时才增加访存接口寄存级；任何延迟变化都必须重新验证精确 store、MMIO、异常和 load-use。
+13. 时序主线稳定后再拆分 mul 与 div/rem、获取真实动态 trace，并决定分支恢复、乘法接受率或 store buffer 的优先级。
 
 ### 6.8 长期阶段 L4：非对称 3-wide 可选实验
 
