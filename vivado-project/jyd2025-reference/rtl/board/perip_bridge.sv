@@ -134,9 +134,7 @@ module perip_bridge(
         .perip_wdata		(perip_wdata),
         .perip_mask			(perip_mask),
         .perip_ren 			(dram_read_req),
-		// perip_wen 在板级 wrapper 中等于 |perip_mask；dram_driver 已逐位
-		// 使用 mask 门控 WEA，因此这里只保留地址区域选择，移除冗余重汇合。
-		.dram_wen 			(dram_region_sel),
+		.dram_wen 			(perip_wen & dram_region_sel),
         .perip_rdata		(dram_rdata)
     );
 

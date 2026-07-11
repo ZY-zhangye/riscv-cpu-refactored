@@ -106,7 +106,8 @@ module issue_stage (
     logic lane1_fire;
     logic lane0_shift;
     logic lane1_shift;
-    logic packet_accept;
+    logic capacity_allow;
+    logic packet_write;
     logic [2:0] consume_count;
     logic [2:0] incoming_count;
     logic [2:0] remaining_count;
@@ -315,10 +316,13 @@ module issue_stage (
         endcase
     end
     // IF当前尚无有效packet时为下一次双字返回预留两个槽位。
-    assign is_allowin = global_flush ||
-                        ((!fs_to_is_valid0 || fs_to_is_valid1) ?
-                         can_accept_two : can_accept_one);
-    assign packet_accept = fs_to_is_valid0 && is_allowin && !global_flush;
+    assign capacity_allow = (!fs_to_is_valid0 || fs_to_is_valid1) ?
+                            can_accept_two : can_accept_one;
+    assign is_allowin = global_flush || capacity_allow;
+    // 与物理移位相同，flush 拍是否把 IF payload 写进无效槽位不可观察；
+    // queue_count 会在本拍末清零。物理写入只看正常容量，避免 global_flush
+    // 经 packet 接收控制再进入 queue payload/queue_info 的 CE/D 锥。
+    assign packet_write = fs_to_is_valid0 && capacity_allow;
 
     assign dual_issue_event = lane1_fire;
     assign single_issue_event = lane0_fire && !lane1_fire;
@@ -348,8 +352,8 @@ module issue_stage (
         next_queue_count = queue_count;
         next_next_packet_tag = next_packet_tag;
 
-        // flush 周期 lane fire 和 packet_accept 已被抑制，因此 payload、预译码
-        // 和槽位 tag 可以按普通的“零消费、零入队”路径保持。不要把
+        // flush 周期的 payload、预译码和槽位 tag 可以按普通物理状态转移。
+        // 不要把
         // global_flush 接入这些宽寄存器的 CE/D 锥；count 清零后它们都属于
         // 无效数据，后续有效入队会自然覆盖。
         unique case (consume_count)
@@ -385,7 +389,7 @@ module issue_stage (
         endcase
         next_queue_count = remaining_count;
 
-        if (packet_accept) begin
+        if (packet_write) begin
             unique case (remaining_count)
                     3'd0: begin
                         next_queue0 = fs_to_is_bus0;
