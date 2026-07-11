@@ -340,13 +340,11 @@ module issue_stage (
         next_queue_count = queue_count;
         next_next_packet_tag = next_packet_tag;
 
-        if (global_flush) begin
-            // payload、预译码和tag在count=0后均为无效数据，不必由EX redirect
-            // 高扇出清零；后续有效入队会按槽位自然覆盖。
-            next_queue_count = 3'd0;
-            next_next_packet_tag = 1'b0;
-        end else begin
-            unique case (consume_count)
+        // flush 周期 lane fire 和 packet_accept 已被抑制，因此 payload、预译码
+        // 和槽位 tag 可以按普通的“零消费、零入队”路径保持。不要把
+        // global_flush 接入这些宽寄存器的 CE/D 锥；count 清零后它们都属于
+        // 无效数据，后续有效入队会自然覆盖。
+        unique case (consume_count)
                 3'd1: begin
                     next_queue0 = queue1;
                     next_queue1 = queue2;
@@ -375,12 +373,12 @@ module issue_stage (
                     next_queue_info2 = '0;
                     next_queue_info3 = '0;
                 end
-                default: ;
-            endcase
-            next_queue_count = remaining_count;
+            default: ;
+        endcase
+        next_queue_count = remaining_count;
 
-            if (packet_accept) begin
-                unique case (remaining_count)
+        if (packet_accept) begin
+            unique case (remaining_count)
                     3'd0: begin
                         next_queue0 = fs_to_is_bus0;
                         next_queue_tag0 = next_packet_tag;
@@ -422,11 +420,15 @@ module issue_stage (
                         next_queue_tag3 = next_packet_tag;
                         next_queue_info3 = decode_issue_info(
                             fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
-                    end
-                endcase
-                next_queue_count = remaining_count + incoming_count;
-                next_next_packet_tag = ~next_packet_tag;
-            end
+                end
+            endcase
+            next_queue_count = remaining_count + incoming_count;
+            next_next_packet_tag = ~next_packet_tag;
+        end
+
+        if (global_flush) begin
+            next_queue_count = 3'd0;
+            next_next_packet_tag = 1'b0;
         end
     end
 
