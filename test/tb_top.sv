@@ -4,9 +4,9 @@
 module tb_uart_benchmark;
     localparam integer CLK_PERIOD_NS = 20; // 仿真步进；性能换算频率由benchmark邮箱给出
     localparam integer PERF_BASE_WORD = 512; // 0x6000_0800映射到data RAM word 512
-    localparam logic [31:0] PERF_MAGIC = 32'h4C33_4730; // "L3G0"
+    localparam logic [31:0] PERF_MAGIC = 32'h4C33_4830; // "L3H0"
     localparam integer PERF_REPORT_WORDS = 20;
-    localparam integer PERF_REPORT_COUNT = 6;
+    localparam integer PERF_REPORT_COUNT = 7;
 
     reg clk;
     reg clk_uart;
@@ -122,7 +122,7 @@ module tb_uart_benchmark;
 
             if (u_my_cpu.u_cpu_top.u_regfile_csr.perf_enable && !perf_enable_d) begin
                 if (perf_phase >= 0) begin
-                    $display("L3G_WINDOW_START phase=%0d fetch_pc=%08h wb_pc=%08h",
+                    $display("L3H_WINDOW_START phase=%0d fetch_pc=%08h wb_pc=%08h",
                              perf_phase, debug_inst_pc, debug_wb_pc);
                 end
                 downstream_blocked_cycles <= !u_my_cpu.u_cpu_top.ds_bundle_allowin;
@@ -153,9 +153,9 @@ module tb_uart_benchmark;
 
             if (!u_my_cpu.u_cpu_top.u_regfile_csr.perf_enable && perf_enable_d) begin
                 if (perf_phase >= 0) begin
-                    $display("L3G_WINDOW_END phase=%0d fetch_pc=%08h wb_pc=%08h",
+                    $display("L3H_WINDOW_END phase=%0d fetch_pc=%08h wb_pc=%08h",
                              perf_phase, debug_inst_pc, debug_wb_pc);
-                    $display("L3G_QUEUE phase=%0d depth0=%0d depth1=%0d depth2=%0d depth3=%0d depth4=%0d downstream_blocked=%0d qfull_downstream=%0d qfull_capacity=%0d",
+                    $display("L3H_QUEUE phase=%0d depth0=%0d depth1=%0d depth2=%0d depth3=%0d depth4=%0d downstream_blocked=%0d qfull_downstream=%0d qfull_capacity=%0d",
                              perf_phase,
                              queue_depth_cycles[0], queue_depth_cycles[1],
                              queue_depth_cycles[2], queue_depth_cycles[3],
@@ -188,7 +188,7 @@ module tb_uart_benchmark;
             instret_wide = instret;
             ipc_x1000 = (cycles != 0) ? ((instret_wide * 1000) / cycles) : 0;
 
-            $display("L3G_REPORT name=%s cycles=%0d instret=%0d ipc_x1000=%0d branch=%0d brmisp=%0d loaduse=%0d exstall=%0d dual=%0d single=%0d raw=%0d waw=%0d struct=%0d lsu_pair=%0d lane1_ctrl=%0d lsu_conflict=%0d bitman_pair=%0d cross_packet=%0d qfull=%0d exceptions=%0d",
+            $display("L3H_REPORT name=%s cycles=%0d instret=%0d ipc_x1000=%0d branch=%0d brmisp=%0d loaduse=%0d exstall=%0d dual=%0d single=%0d raw=%0d waw=%0d struct=%0d lsu_pair=%0d lane1_ctrl=%0d lsu_conflict=%0d bitman_pair=%0d cross_packet=%0d qfull=%0d exceptions=%0d",
                      report_name, cycles, instret, ipc_x1000,
                      perf_word(offset + 2), perf_word(offset + 3),
                      perf_word(offset + 6), perf_word(offset + 7),
@@ -214,16 +214,16 @@ module tb_uart_benchmark;
         end
 
         if (perf_word(0) !== PERF_MAGIC) begin
-            $display("[TB] Timeout waiting for L3G performance mailbox.");
+            $display("[TB] Timeout waiting for L3H performance mailbox.");
 `ifdef DEBUG_EN
             $display("[TB] debug_inst_pc=%08h debug_wb_pc=%08h", debug_inst_pc, debug_wb_pc);
 `endif
             $fatal(1, "PERF_BENCHMARK_TIMEOUT");
         end
 
-        $display("L3G_HEADER version=%0d cpu_freq_hz=%0d sink=%08h sim_cycles=%0d",
+        $display("L3H_HEADER version=%0d cpu_freq_hz=%0d sink=%08h sim_cycles=%0d",
                  perf_word(1), perf_word(2), perf_word(3), wait_cycles);
-        if ((perf_word(1) != 2) || (perf_word(2) == 0)) begin
+        if ((perf_word(1) != 3) || (perf_word(2) == 0)) begin
             failures = failures + 1;
         end
 
@@ -232,7 +232,8 @@ module tb_uart_benchmark;
         display_report("BRANCH_REGULAR", 4 + (2 * PERF_REPORT_WORDS));
         display_report("BRANCH_SHORT", 4 + (3 * PERF_REPORT_WORDS));
         display_report("BRANCH_CALL", 4 + (4 * PERF_REPORT_WORDS));
-        display_report("MEMORY", 4 + (5 * PERF_REPORT_WORDS));
+        display_report("BRANCH_CAPACITY", 4 + (5 * PERF_REPORT_WORDS));
+        display_report("MEMORY", 4 + (6 * PERF_REPORT_WORDS));
 
         total_cycles = 0;
         total_instret = 0;
@@ -244,7 +245,7 @@ module tb_uart_benchmark;
                             perf_word(5 + (report_index * PERF_REPORT_WORDS));
         end
         total_ipc_x1000 = (total_instret * 1000) / total_cycles;
-        $display("L3G_OVERALL cycles=%0d instret=%0d ipc_x1000=%0d",
+        $display("L3H_OVERALL cycles=%0d instret=%0d ipc_x1000=%0d",
                  total_cycles, total_instret, total_ipc_x1000);
 
         if (failures == 0) begin

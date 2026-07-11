@@ -99,6 +99,7 @@
 #define BENCH_SCALE        1u
 #define ALU_ITERS_BASE     12000u
 #define BRANCH_ITERS_BASE  12000u
+#define BTB_PASSES_BASE     512u
 #define MEM_WORDS          256u
 #define MEM_PASSES_BASE    180u
 
@@ -109,8 +110,8 @@
 static volatile uint32_t g_sink;
 static uint32_t g_mem[MEM_WORDS];
 
-#define PERF_RESULT_MAGIC   0x4C334730u /* "L3G0" */
-#define PERF_RESULT_VERSION 2u
+#define PERF_RESULT_MAGIC   0x4C334830u /* "L3H0" */
+#define PERF_RESULT_VERSION 3u
 
 typedef struct {
     uint32_t cycles;
@@ -145,10 +146,11 @@ typedef struct {
     perf_report_t branch_regular;
     perf_report_t branch_short_loop;
     perf_report_t branch_call;
+    perf_report_t branch_capacity;
     perf_report_t memory;
 } perf_results_t;
 
-/* 固定在数据RAM保留区的496-byte仿真邮箱；magic最后写入。 */
+/* 固定在数据RAM保留区的576-byte仿真邮箱；magic最后写入。 */
 volatile perf_results_t g_perf_results
     __attribute__((section(".perf_results"), aligned(4)));
 
@@ -353,6 +355,29 @@ void bench_branch_call(uint32_t iters) {
     g_sink ^= acc;
 }
 
+static __attribute__((noinline, noclone))
+void bench_branch_capacity(uint32_t passes) {
+    uint32_t i;
+    uint32_t acc = 0x6D2B79F5u;
+
+    /*
+     * 连续放置128个静态taken分支，每个目标为下一条指令。分支仍会参与
+     * 方向/目标校验并在未命中时产生恢复气泡，但128个PC可覆盖BTB全部索引。
+     * 16项直接映射表会逐轮冲突替换，128项表则可在预热后稳定命中。
+     */
+    for (i = 0; i < passes; ++i) {
+        __asm__ volatile (
+            ".rept 128\n"
+            "beq zero, zero, 1f\n"
+            "1:\n"
+            ".endr\n"
+            ::: "memory");
+        acc ^= (i << 5) + (i >> 2) + 0x9E3779B9u;
+    }
+
+    g_sink ^= acc;
+}
+
 static void bench_memory(uint32_t passes) {
     /* 访存负载：数组随机扰动读写，观察 load/store 与存储系统表现 */
     uint32_t p, i;
@@ -417,6 +442,7 @@ int main(void) {
      */
     uint32_t alu_iters = ALU_ITERS_BASE * BENCH_SCALE;
     uint32_t branch_iters = BRANCH_ITERS_BASE * BENCH_SCALE;
+    uint32_t btb_passes = BTB_PASSES_BASE * BENCH_SCALE;
     uint32_t mem_passes = MEM_PASSES_BASE * BENCH_SCALE;
     
     /* 性能评分相关 */
@@ -427,6 +453,7 @@ int main(void) {
     uint32_t regular_cycles = 0, regular_instret = 0;
     uint32_t short_cycles = 0, short_instret = 0;
     uint32_t call_cycles = 0, call_instret = 0;
+    uint32_t capacity_cycles = 0, capacity_instret = 0;
     uint32_t memory_cycles = 0, memory_instret = 0;
 
     g_perf_results.magic = 0u;
@@ -494,6 +521,16 @@ int main(void) {
     }
 
     perf_begin();
+    bench_branch_capacity(btb_passes);
+    perf_end();
+    capture_perf(&g_perf_results.branch_capacity);
+    capacity_cycles = g_perf_results.branch_capacity.cycles;
+    capacity_instret = g_perf_results.branch_capacity.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_CAPACITY", capacity_cycles, capacity_instret);
+    }
+
+    perf_begin();
     bench_memory(mem_passes);
     perf_end();
     capture_perf(&g_perf_results.memory);
@@ -505,9 +542,9 @@ int main(void) {
     
     /* 累加总体指标 */
     total_cycles = alu_cycles + random_cycles + regular_cycles +
-                   short_cycles + call_cycles + memory_cycles;
+                   short_cycles + call_cycles + capacity_cycles + memory_cycles;
     total_instret = alu_instret + random_instret + regular_instret +
-                    short_instret + call_instret + memory_instret;
+                    short_instret + call_instret + capacity_instret + memory_instret;
 
     if (BENCH_UART_OUTPUT) {
         uart_puts("\n==== Overall Performance Summary ====\n");

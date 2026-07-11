@@ -39,7 +39,11 @@ module if_stage (
     logic br_taken_reg;
     logic [31:0] br_target_reg;
 
+    `ifdef L3H_BTB_16_ENTRIES
     localparam BP_INDEX_WIDTH = 4;
+    `else
+    localparam BP_INDEX_WIDTH = 7;
+    `endif
     localparam BP_ENTRIES = 1 << BP_INDEX_WIDTH;
     localparam BP_TAG_WIDTH = `ADDR_WIDTH - BP_INDEX_WIDTH - 2;
 
