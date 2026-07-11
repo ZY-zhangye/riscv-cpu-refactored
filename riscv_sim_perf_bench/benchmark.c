@@ -109,8 +109,8 @@
 static volatile uint32_t g_sink;
 static uint32_t g_mem[MEM_WORDS];
 
-#define PERF_RESULT_MAGIC   0x4C334530u /* "L3E0" */
-#define PERF_RESULT_VERSION 1u
+#define PERF_RESULT_MAGIC   0x4C334730u /* "L3G0" */
+#define PERF_RESULT_VERSION 2u
 
 typedef struct {
     uint32_t cycles;
@@ -141,11 +141,14 @@ typedef struct {
     uint32_t cpu_freq_hz;
     uint32_t sink;
     perf_report_t alu;
-    perf_report_t branch;
+    perf_report_t branch_random;
+    perf_report_t branch_regular;
+    perf_report_t branch_short_loop;
+    perf_report_t branch_call;
     perf_report_t memory;
 } perf_results_t;
 
-/* 固定在数据RAM末尾的256-byte仿真邮箱；magic最后写入。 */
+/* 固定在数据RAM保留区的496-byte仿真邮箱；magic最后写入。 */
 volatile perf_results_t g_perf_results
     __attribute__((section(".perf_results"), aligned(4)));
 
@@ -269,7 +272,7 @@ static void bench_alu(uint32_t iters) {
     g_sink ^= x ^ y;
 }
 
-static void bench_branch(uint32_t iters) {
+static void bench_branch_random(uint32_t iters) {
     /* 分支负载：含多分支路径，观察分支处理和流水线行为 */
     uint32_t s = 0x31415926u;
     uint32_t acc = 0;
@@ -292,6 +295,59 @@ static void bench_branch(uint32_t iters) {
         } else {
             acc += 3u;
         }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_regular(uint32_t iters) {
+    uint32_t acc = 0x2468ACE0u;
+    uint32_t i;
+
+    /* 7次走taken、1次走not-taken，观察方向状态稳定性。 */
+    for (i = 0; i < iters; ++i) {
+        if ((i & 7u) != 0u) {
+            acc += (i << 1) ^ 0x10203040u;
+        } else {
+            acc ^= i + 0x55667788u;
+        }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_short_loop(uint32_t outer_iters, uint32_t inner_limit) {
+    uint32_t acc = 0x13579BDFu;
+    uint32_t outer;
+    uint32_t inner;
+
+    /* 重复短循环用于观察TTTN类循环退出模式。 */
+    for (outer = 0; outer < outer_iters; ++outer) {
+        for (inner = 0; inner < inner_limit; ++inner) {
+            acc = (acc << 3) ^ (acc >> 2) ^ outer ^ inner;
+        }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t branch_call_helper(uint32_t x) {
+    if (x & 1u) {
+        return (x << 5) ^ 0xA55AA55Au;
+    }
+    return (x >> 3) + 0x31415926u;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_call(uint32_t iters) {
+    uint32_t acc = 0x89ABCDEFu;
+    uint32_t i;
+
+    for (i = 0; i < iters; ++i) {
+        acc ^= branch_call_helper(acc + i);
     }
 
     g_sink ^= acc;
@@ -356,7 +412,7 @@ static void print_metric(const char *name, uint32_t cycles, uint32_t instret) {
 
 int main(void) {
     /*
-     * 可改：这三个变量决定仿真总耗时。
+     * 可改：这些变量决定仿真总耗时。
      * 若仿真过慢：先减 BENCH_SCALE；若需更稳统计：增 BENCH_SCALE。
      */
     uint32_t alu_iters = ALU_ITERS_BASE * BENCH_SCALE;
@@ -367,7 +423,10 @@ int main(void) {
     uint32_t total_cycles = 0;
     uint32_t total_instret = 0;
     uint32_t alu_cycles = 0, alu_instret = 0;
-    uint32_t branch_cycles = 0, branch_instret = 0;
+    uint32_t random_cycles = 0, random_instret = 0;
+    uint32_t regular_cycles = 0, regular_instret = 0;
+    uint32_t short_cycles = 0, short_instret = 0;
+    uint32_t call_cycles = 0, call_instret = 0;
     uint32_t memory_cycles = 0, memory_instret = 0;
 
     g_perf_results.magic = 0u;
@@ -395,13 +454,43 @@ int main(void) {
     }
 
     perf_begin();
-    bench_branch(branch_iters);
+    bench_branch_random(branch_iters);
     perf_end();
-    capture_perf(&g_perf_results.branch);
-    branch_cycles = g_perf_results.branch.cycles;
-    branch_instret = g_perf_results.branch.instret;
+    capture_perf(&g_perf_results.branch_random);
+    random_cycles = g_perf_results.branch_random.cycles;
+    random_instret = g_perf_results.branch_random.instret;
     if (BENCH_UART_OUTPUT) {
-        print_metric("BRANCH", branch_cycles, branch_instret);
+        print_metric("BRANCH_RANDOM", random_cycles, random_instret);
+    }
+
+    perf_begin();
+    bench_branch_regular(branch_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_regular);
+    regular_cycles = g_perf_results.branch_regular.cycles;
+    regular_instret = g_perf_results.branch_regular.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_REGULAR", regular_cycles, regular_instret);
+    }
+
+    perf_begin();
+    bench_branch_short_loop(branch_iters / 4u, 4u);
+    perf_end();
+    capture_perf(&g_perf_results.branch_short_loop);
+    short_cycles = g_perf_results.branch_short_loop.cycles;
+    short_instret = g_perf_results.branch_short_loop.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_SHORT", short_cycles, short_instret);
+    }
+
+    perf_begin();
+    bench_branch_call(branch_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_call);
+    call_cycles = g_perf_results.branch_call.cycles;
+    call_instret = g_perf_results.branch_call.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_CALL", call_cycles, call_instret);
     }
 
     perf_begin();
@@ -415,8 +504,10 @@ int main(void) {
     }
     
     /* 累加总体指标 */
-    total_cycles = alu_cycles + branch_cycles + memory_cycles;
-    total_instret = alu_instret + branch_instret + memory_instret;
+    total_cycles = alu_cycles + random_cycles + regular_cycles +
+                   short_cycles + call_cycles + memory_cycles;
+    total_instret = alu_instret + random_instret + regular_instret +
+                    short_instret + call_instret + memory_instret;
 
     if (BENCH_UART_OUTPUT) {
         uart_puts("\n==== Overall Performance Summary ====\n");

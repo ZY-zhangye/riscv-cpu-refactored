@@ -8,8 +8,8 @@ ENTRY(_start)
  */
 MEMORY
 {
-  INSTR (rx) : ORIGIN = 0x00000000, LENGTH = 0x1000
-  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0x800
+  INSTR (rx) : ORIGIN = 0x80000000, LENGTH = 0x1000
+  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0xA00
 }
 
 SECTIONS
@@ -60,8 +60,8 @@ SECTIONS
     __stack_top = .;
   } > DATA
 
-  /* 三组L3E性能计数结果，共256字节，供testbench直接读取。 */
-  .perf_results 0x60000700 (NOLOAD) :
+  /* 六组L3G性能计数结果，共496字节，供testbench直接读取。 */
+  .perf_results 0x60000800 (NOLOAD) :
   {
     KEEP(*(.perf_results))
   } > DATA
