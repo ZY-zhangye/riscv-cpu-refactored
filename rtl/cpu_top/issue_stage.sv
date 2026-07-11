@@ -104,6 +104,8 @@ module issue_stage (
     logic can_pair;
     logic lane0_fire;
     logic lane1_fire;
+    logic lane0_shift;
+    logic lane1_shift;
     logic packet_accept;
     logic [2:0] consume_count;
     logic [2:0] incoming_count;
@@ -282,7 +284,13 @@ module issue_stage (
 
     assign lane0_fire = is_to_ds_valid0 && ds_bundle_allowin;
     assign lane1_fire = is_to_ds_valid1 && ds_bundle_allowin;
-    assign consume_count = lane1_fire ? 3'd2 : lane0_fire ? 3'd1 : 3'd0;
+    // 队列 payload 的物理移位不需要受 global_flush 门控：flush 最终会把
+    // queue_count 清零，移位后的 payload 均为无效数据。提交事件仍使用上面
+    // 带 flush 掩码的 lane*_fire，只有内部移位选择使用未掩码条件，避免
+    // EX redirect 经 consume_count 进入所有宽队列寄存器的 CE/D 锥。
+    assign lane0_shift = buf_valid0 && ds_bundle_allowin;
+    assign lane1_shift = can_pair && ds_bundle_allowin;
+    assign consume_count = lane1_shift ? 3'd2 : lane0_shift ? 3'd1 : 3'd0;
     assign incoming_count = fs_to_is_valid0 ?
                             (fs_to_is_valid1 ? 3'd2 : 3'd1) : 3'd0;
     assign remaining_count = queue_count - consume_count;
