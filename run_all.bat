@@ -16,7 +16,7 @@ set MODE=%~1
 if "%MODE%"=="" set MODE=all
 
 REM === compilation ===
-vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.svh rtl/my_cpu/*.sv test/*.sv
+vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.svh rtl/my_cpu/*.sv vivado-project/jyd2025-reference/rtl/board/dram_driver.sv test/*.sv
 if errorlevel 1 (
     echo Compile failed!
     exit /b 1
@@ -36,6 +36,8 @@ if errorlevel 1 goto :fail
 call :run_unit_test tb_multi_issue_l2 multi_issue_l2 "MULTI_ISSUE_L2_TEST_PASSED"
 if errorlevel 1 goto :fail
 call :run_unit_test tb_multi_issue_l3 multi_issue_l3 "MULTI_ISSUE_L3_TEST_PASSED"
+if errorlevel 1 goto :fail
+call :run_unit_test tb_dram_driver dram_driver "DRAM_DRIVER_TEST_PASSED"
 if errorlevel 1 goto :fail
 
 if /I "%MODE%"=="z" goto :run_z_only
