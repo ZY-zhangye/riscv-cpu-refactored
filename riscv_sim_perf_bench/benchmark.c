@@ -100,6 +100,7 @@
 #define ALU_ITERS_BASE     12000u
 #define BRANCH_ITERS_BASE  12000u
 #define BTB_PASSES_BASE     512u
+#define RETURN_ITERS_BASE   8000u
 #define MEM_WORDS          256u
 #define MEM_PASSES_BASE    180u
 
@@ -110,8 +111,8 @@
 static volatile uint32_t g_sink;
 static uint32_t g_mem[MEM_WORDS];
 
-#define PERF_RESULT_MAGIC   0x4C334830u /* "L3H0" */
-#define PERF_RESULT_VERSION 3u
+#define PERF_RESULT_MAGIC   0x4C334930u /* "L3I0" */
+#define PERF_RESULT_VERSION 4u
 
 typedef struct {
     uint32_t cycles;
@@ -147,10 +148,11 @@ typedef struct {
     perf_report_t branch_short_loop;
     perf_report_t branch_call;
     perf_report_t branch_capacity;
+    perf_report_t branch_return;
     perf_report_t memory;
 } perf_results_t;
 
-/* 固定在数据RAM保留区的576-byte仿真邮箱；magic最后写入。 */
+/* 固定在数据RAM保留区的656-byte仿真邮箱；magic最后写入。 */
 volatile perf_results_t g_perf_results
     __attribute__((section(".perf_results"), aligned(4)));
 
@@ -378,6 +380,47 @@ void bench_branch_capacity(uint32_t passes) {
     g_sink ^= acc;
 }
 
+static __attribute__((noinline, noclone))
+uint32_t shared_return_helper(uint32_t x) {
+    __asm__ volatile ("" : "+r"(x));
+    return (x << 7) ^ (x >> 3) ^ 0x7F4A7C15u;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level3(uint32_t x) {
+    uint32_t y = shared_return_helper(x ^ 0x13579BDFu);
+    return y + 0x10203040u;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level2(uint32_t x) {
+    uint32_t y = nested_return_level3(x + 0x2468ACE0u);
+    return y ^ (x >> 5);
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level1(uint32_t x) {
+    uint32_t y = nested_return_level2(x ^ 0x89ABCDEFu);
+    return y + (x << 3);
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_return(uint32_t iters) {
+    uint32_t i;
+    uint32_t acc = 0xD1B54A35u;
+
+    /* 同一ret指令轮流返回四个静态调用点，专门暴露单目标JALR BTB抖动。 */
+    for (i = 0; i < iters; ++i) {
+        acc ^= shared_return_helper(acc + i + 0u);
+        acc ^= shared_return_helper(acc + i + 1u);
+        acc ^= shared_return_helper(acc + i + 2u);
+        acc ^= shared_return_helper(acc + i + 3u);
+        acc ^= nested_return_level1(acc + i);
+    }
+
+    g_sink ^= acc;
+}
+
 static void bench_memory(uint32_t passes) {
     /* 访存负载：数组随机扰动读写，观察 load/store 与存储系统表现 */
     uint32_t p, i;
@@ -443,6 +486,7 @@ int main(void) {
     uint32_t alu_iters = ALU_ITERS_BASE * BENCH_SCALE;
     uint32_t branch_iters = BRANCH_ITERS_BASE * BENCH_SCALE;
     uint32_t btb_passes = BTB_PASSES_BASE * BENCH_SCALE;
+    uint32_t return_iters = RETURN_ITERS_BASE * BENCH_SCALE;
     uint32_t mem_passes = MEM_PASSES_BASE * BENCH_SCALE;
     
     /* 性能评分相关 */
@@ -454,6 +498,7 @@ int main(void) {
     uint32_t short_cycles = 0, short_instret = 0;
     uint32_t call_cycles = 0, call_instret = 0;
     uint32_t capacity_cycles = 0, capacity_instret = 0;
+    uint32_t return_cycles = 0, return_instret = 0;
     uint32_t memory_cycles = 0, memory_instret = 0;
 
     g_perf_results.magic = 0u;
@@ -531,6 +576,16 @@ int main(void) {
     }
 
     perf_begin();
+    bench_branch_return(return_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_return);
+    return_cycles = g_perf_results.branch_return.cycles;
+    return_instret = g_perf_results.branch_return.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_RETURN", return_cycles, return_instret);
+    }
+
+    perf_begin();
     bench_memory(mem_passes);
     perf_end();
     capture_perf(&g_perf_results.memory);
@@ -542,9 +597,11 @@ int main(void) {
     
     /* 累加总体指标 */
     total_cycles = alu_cycles + random_cycles + regular_cycles +
-                   short_cycles + call_cycles + capacity_cycles + memory_cycles;
+                   short_cycles + call_cycles + capacity_cycles + return_cycles +
+                   memory_cycles;
     total_instret = alu_instret + random_instret + regular_instret +
-                    short_instret + call_instret + capacity_instret + memory_instret;
+                    short_instret + call_instret + capacity_instret + return_instret +
+                    memory_instret;
 
     if (BENCH_UART_OUTPUT) {
         uart_puts("\n==== Overall Performance Summary ====\n");

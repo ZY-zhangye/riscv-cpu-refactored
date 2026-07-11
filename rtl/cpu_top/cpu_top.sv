@@ -74,6 +74,8 @@ module cpu_top (
     logic bp_update_taken;
     logic [31:0] bp_update_target;
     logic bp_update_is_jalr;
+    logic bp_update_is_call;
+    logic bp_update_is_return;
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
@@ -86,6 +88,8 @@ module cpu_top (
     logic bp_update_taken0;
     logic [31:0] bp_update_target0;
     logic bp_update_is_jalr0;
+    logic bp_update_is_call0;
+    logic bp_update_is_return0;
     logic br_taken1;
     logic [31:0] br_target1;
     logic br_redirect1;
@@ -95,6 +99,8 @@ module cpu_top (
     logic bp_update_taken1;
     logic [31:0] bp_update_target1;
     logic bp_update_is_jalr1;
+    logic bp_update_is_call1;
+    logic bp_update_is_return1;
 
     // issue -> ID bundle
     logic is_to_ds_valid0;
@@ -315,6 +321,8 @@ module cpu_top (
         .bp_update_taken(bp_update_taken),
         .bp_update_target(bp_update_target),
         .bp_update_is_jalr(bp_update_is_jalr),
+        .bp_update_is_call(bp_update_is_call),
+        .bp_update_is_return(bp_update_is_return),
         .fs_exc_bus(fs_exc_bus),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
@@ -501,6 +509,8 @@ module cpu_top (
     assign bp_update_taken = bp_update_valid0 ? bp_update_taken0 : bp_update_taken1;
     assign bp_update_target = bp_update_valid0 ? bp_update_target0 : bp_update_target1;
     assign bp_update_is_jalr = bp_update_valid0 ? bp_update_is_jalr0 : bp_update_is_jalr1;
+    assign bp_update_is_call = bp_update_valid0 ? bp_update_is_call0 : bp_update_is_call1;
+    assign bp_update_is_return = bp_update_valid0 ? bp_update_is_return0 : bp_update_is_return1;
 
     exe_stage u_exe_stage0 (
         .clk(clk),
@@ -542,6 +552,8 @@ module cpu_top (
         .bp_update_taken(bp_update_taken0),
         .bp_update_target(bp_update_target0),
         .bp_update_is_jalr(bp_update_is_jalr0),
+        .bp_update_is_call(bp_update_is_call0),
+        .bp_update_is_return(bp_update_is_return0),
         .branch_event(ex_branch_event),
         .branch_mispredict_event(ex_branch_mispredict_event),
         .execute_stall_event(execute_stall_event0),
@@ -599,6 +611,8 @@ module cpu_top (
         .bp_update_taken(bp_update_taken1),
         .bp_update_target(bp_update_target1),
         .bp_update_is_jalr(bp_update_is_jalr1),
+        .bp_update_is_call(bp_update_is_call1),
+        .bp_update_is_return(bp_update_is_return1),
         .branch_event(branch_event1),
         .branch_mispredict_event(branch_mispredict_event1),
         .execute_stall_event(execute_stall_event1),

@@ -48,6 +48,8 @@ module exe_stage(
     output logic bp_update_taken,
     output logic [31:0] bp_update_target,
     output logic bp_update_is_jalr,
+    output logic bp_update_is_call,
+    output logic bp_update_is_return,
     //性能计数事件
     output logic branch_event,
     output logic branch_mispredict_event,
@@ -584,6 +586,14 @@ module exe_stage(
     assign bp_update_taken = br_taken;
     assign bp_update_target = br_target;
     assign bp_update_is_jalr = is_jalr;
+    assign bp_update_is_call = (is_jal || is_jalr) &&
+                               ((exe_inst[11:7] == 5'd1) ||
+                                (exe_inst[11:7] == 5'd5));
+    assign bp_update_is_return = is_jalr &&
+                                 (exe_inst[11:7] == 5'd0) &&
+                                 ((exe_inst[19:15] == 5'd1) ||
+                                  (exe_inst[19:15] == 5'd5)) &&
+                                 (exe_inst[31:20] == 12'd0);
     assign branch_event = es_to_ms_valid && ms_allowin && !es_flush && is_br_jmp;
     assign branch_mispredict_event = branch_event && br_redirect;
     //结果选择

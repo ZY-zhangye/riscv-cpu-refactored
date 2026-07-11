@@ -24,6 +24,8 @@ module if_stage (
     input logic bp_update_taken,
     input logic [`ADDR_WIDTH-1:0] bp_update_target,
     input logic bp_update_is_jalr,
+    input logic bp_update_is_call,
+    input logic bp_update_is_return,
     //异常包接口
     output logic [`EXC_WIDTH-1:0] fs_exc_bus,
     //异常跳转接口
@@ -65,6 +67,29 @@ module if_stage (
     logic [BP_INDEX_WIDTH-1:0] bp_update_index;
     logic [BP_TAG_WIDTH-1:0] bp_update_tag;
 
+    `ifdef L3I_RAS
+    localparam RAS_DEPTH = 8;
+    localparam RAS_INDEX_WIDTH = 3;
+    logic [`ADDR_WIDTH-1:0] ras_commit_stack [RAS_DEPTH-1:0];
+    logic [`ADDR_WIDTH-1:0] ras_spec_stack [RAS_DEPTH-1:0];
+    logic [RAS_INDEX_WIDTH-1:0] ras_commit_sp;
+    logic [RAS_INDEX_WIDTH:0] ras_commit_count;
+    logic [RAS_INDEX_WIDTH-1:0] ras_spec_sp;
+    logic [RAS_INDEX_WIDTH:0] ras_spec_count;
+    logic [RAS_INDEX_WIDTH-1:0] ras_top_index;
+    logic [`ADDR_WIDTH-1:0] ras_top;
+    logic ras_call0;
+    logic ras_call1;
+    logic ras_return0;
+    logic ras_return1;
+    logic ras_pred_taken0;
+    logic ras_pred_taken1;
+    `endif
+    logic effective_pred_taken0;
+    logic effective_pred_taken1;
+    logic [`ADDR_WIDTH-1:0] effective_pred_target0;
+    logic [`ADDR_WIDTH-1:0] effective_pred_target1;
+
     assign bp_lookup_index0 = fs_out_pc[BP_INDEX_WIDTH+1:2];
     assign bp_lookup_index1 = (fs_out_pc + 32'd4) >> 2;
     assign bp_lookup_tag0 = fs_out_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
@@ -80,12 +105,46 @@ module if_stage (
     assign bp_update_index = bp_update_pc[BP_INDEX_WIDTH+1:2];
     assign bp_update_tag = bp_update_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
 
+    `ifdef L3I_RAS
+    assign ras_top_index = ras_spec_sp - 1'b1;
+    assign ras_top = ras_spec_stack[ras_top_index];
+    assign ras_call0 = ((fs_out_inst[6:0] == 7'b1101111) ||
+                        (fs_out_inst[6:0] == 7'b1100111)) &&
+                       ((fs_out_inst[11:7] == 5'd1) ||
+                        (fs_out_inst[11:7] == 5'd5));
+    assign ras_call1 = ((inst_in1[6:0] == 7'b1101111) ||
+                        (inst_in1[6:0] == 7'b1100111)) &&
+                       ((inst_in1[11:7] == 5'd1) ||
+                        (inst_in1[11:7] == 5'd5));
+    assign ras_return0 = (fs_out_inst[6:0] == 7'b1100111) &&
+                         (fs_out_inst[11:7] == 5'd0) &&
+                         ((fs_out_inst[19:15] == 5'd1) ||
+                          (fs_out_inst[19:15] == 5'd5)) &&
+                         (fs_out_inst[31:20] == 12'd0);
+    assign ras_return1 = (inst_in1[6:0] == 7'b1100111) &&
+                         (inst_in1[11:7] == 5'd0) &&
+                         ((inst_in1[19:15] == 5'd1) ||
+                          (inst_in1[19:15] == 5'd5)) &&
+                         (inst_in1[31:20] == 12'd0);
+    assign ras_pred_taken0 = (ras_spec_count != 0) && ras_return0;
+    assign ras_pred_taken1 = (ras_spec_count != 0) && ras_return1;
+    assign effective_pred_taken0 = ras_pred_taken0 || bp_pred_taken0;
+    assign effective_pred_taken1 = ras_pred_taken1 || bp_pred_taken1;
+    assign effective_pred_target0 = ras_pred_taken0 ? ras_top : bp_pred_target0;
+    assign effective_pred_target1 = ras_pred_taken1 ? ras_top : bp_pred_target1;
+    `else
+    assign effective_pred_taken0 = bp_pred_taken0;
+    assign effective_pred_taken1 = bp_pred_taken1;
+    assign effective_pred_target0 = bp_pred_target0;
+    assign effective_pred_target1 = bp_pred_target1;
+    `endif
+
     logic fetch_kill;
     assign seq_pc = fs_out_pc + 8;
     assign next_pc = exception_flag ? exception_addr :
                      br_taken_reg ? br_target_reg :
-                     bp_pred_taken0 ? bp_pred_target0 :
-                     bp_pred_taken1 ? bp_pred_target1 :
+                     effective_pred_taken0 ? effective_pred_target0 :
+                     effective_pred_taken1 ? effective_pred_target1 :
                      seq_pc;
     logic fs_valid;
     logic fs_ready_go;
@@ -95,7 +154,7 @@ module if_stage (
     assign fetch_kill = br_taken || br_taken_reg || exception_flag;
     assign fs_to_ds_valid = fs_valid && fs_ready_go && !fetch_kill;
     // lane0预测跳转时顺序lane1无效；lane1预测跳转时两条均有效，下一fetch转向目标。
-    assign fs_to_ds_valid1 = fs_to_ds_valid && !bp_pred_taken0;
+    assign fs_to_ds_valid1 = fs_to_ds_valid && !effective_pred_taken0;
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             fs_valid <= 1'b0;
@@ -147,18 +206,91 @@ module if_stage (
         end
     end
 
+    `ifdef L3I_RAS
+    always_ff @(posedge clk) begin
+        integer ras_i;
+        if (!rst_n) begin
+            ras_commit_sp <= '0;
+            ras_commit_count <= '0;
+            ras_spec_sp <= '0;
+            ras_spec_count <= '0;
+            for (ras_i = 0; ras_i < RAS_DEPTH; ras_i = ras_i + 1) begin
+                ras_commit_stack[ras_i] <= '0;
+                ras_spec_stack[ras_i] <= '0;
+            end
+        end else if (exception_flag) begin
+            ras_commit_sp <= '0;
+            ras_commit_count <= '0;
+            ras_spec_sp <= '0;
+            ras_spec_count <= '0;
+        end else begin
+            if (bp_update_valid && bp_update_is_call) begin
+                ras_commit_stack[ras_commit_sp] <= bp_update_pc + 32'd4;
+                ras_commit_sp <= ras_commit_sp + 1'b1;
+                if (ras_commit_count < RAS_DEPTH) begin
+                    ras_commit_count <= ras_commit_count + 1'b1;
+                end
+            end else if (bp_update_valid && bp_update_is_return &&
+                         (ras_commit_count != 0)) begin
+                ras_commit_sp <= ras_commit_sp - 1'b1;
+                ras_commit_count <= ras_commit_count - 1'b1;
+            end
+
+            if (br_taken) begin
+                for (ras_i = 0; ras_i < RAS_DEPTH; ras_i = ras_i + 1) begin
+                    ras_spec_stack[ras_i] <= ras_commit_stack[ras_i];
+                end
+                if (bp_update_valid && bp_update_is_call) begin
+                    ras_spec_stack[ras_commit_sp] <= bp_update_pc + 32'd4;
+                    ras_spec_sp <= ras_commit_sp + 1'b1;
+                    ras_spec_count <= (ras_commit_count < RAS_DEPTH) ?
+                                      ras_commit_count + 1'b1 : ras_commit_count;
+                end else if (bp_update_valid && bp_update_is_return &&
+                             (ras_commit_count != 0)) begin
+                    ras_spec_sp <= ras_commit_sp - 1'b1;
+                    ras_spec_count <= ras_commit_count - 1'b1;
+                end else begin
+                    ras_spec_sp <= ras_commit_sp;
+                    ras_spec_count <= ras_commit_count;
+                end
+            end else if (fs_to_ds_valid && ds_allowin) begin
+                if (ras_call0) begin
+                    ras_spec_stack[ras_spec_sp] <= fs_out_pc + 32'd4;
+                    ras_spec_sp <= ras_spec_sp + 1'b1;
+                    if (ras_spec_count < RAS_DEPTH) begin
+                        ras_spec_count <= ras_spec_count + 1'b1;
+                    end
+                end else if (ras_return0 && (ras_spec_count != 0)) begin
+                    ras_spec_sp <= ras_spec_sp - 1'b1;
+                    ras_spec_count <= ras_spec_count - 1'b1;
+                end else if (fs_to_ds_valid1 && ras_call1) begin
+                    ras_spec_stack[ras_spec_sp] <= fs_out_pc + 32'd8;
+                    ras_spec_sp <= ras_spec_sp + 1'b1;
+                    if (ras_spec_count < RAS_DEPTH) begin
+                        ras_spec_count <= ras_spec_count + 1'b1;
+                    end
+                end else if (fs_to_ds_valid1 && ras_return1 &&
+                             (ras_spec_count != 0)) begin
+                    ras_spec_sp <= ras_spec_sp - 1'b1;
+                    ras_spec_count <= ras_spec_count - 1'b1;
+                end
+            end
+        end
+    end
+    `endif
+
     assign pc_out = next_pc;
     assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc,
-                           (bp_pred_taken0 && !br_taken && !br_taken_reg && !exception_flag),
-                           bp_pred_target0};
+                           (effective_pred_taken0 && !br_taken && !br_taken_reg && !exception_flag),
+                           effective_pred_target0};
     assign pc_out1 = next_pc + 32'd4;
     assign inst_ren1 = fs_allowin;
     assign fs_to_ds_bus1 = {inst_in1, fs_out_pc + 32'd4,
-                            (bp_pred_taken1 && !br_taken && !br_taken_reg && !exception_flag),
-                            bp_pred_target1};
+                            (effective_pred_taken1 && !br_taken && !br_taken_reg && !exception_flag),
+                            effective_pred_target1};
 
     /*logic exception_iam;
     assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/
