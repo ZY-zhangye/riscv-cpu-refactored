@@ -62,14 +62,22 @@ blk_mem_gen_0 u_dram (
 - `run_all.bat all`：6 个单元/专项测试通过，77/77 ISA 用例通过。
 - 回归在隔离 worktree 执行，用户 HEX 与 Vivado 报告未被覆盖。
 
-## 后路由验收
+## 后路由结果
 
-L3C 需要重新运行 Vivado 综合、布局和布线，重点确认：
+L3C `0a3a08c` 已完成 Vivado 2023.2 综合、布局和布线：
+
+- LUT 13,528、FF 15,038、BRAM 64、DSP 8。
+- 175 MHz 约束下 WNS -1.754 ns、TNS -5,121.279 ns。
+- 推导 Fmax 133.9 MHz，按 5 MHz 向下取整的建议频率为 130 MHz。
+- 原 `mem_stage → DRAM BRAM ENARDEN` 最差路径已经消失。
+- 新最差路径迁移为 `u_exe_stage1/ds_to_es_bus_r_reg[1] → u_issue_stage/queue0_reg[80]/CE`，数据延迟 7.077 ns、15 级逻辑，布线占 82.0%。
+
+完整分析见 `vivado-project/jyd2025-reference/reports/L3C_0a3a08c_final/L3C_full_vivado_analysis.md`。该结果确认 BRAM 常使能修改达成目标；后续由 L3D 清理 EX redirect 对 issue queue payload 的高扇出清零路径。
+
+原定验收项结果如下：
 
 1. `ENARDEN` 路径已经消失。
-2. 新关键路径是否转移到 BRAM 地址 `ADDRARDADDR` 或写使能 `WEA`。
-3. 125 MHz 下达到 `WNS >= 0`、`TNS = 0`，并检查 hold timing。
-4. 尝试 130 MHz，记录 WNS/TNS、推导 Fmax 和 `1.259 × Fmax`。
-5. 检查 BRAM 数量仍为 64，DSP 仍为 8，LUT/FF 变化应很小。
-
-如果新关键路径仍以 BRAM 跨层级布线为主，下一步应优先采用 floorplan/pblock 或物理优化，而不是改变 CPU load 延迟或继续扩大多发架构。
+2. 新关键路径未转移到 BRAM 地址或写使能，而是 issue queue payload CE。
+3. hold WNS 为正、hold TNS 为 0；130 MHz 是依据 175 MHz 结果推导的建议运行点，仍应在实际 130 MHz 约束下复跑确认。
+4. 按 IPC 1.259 与 130 MHz 估算，吞吐约 163.7 MIPS。
+5. BRAM 仍为 64，DSP 仍为 8，资源变化很小。

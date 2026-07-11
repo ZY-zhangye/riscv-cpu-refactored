@@ -274,6 +274,11 @@ module tb_issue_stage;
         br_redirect = 1'b0;
         check("flush clears lane0", !is_to_ds_valid0);
         check("flush clears lane1", !is_to_ds_valid1);
+        send_pair(ADDI_X5_X0_5, ADDI_X6_X0_6);
+        check("post-flush new lane0", is_to_ds_valid0 &&
+              (bus_inst(is_to_ds_bus0) == ADDI_X5_X0_5));
+        check("post-flush new lane1", is_to_ds_valid1 &&
+              (bus_inst(is_to_ds_bus1) == ADDI_X6_X0_6));
 
         if (failures == 0) begin
             $display("ISSUE_STAGE_TEST_PASSED");

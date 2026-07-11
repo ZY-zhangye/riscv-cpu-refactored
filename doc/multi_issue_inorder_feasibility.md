@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B 已完成仿真与后路由分析；L3C 板级 BRAM 使能路径优化已完成 RTL 回归，等待后路由复测。记录见 `multi_issue_l3a_checkpoint.md`、`multi_issue_l3b_checkpoint.md` 与 `multi_issue_l3c_checkpoint.md`。
+状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理及完整 RTL 回归，等待后路由复测。记录见 `multi_issue_l3a_checkpoint.md`、`multi_issue_l3b_checkpoint.md`、`multi_issue_l3c_checkpoint.md` 与 `multi_issue_l3d_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 

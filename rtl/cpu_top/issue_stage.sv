@@ -317,18 +317,8 @@ module issue_stage (
         next_next_packet_tag = next_packet_tag;
 
         if (global_flush) begin
-            next_queue0 = '0;
-            next_queue1 = '0;
-            next_queue2 = '0;
-            next_queue3 = '0;
-            next_queue_tag0 = 1'b0;
-            next_queue_tag1 = 1'b0;
-            next_queue_tag2 = 1'b0;
-            next_queue_tag3 = 1'b0;
-            next_queue_info0 = '0;
-            next_queue_info1 = '0;
-            next_queue_info2 = '0;
-            next_queue_info3 = '0;
+            // payload、预译码和tag在count=0后均为无效数据，不必由EX redirect
+            // 高扇出清零；后续有效入队会按槽位自然覆盖。
             next_queue_count = 3'd0;
             next_next_packet_tag = 1'b0;
         end else begin
