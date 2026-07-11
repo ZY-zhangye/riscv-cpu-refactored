@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理及完整 RTL 回归，等待后路由复测。记录见 `multi_issue_l3a_checkpoint.md`、`multi_issue_l3b_checkpoint.md`、`multi_issue_l3c_checkpoint.md` 与 `multi_issue_l3d_checkpoint.md`。
+状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。记录见 `multi_issue_l3a_checkpoint.md`、`multi_issue_l3b_checkpoint.md`、`multi_issue_l3c_checkpoint.md` 与 `multi_issue_l3d_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 
@@ -233,7 +233,32 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 完成门槛：目标程序的 IPC 提升来自真实双发，而非降低时钟频率换取；必须同时报告 IPC、Fmax 和每秒有效指令数。
 
-### 6.7 长期阶段 L4：非对称 3-wide 可选实验
+### 6.7 长期并行主线 T：持续时序收敛
+
+时序优化不再作为架构阶段结束后的补充工作，而是与 L3、L4 等性能阶段并行推进。当前基线定义为：
+
+- 性能签核档：L3D @130 MHz，setup WNS +0.002 ns、TNS 0，IPC 1.259，约 163.7 MIPS。
+- 稳健运行档：125 MHz；后续应保留独立 PLL/约束配置并完成同等级后路由签核。
+- 130 MHz 是当前可实现的最高点，不把 2 ps 裕量视为充分的工程余量。
+
+长期执行规则：
+
+1. 每个架构阶段先完成 RTL/ISA/性能回归，再在服务器上运行实际目标频率的综合、布局、布线和 hold 检查；不得只用高频 WNS 线性外推签核频率。
+2. 每次同时记录 setup WNS/TNS、失败端点、hold、前 20 条路径簇、逻辑/布线占比、LUT/FF/BRAM/DSP、IPC 和 `IPC × Fmax`。
+3. 路径以布线为主时优先处理层次边界、寄存器复制、局部控制、队列物理结构和 placement；以逻辑为主时才考虑拆分比较链或增加流水级。
+4. 只有同一接口连续出现在关键路径簇、且阻碍目标签核频率时才改变协议。不得仅因单次报告出现 BRAM `WEA/ENA` 就增加访存延迟。
+5. 所有新增旁路、队列扩容、store buffer、第三 lane 或寄存器端口都必须通过 130 MHz 回归；若 IPC 上升但 `IPC × Fmax` 不升，则不进入稳定基线。
+6. 对阶段签核版本冻结 RTL、PLL/XDC、Vivado 版本、实现 directive 和报告目录，使结果可重复。
+
+下一轮时序工作的优先顺序：
+
+1. 先保存 L3D 的 130 MHz 性能档，并补做 125 MHz 稳健档签核。
+2. 对当前 `EXE → issue queue CE` 前 20 条路径做逻辑锥归类，区分 flush、正常搬移、入队选择和 allowin；只优化占主导的共同控制。
+3. 若需要扩大 130 MHz 裕量，优先评估 queue 局部写使能或环形队列，目标是减少跨层级 CE 扇出和 payload 搬移。
+4. 仅在 130 MHz 获得可重复正裕量后尝试 135 MHz；135 MHz 不作为当前稳定基线的硬性目标。
+5. LSU 请求寄存化和有序 store buffer 延后到真实性能计数证明 LSU 阻塞是主要瓶颈时再启动。
+
+### 6.8 长期阶段 L4：非对称 3-wide 可选实验
 
 只有成熟 2-wide 满足以下条件时才进入本阶段：
 
@@ -260,7 +285,7 @@ slot2：简单整数 ALU/bitman
 
 本阶段属于研究扩展，可以保留在独立分支，不应阻塞成熟 2-wide 的稳定版本。
 
-### 6.8 长期阶段 L5：4-wide 理论研究上限
+### 6.9 长期阶段 L5：4-wide 理论研究上限
 
 4-wide 仍可保持严格顺序，但需要 128-bit 取指、四译码、8R4W 级别寄存器访问、四路 commit、六组包内依赖关系和更大的跨级旁路网络。若希望获得与硬件投入相称的性能，通常还需要更宽的指令存储接口、banked data memory 或 Cache，以及至少两个可并行的简单执行/访存通道。
 
@@ -273,7 +298,7 @@ slot2：简单整数 ALU/bitman
 
 否则长期路线应停在高性能 2-wide，或最多保留非对称 3-wide 实验。4-wide 以上不再规划，因为严格顺序带来的队首阻塞会使新增硬件大部分时间得不到利用，而这类瓶颈通常只有动态乱序调度才能根本缓解；乱序不在当前计划范围内。
 
-### 6.9 长期决策原则
+### 6.10 长期决策原则
 
 每次扩大发射宽度之前，都使用以下指标作继续/停止判断：
 
@@ -283,6 +308,7 @@ slot2：简单整数 ALU/bitman
 4. 成本：比较 LUT、FF、BRAM、DSP、功耗和关键路径变化。
 5. 瓶颈归因：只有当前宽度经常满发时才增加宽度；若主要瓶颈是 RAW、分支或 LSU，应优化这些环节而不是继续加 lane。
 6. 可维护性：稳定 2-wide 始终保留为可综合、可回归的长期基线，3-wide/4-wide 使用独立实验分支。
+7. 时序门槛：任何性能功能进入稳定基线前都必须在实际目标 PLL 下通过 post-route setup/hold；同时保留 125 MHz 稳健档和 130 MHz 性能档。
 
 ## 7. 风险分级
 

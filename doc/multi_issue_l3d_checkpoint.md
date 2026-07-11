@@ -45,14 +45,23 @@ next_next_packet_tag = 1'b0;
 - `run_all.bat all`：6 个单元/专项测试通过，77/77 ISA 用例通过。
 - 完整回归在 `F:\Tools` 下的隔离 worktree 执行，用户 HEX 未被覆盖。
 
-## 后路由验收
+## 175 MHz 后路由结果
 
-下一次 Vivado 综合、布局和布线应重点确认：
+L3D `6c77115` 在 175 MHz 约束下完成后路由：WNS -1.747 ns、TNS -4,794.079 ns。原 L3C 的 flush payload 路径退出关键路径簇，最差路径迁移到 `mem_stage0/es_ms_bus_r_reg[92] → DRAM BRAM WEA[0]`。这说明本阶段修改达到目标，但 175 MHz 仍明显超出当前设计的可实现频率。
 
-1. `EXE → queue payload CE` 路径从最差路径簇中消失。
-2. queue payload 寄存器不再由 redirect/exception 高扇出控制；若仍存在同类路径，应检查综合是否把 count 有效性重新传播成 payload CE。
-3. 在 130 MHz 约束下达到 `WNS >= 0`、`TNS = 0`，并检查 hold timing；同时尝试 135 MHz。
-4. BRAM 保持 64、DSP 保持 8，LUT/FF 变化应很小。
-5. 继续使用 IPC 1.259 计算 `IPC × Fmax`，确认吞吐提升没有以 IPC 回退为代价。
+## 130 MHz 阶段签核
 
-若关键路径迁移到真正的 queue 出入队数据搬移或 allowin 组合网络，再按新报告决定是否改为环形队列/局部写使能；本阶段不加入同周期旁路或 store buffer。
+服务器随后使用实际 130 MHz PLL、50/130 MHz 异步时钟组约束和后路由 `phys_opt_design -directive Explore` 完成签核：
+
+- CPU setup WNS +0.002 ns、TNS 0、失败端点 0。
+- CPU hold WNS +3.204 ns、TNS 0。
+- 24,444 条网络全部完成路由，0 路由错误。
+- 最差路径为 `u_exe_stage1/ds_to_es_bus_r_reg[3] → u_issue_stage/queue3_reg[71]/CE`，数据路径 7.251 ns，布线占 75.6%。
+- 前 20 条路径均为正裕量，范围 +0.002 ns 至 +0.032 ns。
+- IPC 保持 1.259，按 130 MHz 估算吞吐约 163.7 MIPS。
+
+完整报告见 `vivado-project/jyd2025-reference/reports/L3D_130MHz_physopt/L3D_130MHz_signoff_analysis.md`。
+
+由此将 L3D @130 MHz 定义为本阶段最高性能签核版本。2 ps setup 余量满足本次工具流的签核条件，但不具备充足的实现扰动余量；需要更高鲁棒性时使用 125 MHz。当前不再寄存化整个 LSU/DRAM 请求边界，因为 DRAM `WEA` 已不再是 130 MHz 最差路径，修改访存协议的风险大于收益。
+
+后续若继续提高频率或扩大签核余量，应先分析正常 issue queue 出入队、搬移和接收许可产生的 CE 逻辑锥，再决定是否采用环形队列、局部写使能或物理局部化；不恢复 payload flush 清零，也不为单条偶发路径盲目增加流水级。
