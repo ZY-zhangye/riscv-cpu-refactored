@@ -1,5 +1,7 @@
 # 顺序多发 L3F queue 与同包 RAW 旁路仿真 A/B 检查点
 
+> 状态更新：本页记录 L3F 当时的实验决策；`doc/multi_issue_l3p_125mhz_release.md` 已在 125 MHz 提交候选中默认启用完整简单 ALU 同包 RAW 旁路。
+
 ## 目标与边界
 
 L3F 建立两类仿真实验，不改变默认综合配置：

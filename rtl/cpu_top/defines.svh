@@ -5,6 +5,10 @@
 `define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
 `define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
 `define Z_BITMAIN_ENABLE 1'b1   //是否启用Z-bitman指令集扩展，1为启用，0为不启用
+// 125 MHz release configuration: allow a simple lane1 ALU operation to consume
+// the current packet's lane0 ALU result.  This removes a large class of
+// artificial same-packet RAW serialization without changing architectural state.
+`define L3F_SAME_CYCLE_ALU_BYPASS
 //定义位宽
 `define DATA_WIDTH 32
 `define ADDR_WIDTH 32

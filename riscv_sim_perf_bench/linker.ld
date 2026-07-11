@@ -8,7 +8,8 @@ ENTRY(_start)
  */
 MEMORY
 {
-  INSTR (rx) : ORIGIN = 0x80000000, LENGTH = 0x1000
+  /* PERF_BENCH selects PC_START=0 in RTL; keep the generated image aligned. */
+  INSTR (rx) : ORIGIN = 0x00000000, LENGTH = 0x1000
   DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0xC00
 }
 

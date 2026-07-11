@@ -104,10 +104,7 @@ module issue_stage (
     logic can_pair;
     logic lane0_fire;
     logic lane1_fire;
-    logic lane0_shift;
-    logic lane1_shift;
-    logic capacity_allow;
-    logic packet_write;
+    logic packet_accept;
     logic [2:0] consume_count;
     logic [2:0] incoming_count;
     logic [2:0] remaining_count;
@@ -285,13 +282,7 @@ module issue_stage (
 
     assign lane0_fire = is_to_ds_valid0 && ds_bundle_allowin;
     assign lane1_fire = is_to_ds_valid1 && ds_bundle_allowin;
-    // 队列 payload 的物理移位不需要受 global_flush 门控：flush 最终会把
-    // queue_count 清零，移位后的 payload 均为无效数据。提交事件仍使用上面
-    // 带 flush 掩码的 lane*_fire，只有内部移位选择使用未掩码条件，避免
-    // EX redirect 经 consume_count 进入所有宽队列寄存器的 CE/D 锥。
-    assign lane0_shift = buf_valid0 && ds_bundle_allowin;
-    assign lane1_shift = can_pair && ds_bundle_allowin;
-    assign consume_count = lane1_shift ? 3'd2 : lane0_shift ? 3'd1 : 3'd0;
+    assign consume_count = lane1_fire ? 3'd2 : lane0_fire ? 3'd1 : 3'd0;
     assign incoming_count = fs_to_is_valid0 ?
                             (fs_to_is_valid1 ? 3'd2 : 3'd1) : 3'd0;
     assign remaining_count = queue_count - consume_count;
@@ -316,13 +307,10 @@ module issue_stage (
         endcase
     end
     // IF当前尚无有效packet时为下一次双字返回预留两个槽位。
-    assign capacity_allow = (!fs_to_is_valid0 || fs_to_is_valid1) ?
-                            can_accept_two : can_accept_one;
-    assign is_allowin = global_flush || capacity_allow;
-    // 与物理移位相同，flush 拍是否把 IF payload 写进无效槽位不可观察；
-    // queue_count 会在本拍末清零。物理写入只看正常容量，避免 global_flush
-    // 经 packet 接收控制再进入 queue payload/queue_info 的 CE/D 锥。
-    assign packet_write = fs_to_is_valid0 && capacity_allow;
+    assign is_allowin = global_flush ||
+                        ((!fs_to_is_valid0 || fs_to_is_valid1) ?
+                         can_accept_two : can_accept_one);
+    assign packet_accept = fs_to_is_valid0 && is_allowin && !global_flush;
 
     assign dual_issue_event = lane1_fire;
     assign single_issue_event = lane0_fire && !lane1_fire;
@@ -352,11 +340,13 @@ module issue_stage (
         next_queue_count = queue_count;
         next_next_packet_tag = next_packet_tag;
 
-        // flush 周期的 payload、预译码和槽位 tag 可以按普通物理状态转移。
-        // 不要把
-        // global_flush 接入这些宽寄存器的 CE/D 锥；count 清零后它们都属于
-        // 无效数据，后续有效入队会自然覆盖。
-        unique case (consume_count)
+        if (global_flush) begin
+            // payload、预译码和tag在count=0后均为无效数据，不必由EX redirect
+            // 高扇出清零；后续有效入队会按槽位自然覆盖。
+            next_queue_count = 3'd0;
+            next_next_packet_tag = 1'b0;
+        end else begin
+            unique case (consume_count)
                 3'd1: begin
                     next_queue0 = queue1;
                     next_queue1 = queue2;
@@ -385,12 +375,12 @@ module issue_stage (
                     next_queue_info2 = '0;
                     next_queue_info3 = '0;
                 end
-            default: ;
-        endcase
-        next_queue_count = remaining_count;
+                default: ;
+            endcase
+            next_queue_count = remaining_count;
 
-        if (packet_write) begin
-            unique case (remaining_count)
+            if (packet_accept) begin
+                unique case (remaining_count)
                     3'd0: begin
                         next_queue0 = fs_to_is_bus0;
                         next_queue_tag0 = next_packet_tag;
@@ -432,15 +422,11 @@ module issue_stage (
                         next_queue_tag3 = next_packet_tag;
                         next_queue_info3 = decode_issue_info(
                             fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
-                end
-            endcase
-            next_queue_count = remaining_count + incoming_count;
-            next_next_packet_tag = ~next_packet_tag;
-        end
-
-        if (global_flush) begin
-            next_queue_count = 3'd0;
-            next_next_packet_tag = 1'b0;
+                    end
+                endcase
+                next_queue_count = remaining_count + incoming_count;
+                next_next_packet_tag = ~next_packet_tag;
+            end
         end
     end
 
