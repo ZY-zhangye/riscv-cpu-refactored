@@ -63,8 +63,9 @@ module id_stage (
     input logic exception_flag,
     input logic [`EXC_WIDTH-1:0] fs_exc_bus,
     output logic [`EXC_WIDTH-1:0] ds_exc_bus,
-    //性能计数事件：每个因load-use相关而停顿的周期拉高
+    //性能计数事件：区分load结果等待与多周期执行结果等待
     output logic load_use_stall_event,
+    output logic result_dependency_stall_event,
     output logic ds_valid_out
 );  
 
@@ -685,9 +686,9 @@ module id_stage (
     //load_use冒险检测
     logic need_rs1 , need_rs2;
     logic exe_load_use_hazard;
+    logic exe_result_dependency_hazard;
     assign need_rs1 = is_op_reg || is_op_imm || is_load || is_store || is_branch || inst_jalr || is_fpu || inst_csrrw || inst_csrrs || inst_csrrc;
     assign need_rs2 = is_op_reg || is_store || is_branch || is_fpu;
-    logic exe_forward_pending;
     logic exe_rs1_hazard;
     logic exe_rs2_hazard;
     logic exe_frs1_hazard;
@@ -696,7 +697,6 @@ module id_stage (
     logic exe_csr_hazard;
     logic secondary_exe_rs1_hazard;
     logic secondary_exe_rs2_hazard;
-    assign exe_forward_pending = exe_load_pending || exe_result_pending;
     assign exe_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
                             (rs1_addr == exe_dest_addr) &&
                             es_valid && exe_regfile_wen;
@@ -716,18 +716,29 @@ module id_stage (
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
+            exe_result_dependency_hazard = 1'b0;
         end else begin
             exe_load_use_hazard =
-                (exe_forward_pending &&
+                (exe_load_pending &&
                  (exe_rs1_hazard || exe_rs2_hazard ||
                   exe_frs1_hazard || exe_frs2_hazard ||
                   exe_frs3_hazard || exe_csr_hazard)) ||
-                ((secondary_exe_load_pending || secondary_exe_result_pending) &&
+                (secondary_exe_load_pending &&
+                 (secondary_exe_rs1_hazard || secondary_exe_rs2_hazard));
+            exe_result_dependency_hazard =
+                (exe_result_pending &&
+                 (exe_rs1_hazard || exe_rs2_hazard ||
+                  exe_frs1_hazard || exe_frs2_hazard ||
+                  exe_frs3_hazard || exe_csr_hazard)) ||
+                (secondary_exe_result_pending &&
                  (secondary_exe_rs1_hazard || secondary_exe_rs2_hazard));
         end
     end
-    assign load_use_hazard = exe_load_use_hazard && ds_valid;
-    assign load_use_stall_event = load_use_hazard;
+    assign load_use_hazard = (exe_load_use_hazard ||
+                              exe_result_dependency_hazard) && ds_valid;
+    assign load_use_stall_event = exe_load_use_hazard && ds_valid;
+    assign result_dependency_stall_event =
+        exe_result_dependency_hazard && ds_valid;
 
 
 endmodule

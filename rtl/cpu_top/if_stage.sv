@@ -67,7 +67,7 @@ module if_stage (
     logic [BP_INDEX_WIDTH-1:0] bp_update_index;
     logic [BP_TAG_WIDTH-1:0] bp_update_tag;
 
-    `ifdef L3I_RAS
+    `ifndef L3I_DISABLE_RAS
     localparam RAS_DEPTH = 8;
     localparam RAS_INDEX_WIDTH = 3;
     logic [`ADDR_WIDTH-1:0] ras_commit_stack [RAS_DEPTH-1:0];
@@ -105,7 +105,7 @@ module if_stage (
     assign bp_update_index = bp_update_pc[BP_INDEX_WIDTH+1:2];
     assign bp_update_tag = bp_update_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
 
-    `ifdef L3I_RAS
+    `ifndef L3I_DISABLE_RAS
     assign ras_top_index = ras_spec_sp - 1'b1;
     assign ras_top = ras_spec_stack[ras_top_index];
     assign ras_call0 = ((fs_out_inst[6:0] == 7'b1101111) ||
@@ -206,7 +206,7 @@ module if_stage (
         end
     end
 
-    `ifdef L3I_RAS
+    `ifndef L3I_DISABLE_RAS
     always_ff @(posedge clk) begin
         integer ras_i;
         if (!rst_n) begin

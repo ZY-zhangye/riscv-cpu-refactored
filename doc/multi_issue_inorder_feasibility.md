@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。L3E 已建立分段性能 CSR 邮箱和 queue 仿真归因，130 MHz 换算基线为 IPC 1.2956、约 168.4 MIPS，且未发现启动 store buffer 的依据。L3F 仿真证明 8 项 queue 不提高 IPC；完整简单 ALU 同包 RAW 旁路可将 IPC 提高到 1.3761，但必须保持至少约 122.4 MHz，当前仅作为默认关闭的实验候选。L3G 的 2-bit 方向计数与 JALR 预测组合已完成双频后路由签核。L3H 根据真实版本经验补充 128 静态分支容量窗口，证明 16 项表会发生严重冲突；128 项将容量窗口误预测从 66,048 降至 1,151，当前正在远端综合。L3I 增加多调用点与三层嵌套返回窗口；8-depth 提交态/推测态 RAS 将返回窗口误预测从 40,015 降至 11、八窗口 IPC 提高 10.10%，当前作为默认关闭的后续综合候选。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3i_checkpoint.md`。
+状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。L3E 已建立分段性能 CSR 邮箱和 queue 仿真归因。L3F 的完整简单 ALU 同包 RAW 旁路仍为默认关闭候选。L3G 的 2-bit 方向计数与 JALR 预测组合已完成双频后路由签核。L3H 的 128 项 BTB 当前正在远端综合。L3I 的 8-depth 提交态/推测态 RAS 将返回窗口误预测从 40,015 降至 11，现已默认开启。L3J 读取实际 2,216 条指令静态画像，确认访存占 28.97%、控制流占 17.87%、RV32M 占 1.76%；新增 MEXT 窗口并将 load 依赖与多周期结果依赖计数拆分，MEXT 测得 IPC 0.303、`multidep=110,000`、`exstall=136,000`。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3j_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 
@@ -258,9 +258,10 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 4. L3G 的 125 MHz setup WNS 为 +0.242 ns，130 MHz 为 +0.174 ns；新增预测逻辑没有成为关键路径，当前性能档保持 130 MHz。
 5. 真实版本经验表明约 128 项更适合实际负载；L3H 的专用容量窗口也复现了 16 项直接映射冲突，128 项使该窗口 cycles 降低 78.24%，因此先完成 128 项的 125/130 MHz 双频综合签核。
 6. 128 项数组可能增加约 6.5 Kbit 状态及 IF 查询选择压力；必须同时记录资源、数组映射类型和 next-PC 路径，不能只依据容量微基准直接转正。
-7. L3I 已完成 8-depth RAS 仿真：必须使用提交态/推测态分离以支持连续嵌套返回；先等待 L3H 签核，再单独综合 `L3I_RAS`，避免混淆两项成本。
-8. RAS 候选使八窗口 IPC 提高 10.10%，盈亏平衡频率约 118.1 MHz；主要检查 IF return 预译码、RAS target mux 和 next-PC 路径。
-9. 分支恢复气泡优化排在 RAS 签核之后。CPU→DRAM BRAM `WEA` 路径仍作为并行时序观察点；LSU 请求寄存化和有序 store buffer 延后到真实性能计数证明 LSU 阻塞是主要瓶颈时再启动。
+7. L3I RAS 已默认开启；云端版本同时包含 128 项 BTB 与 RAS，若出现问题分别使用 `L3H_BTB_16_ENTRIES`、`L3I_DISABLE_RAS` 回退并复测。
+8. 实际镜像静态控制流占 17.87%，继续支持 BTB/RAS 优先级；访存占 28.97%，但必须等待动态 trace 再判断 store buffer 优先级。
+9. RV32M 虽只占 1.76%，L3J MEXT 却产生 136,000 EX stall；下一步先分离 mul 与 div/rem 动态成本，再决定多周期单元优化。
+10. 分支恢复气泡优化排在当前前端双频签核之后。CPU→DRAM BRAM `WEA` 路径仍作为并行时序观察点。
 
 ### 6.8 长期阶段 L4：非对称 3-wide 可选实验
 

@@ -171,6 +171,8 @@ module cpu_top (
     logic [`EXC_WIDTH-1:0] ds_exc_bus1;
     logic load_use_stall_event0;
     logic load_use_stall_event1;
+    logic result_dependency_stall_event0;
+    logic result_dependency_stall_event1;
     logic id_bundle_advance;
     logic id_lanes_ready;
 
@@ -432,6 +434,7 @@ module cpu_top (
         .fs_exc_bus(fs_exc_bus),
         .ds_exc_bus(ds_exc_bus0),
         .load_use_stall_event(load_use_stall_event0),
+        .result_dependency_stall_event(result_dependency_stall_event0),
         .ds_valid_out(ds_valid0)
     );
 
@@ -490,6 +493,7 @@ module cpu_top (
         .fs_exc_bus(fs_exc_bus),
         .ds_exc_bus(ds_exc_bus1),
         .load_use_stall_event(load_use_stall_event1),
+        .result_dependency_stall_event(result_dependency_stall_event1),
         .ds_valid_out(ds_valid1)
     );
 
@@ -843,6 +847,8 @@ module cpu_top (
         .branch_event(ex_branch_event || branch_event1),
         .branch_mispredict_event(ex_branch_mispredict_event || branch_mispredict_event1),
         .load_use_stall_event(load_use_stall_event0 || load_use_stall_event1),
+        .result_dependency_stall_event(result_dependency_stall_event0 ||
+                                        result_dependency_stall_event1),
         .execute_stall_event(execute_stall_event0 || execute_stall_event1),
         .dual_issue_event(dual_issue_event),
         .single_issue_event(single_issue_event),

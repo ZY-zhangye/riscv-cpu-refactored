@@ -15,6 +15,7 @@ module tb_perf_counters;
     logic branch_event;
     logic branch_mispredict_event;
     logic load_use_stall_event;
+    logic result_dependency_stall_event;
     logic execute_stall_event;
     logic dual_issue_event;
     logic single_issue_event;
@@ -45,6 +46,7 @@ module tb_perf_counters;
         .branch_event(branch_event),
         .branch_mispredict_event(branch_mispredict_event),
         .load_use_stall_event(load_use_stall_event),
+        .result_dependency_stall_event(result_dependency_stall_event),
         .execute_stall_event(execute_stall_event),
         .dual_issue_event(dual_issue_event),
         .single_issue_event(single_issue_event),
@@ -87,6 +89,7 @@ module tb_perf_counters;
             branch_event = branch;
             branch_mispredict_event = mispredict;
             load_use_stall_event = load_use;
+            result_dependency_stall_event = 1'b0;
             execute_stall_event = ex_stall;
             exception_code = exc;
             @(posedge clk);
@@ -98,6 +101,7 @@ module tb_perf_counters;
             branch_event = 1'b0;
             branch_mispredict_event = 1'b0;
             load_use_stall_event = 1'b0;
+            result_dependency_stall_event = 1'b0;
             execute_stall_event = 1'b0;
             exception_code = `EXC_NONE;
         end
@@ -130,6 +134,7 @@ module tb_perf_counters;
         branch_event = 1'b0;
         branch_mispredict_event = 1'b0;
         load_use_stall_event = 1'b0;
+        result_dependency_stall_event = 1'b0;
         execute_stall_event = 1'b0;
         dual_issue_event = 1'b0;
         single_issue_event = 1'b0;
@@ -186,9 +191,14 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_INSTRET,   32'd0, "cleared_perf_instret");
         expect_csr(`CSR_PERF_BRANCH,    32'd0, "cleared_perf_branch");
         expect_csr(`CSR_PERF_EXCEPTION, 32'd0, "cleared_perf_exception");
+        expect_csr(`CSR_PERF_RESULT_DEP, 32'd0, "cleared_perf_result_dep");
 
         drive_cycle(1'b1, `CSR_PERF_CTRL, 32'h0000_0001,
                     2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        @(negedge clk);
+        result_dependency_stall_event = 1'b1;
+        @(posedge clk);
+        #1 result_dependency_stall_event = 1'b0;
         dual_issue_event = 1'b1;
         issue_lsu_pair_event = 1'b1;
         issue_lane1_control_event = 1'b1;
@@ -227,6 +237,7 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_BITMAN_PAIR,  32'd1, "perf_bitman_pair");
         expect_csr(`CSR_PERF_CROSS_PACKET, 32'd1, "perf_cross_packet");
         expect_csr(`CSR_PERF_ISSUE_QFULL,  32'd1, "perf_issue_qfull");
+        expect_csr(`CSR_PERF_RESULT_DEP,   32'd1, "perf_result_dep");
 
         $display("PERF COUNTER TEST PASSED");
         $finish;

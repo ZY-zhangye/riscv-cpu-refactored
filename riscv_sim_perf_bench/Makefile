@@ -22,7 +22,7 @@ INST_COE := $(OUT_DIR)/inst.coe
 DATA_COE := $(OUT_DIR)/data.coe
 
 CFLAGS := -O2 -Wall -Wextra -ffunction-sections -fdata-sections \
-		  -march=rv32i_zicsr -mabi=ilp32 -nostartfiles \
+		  -march=rv32im_zicsr -mabi=ilp32 -nostartfiles \
 		  -DCPU_FREQ_HZ=$(CPU_FREQ_HZ) -DUART_FREQ_HZ=$(UART_FREQ_HZ) \
 		  -DBENCH_UART_OUTPUT=$(BENCH_UART_OUTPUT)
 LDFLAGS := -Wl,-Tlinker.ld,--gc-sections

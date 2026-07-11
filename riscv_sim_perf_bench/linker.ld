@@ -60,7 +60,7 @@ SECTIONS
     __stack_top = .;
   } > DATA
 
-  /* 八组L3I性能计数结果，共656字节，供testbench直接读取。 */
+  /* 九组L3J性能计数结果，共772字节，供testbench直接读取。 */
   .perf_results 0x60000800 (NOLOAD) :
   {
     KEEP(*(.perf_results))

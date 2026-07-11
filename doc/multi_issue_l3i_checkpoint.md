@@ -30,7 +30,7 @@ L3G 的 JALR BTB 预测能处理单一稳定目标，但同一条 `ret` 被多�
 
 ## RAS 设计
 
-实验宏 `L3I_RAS` 启用 8 深度返回地址栈，支持标准 RISC-V link register `x1` 和备用 link register `x5`：
+8 深度返回地址栈支持标准 RISC-V link register `x1` 和备用 link register `x5`：
 
 - call：JAL/JALR 且 `rd=x1/x5`；
 - return：JALR、`rd=x0`、`rs1=x1/x5`、立即数为 0；
@@ -74,8 +74,8 @@ RAS 配置：
 
 ## 决策与下一步
 
-1. 8-depth RAS 的仿真收益明确，保留 `L3I_RAS` 为默认关闭的综合候选。
+1. 8-depth RAS 的仿真收益明确，现已按后续云端综合版本要求转为默认开启；定义 `L3I_DISABLE_RAS` 可回退到无 RAS 配置。
 2. 不采用仅在 EX 更新的简化 RAS；连续嵌套返回必须使用提交态/推测态分离。
-3. 等待 L3H 128 项 BTB 的远端签核结果，先冻结其资源和时序基线，再单独综合 `L3I_RAS`，避免混淆 BTB 扩容与 RAS 成本。
+3. 后续云端版本将默认同时包含 128 项 BTB 与 RAS；若时序或资源出现问题，可分别使用 `L3H_BTB_16_ENTRIES` 和 `L3I_DISABLE_RAS` 独立回退。
 4. RAS 原始新增状态约 512 bits，面积风险小于 128 项 BTB；主要时序风险是 IF 指令预译码、RAS target 选择和 next-PC mux。
 5. L3I 仍需 125/130 MHz 双频 post-route setup/hold 签核，只有 `IPC × Fmax` 保持净提升时才转为默认配置。

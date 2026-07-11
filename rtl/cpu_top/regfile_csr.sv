@@ -17,6 +17,7 @@ module regfile_csr (
     input logic branch_event,
     input logic branch_mispredict_event,
     input logic load_use_stall_event,
+    input logic result_dependency_stall_event,
     input logic execute_stall_event,
     input logic dual_issue_event,
     input logic single_issue_event,
@@ -64,6 +65,7 @@ module regfile_csr (
     logic [31:0] perf_bitman_pair;
     logic [31:0] perf_cross_packet;
     logic [31:0] perf_issue_qfull;
+    logic [31:0] perf_result_dep;
 
     assign perf_clear = csr_wen && (csr_waddr == `CSR_PERF_CTRL) && csr_wdata[1];
 
@@ -102,6 +104,7 @@ module regfile_csr (
             perf_bitman_pair <= 32'b0;
             perf_cross_packet <= 32'b0;
             perf_issue_qfull <= 32'b0;
+            perf_result_dep <= 32'b0;
         end else begin
             if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 perf_enable <= csr_wdata[0];
@@ -128,6 +131,7 @@ module regfile_csr (
                 perf_bitman_pair <= 32'b0;
                 perf_cross_packet <= 32'b0;
                 perf_issue_qfull <= 32'b0;
+                perf_result_dep <= 32'b0;
             end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 //控制写本身不计入测量窗口。
             end else if (perf_enable) begin
@@ -144,6 +148,9 @@ module regfile_csr (
                 end
                 if (load_use_stall_event) begin
                     perf_loaduse <= perf_loaduse + 1'b1;
+                end
+                if (result_dependency_stall_event) begin
+                    perf_result_dep <= perf_result_dep + 1'b1;
                 end
                 if (execute_stall_event) begin
                     perf_exstall <= perf_exstall + 1'b1;
@@ -276,6 +283,7 @@ module regfile_csr (
             `CSR_PERF_BITMAN_PAIR: csr_rdata = perf_bitman_pair;
             `CSR_PERF_CROSS_PACKET: csr_rdata = perf_cross_packet;
             `CSR_PERF_ISSUE_QFULL: csr_rdata = perf_issue_qfull;
+            `CSR_PERF_RESULT_DEP: csr_rdata = perf_result_dep;
             default: csr_rdata = 32'b0;
         endcase
         end
