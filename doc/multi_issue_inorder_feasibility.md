@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。记录见 `multi_issue_l3a_checkpoint.md`、`multi_issue_l3b_checkpoint.md`、`multi_issue_l3c_checkpoint.md` 与 `multi_issue_l3d_checkpoint.md`。
+状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。L3E 已建立分段性能 CSR 邮箱和 queue 仿真归因，130 MHz 换算基线为 IPC 1.2956、约 168.4 MIPS，且未发现启动 store buffer 的依据。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3e_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 

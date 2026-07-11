@@ -5,7 +5,7 @@
 ## 设计目标
 
 - **独立性**：不依赖原有 `start.s`、`uart.c`、`Makefile` 或其它模块。
-- **可解释性**：输出 `cycles`、`instret`、`CPI`（放大1000倍）三个核心指标。
+- **可解释性**：分段采集 `cycles`、`instret`、双发、RAW/WAW、分支、load-use、LSU 和 queue full 等完整性能计数。
 - **仿真友好**：默认循环规模适中，避免仿真时间过长。
 - **代表性**：分离测试三类负载：
   - `ALU`：移位/异或/加法密集
@@ -34,6 +34,31 @@
 
 > 说明：默认输出深度为 1024 行，不足部分补 `00000000`。可在 `Makefile` 里修改 `DEPTH`。
 
+默认构建参数为：
+
+```text
+CPU_FREQ_HZ=130000000
+UART_FREQ_HZ=50000000
+BENCH_UART_OUTPUT=0
+```
+
+`CPU_FREQ_HZ` 只用于把仿真得到的 IPC 换算成签核频率下的吞吐；Questa 的仿真时钟周期不会改变架构 cycle 计数。`UART_FREQ_HZ` 单独用于波特率分频，避免把 CPU 频率和 UART 时钟混为一谈。需要串口文本输出时可使用 `make BENCH_UART_OUTPUT=1`。
+
+## L3E 仿真结果邮箱
+
+默认仿真不等待 UART 串行输出，而是在 `0x6000_0700~0x6000_07FF` 写入固定 256-byte 结果邮箱。`test/tb_top.sv` 监视最后写入的 magic `0x4C334530`，随后打印三行机器可读的 `L3E_REPORT` 并自动结束仿真。
+
+每个 ALU/BRANCH/MEMORY 报告包含 20 个 32-bit 计数：
+
+```text
+cycle, instret, branch, branch_mispredict, branch_hit, branch_miss,
+load_use, exe_stall, exception, dual_issue, single_issue,
+issue_raw, issue_waw, issue_struct, lsu_pair, lane1_control,
+lsu_conflict, bitman_pair, cross_packet, issue_qfull
+```
+
+testbench 还会输出 `L3E_QUEUE`，统计性能窗口内 issue queue 深度分布，并把 queue full 分为下游反压与本地接收容量限制。邮箱位于链接脚本保留区，不进入普通 `.bss`，magic 始终最后写入。
+
 ## 仿真时间与说服力平衡建议
 
 当前默认规模由以下宏控制（`benchmark.c`）：
@@ -52,8 +77,9 @@
 
 ## 你最常改的位置
 
-- `benchmark.c`
-  - `CLK_FREQ_HZ`、`UART_BASE_ADDR`：按平台地址映射修改。
+- `benchmark.c` / `Makefile`
+  - `CPU_FREQ_HZ`、`UART_FREQ_HZ`、`BENCH_UART_OUTPUT`：分别控制吞吐换算、UART 分频和文本输出。
+  - `UART_BASE_ADDR`：按平台地址映射修改。
   - `BENCH_SCALE`、`*_BASE`：控制仿真时长与统计稳定性。
 - `linker.ld`
   - `MEMORY` 里的 `ORIGIN/LENGTH`：按 irom/dram 实际大小和地址修改。
