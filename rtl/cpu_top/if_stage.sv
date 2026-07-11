@@ -155,7 +155,10 @@ module if_stage (
     logic fs_allowin;
     assign fs_ready_go = 1'b1;
     assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
-    assign fetch_kill = br_taken || br_taken_reg || exception_flag;
+    // 即时 redirect 同时送入 issue_stage.global_flush，该拍不会接收任何 IF
+    // packet。IF 输出只需保留已寄存 redirect 的恢复气泡，避免 EX 分支判断
+    // 再经 fs_to_ds_valid 扇出到 issue queue 的宽寄存器写使能。
+    assign fetch_kill = br_taken_reg || exception_flag;
     assign fs_to_ds_valid = fs_valid && fs_ready_go && !fetch_kill;
     // lane0预测跳转时顺序lane1无效；lane1预测跳转时两条均有效，下一fetch转向目标。
     assign fs_to_ds_valid1 = fs_to_ds_valid && !effective_pred_taken0;
@@ -302,16 +305,16 @@ module if_stage (
     `endif
 
     assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
+    assign fs_out_inst = (br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // redirect恢复拍用NOP占位
     assign inst_ren = fs_allowin;
     assign fs_out_pc = fs_pc;
     assign fs_to_ds_bus = {fs_out_inst, fs_out_pc,
-                           (effective_pred_taken0 && !br_taken && !br_taken_reg && !exception_flag),
+                           (effective_pred_taken0 && !br_taken_reg && !exception_flag),
                            effective_pred_target0};
     assign pc_out1 = next_pc + 32'd4;
     assign inst_ren1 = fs_allowin;
     assign fs_to_ds_bus1 = {inst_in1, fs_out_pc + 32'd4,
-                            (effective_pred_taken1 && !br_taken && !br_taken_reg && !exception_flag),
+                            (effective_pred_taken1 && !br_taken_reg && !exception_flag),
                             effective_pred_target1};
 
     /*logic exception_iam;
