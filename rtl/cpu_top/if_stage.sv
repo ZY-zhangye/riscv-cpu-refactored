@@ -66,6 +66,10 @@ module if_stage (
     logic [`ADDR_WIDTH-1:0] bp_pred_target1;
     logic [BP_INDEX_WIDTH-1:0] bp_update_index;
     logic [BP_TAG_WIDTH-1:0] bp_update_tag;
+    logic bp_update_valid_r;
+    logic [`ADDR_WIDTH-1:0] bp_update_pc_r;
+    logic bp_update_taken_r;
+    logic [`ADDR_WIDTH-1:0] bp_update_target_r;
 
     `ifndef L3I_DISABLE_RAS
     localparam RAS_DEPTH = 8;
@@ -102,8 +106,8 @@ module if_stage (
     assign bp_pred_taken1 = bp_hit1 && bp_counter[bp_lookup_index1][1];
     assign bp_pred_target0 = bp_target[bp_lookup_index0];
     assign bp_pred_target1 = bp_target[bp_lookup_index1];
-    assign bp_update_index = bp_update_pc[BP_INDEX_WIDTH+1:2];
-    assign bp_update_tag = bp_update_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
+    assign bp_update_index = bp_update_pc_r[BP_INDEX_WIDTH+1:2];
+    assign bp_update_tag = bp_update_pc_r[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
 
     `ifndef L3I_DISABLE_RAS
     assign ras_top_index = ras_spec_sp - 1'b1;
@@ -177,6 +181,24 @@ module if_stage (
         end
     end
 
+    // 将远端EX/flush生成的更新请求先收进IF本地寄存器，切断其到128项表写口的长路径。
+    // 更新延后一拍，但仍保持每拍一个请求的吞吐率。
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            bp_update_valid_r <= 1'b0;
+            bp_update_pc_r <= '0;
+            bp_update_taken_r <= 1'b0;
+            bp_update_target_r <= '0;
+        end else begin
+            bp_update_valid_r <= bp_update_valid;
+            if (bp_update_valid) begin
+                bp_update_pc_r <= bp_update_pc;
+                bp_update_taken_r <= bp_update_taken;
+                bp_update_target_r <= bp_update_target;
+            end
+        end
+    end
+
     always_ff @(posedge clk) begin
         integer i;
         if (!rst_n) begin
@@ -186,13 +208,13 @@ module if_stage (
                 bp_tag[i] <= '0;
                 bp_target[i] <= '0;
             end
-        end else if (bp_update_valid) begin
+        end else if (bp_update_valid_r) begin
             bp_valid[bp_update_index] <= 1'b1;
             if (!bp_valid[bp_update_index] ||
                 (bp_tag[bp_update_index] != bp_update_tag)) begin
                 bp_counter[bp_update_index] <=
-                    bp_update_taken ? 2'b10 : 2'b01;
-            end else if (bp_update_taken) begin
+                    bp_update_taken_r ? 2'b10 : 2'b01;
+            end else if (bp_update_taken_r) begin
                 if (bp_counter[bp_update_index] != 2'b11) begin
                     bp_counter[bp_update_index] <=
                         bp_counter[bp_update_index] + 1'b1;
@@ -202,7 +224,7 @@ module if_stage (
                     bp_counter[bp_update_index] - 1'b1;
             end
             bp_tag[bp_update_index] <= bp_update_tag;
-            bp_target[bp_update_index] <= bp_update_target;
+            bp_target[bp_update_index] <= bp_update_target_r;
         end
     end
 

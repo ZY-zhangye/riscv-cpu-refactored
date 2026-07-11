@@ -219,7 +219,7 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 
 ### 6.6 长期阶段 L3：高性能 2-wide
 
-状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。L3E 已建立分段性能 CSR 邮箱和 queue 仿真归因。L3F 的完整简单 ALU 同包 RAW 旁路仍为默认关闭候选。L3G 的 2-bit 方向计数与 JALR 预测组合已完成双频后路由签核。L3H 的 128 项 BTB 当前正在远端综合。L3I 的 8-depth 提交态/推测态 RAS 将返回窗口误预测从 40,015 降至 11，现已默认开启。L3J 读取实际 2,216 条指令静态画像，确认访存占 28.97%、控制流占 17.87%、RV32M 占 1.76%；新增 MEXT 窗口并将 load 依赖与多周期结果依赖计数拆分，MEXT 测得 IPC 0.303、`multidep=110,000`、`exstall=136,000`。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3j_checkpoint.md`。
+状态：L3A、L3B、L3C 已完成仿真与后路由分析；L3C 已移除 DRAM BRAM `ENARDEN` 关键路径。L3D 已完成 issue payload flush 扇出清理、完整 RTL 回归，并在实际 130 MHz PLL 约束和后路由物理优化后以 setup WNS +0.002 ns、TNS 0、hold WNS +3.204 ns 完成阶段签核。L3E 已建立分段性能 CSR 邮箱和 queue 仿真归因。L3F 的完整简单 ALU 同包 RAW 旁路仍为默认关闭候选。L3G 的 2-bit 方向计数与 JALR 预测组合已完成双频后路由签核。L3H 的 128 项 BTB 在 125 MHz WNS -0.539 ns、130 MHz WNS -0.628 ns，最差路径为 `MEM/flush → bp_update_valid → 128项 counter/D`。L3I 的 8-depth 提交态/推测态 RAS 已默认开启。L3J 根据实际指令画像增加 MEXT 和精确依赖计数。L3K 在 IF 内把 BTB 更新请求寄存一拍，切断远端 flush 到大表写口的路径，仿真性能逐项不变，等待重新双频实现。记录见 `multi_issue_l3a_checkpoint.md` 至 `multi_issue_l3k_checkpoint.md`。
 
 目标是在不引入乱序的前提下，尽量接近 2-wide 的实际性能上限。
 
@@ -258,10 +258,11 @@ lane0.rd 与 lane1.rd 不相同（忽略 x0）
 4. L3G 的 125 MHz setup WNS 为 +0.242 ns，130 MHz 为 +0.174 ns；新增预测逻辑没有成为关键路径，当前性能档保持 130 MHz。
 5. 真实版本经验表明约 128 项更适合实际负载；L3H 的专用容量窗口也复现了 16 项直接映射冲突，128 项使该窗口 cycles 降低 78.24%，因此先完成 128 项的 125/130 MHz 双频综合签核。
 6. 128 项数组可能增加约 6.5 Kbit 状态及 IF 查询选择压力；必须同时记录资源、数组映射类型和 next-PC 路径，不能只依据容量微基准直接转正。
-7. L3I RAS 已默认开启；云端版本同时包含 128 项 BTB 与 RAS，若出现问题分别使用 `L3H_BTB_16_ENTRIES`、`L3I_DISABLE_RAS` 回退并复测。
+7. L3I RAS 已默认开启；若出现问题可用 `L3I_DISABLE_RAS` 独立回退。
 8. 实际镜像静态控制流占 17.87%，继续支持 BTB/RAS 优先级；访存占 28.97%，但必须等待动态 trace 再判断 store buffer 优先级。
 9. RV32M 虽只占 1.76%，L3J MEXT 却产生 136,000 EX stall；下一步先分离 mul 与 div/rem 动态成本，再决定多周期单元优化。
-10. 分支恢复气泡优化排在当前前端双频签核之后。CPU→DRAM BRAM `WEA` 路径仍作为并行时序观察点。
+10. L3K 已将 BTB 更新请求在 IF 本地寄存一拍；下一次双频实现必须确认原 `MEM/flush → bp_counter/D` 路径簇消失。若仍失败，再考虑逐项 CE/局部译码；128 项可用 `L3H_BTB_16_ENTRIES` 独立回退。
+11. 分支恢复气泡优化排在当前前端双频签核之后。CPU→DRAM BRAM `WEA` 路径仍作为并行时序观察点。
 
 ### 6.8 长期阶段 L4：非对称 3-wide 可选实验
 
