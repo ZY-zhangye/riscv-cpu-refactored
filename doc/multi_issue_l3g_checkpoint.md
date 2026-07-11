@@ -8,8 +8,7 @@ L3G 在不增加 EX 数据通路深度的前提下，分离测量分支预测器
 - 1-bit 最近结果改为 2-bit 饱和方向计数；
 - 允许 BTB 学习并预测 JALR。
 
-稳定综合配置仍保持 16 项、1-bit、忽略 JALR。有效候选分别由
-`L3G_BP_2BIT` 和 `L3G_BP_PREDICT_JALR` 打开，等待 post-route 时序签核后再决定是否转为默认配置。64 项实验无收益，已从 RTL 撤销。
+实验阶段使用 `L3G_BP_2BIT` 和 `L3G_BP_PREDICT_JALR` 分别控制两个候选。后路由结果证明组合配置可在 125/130 MHz 均通过 setup/hold，因此二者现已转为稳定默认 RTL，实验宏随之移除。64 项实验无收益，也已从 RTL 撤销。
 
 完成日期：2026-07-11
 
@@ -52,7 +51,7 @@ L3G 在不增加 EX 数据通路深度的前提下，分离测量分支预测器
 
 JALR-only 将函数调用窗口降到 128,444 cycles、8,106 次误预测，IPC 从 0.816 提高到 1.121。与 2-bit 叠加后该窗口进一步降到 112,260 cycles、4,060 次误预测，IPC 达到 1.282。
 
-组合候选的 benchmark 吞吐盈亏平衡频率约为 119.8 MHz。若能通过 125 MHz，其换算吞吐约 165.1 MIPS，高于默认配置在 130 MHz 的约 158.2 MIPS；若通过 130 MHz则约为 171.7 MIPS。这里使用的是 L3G 六窗口 benchmark IPC，不能与 L3 微基准的 IPC 1.259 直接混用。
+组合配置的 benchmark 吞吐盈亏平衡频率约为 119.8 MHz。在 125 MHz 下换算吞吐约 165.1 MIPS，高于旧预测器在 130 MHz 的约 158.2 MIPS；当前签核的 130 MHz 下约为 171.7 MIPS。这里使用的是 L3G 六窗口 benchmark IPC，不能与 L3 微基准的 IPC 1.259 直接混用。
 
 ## RTL 注意事项
 
@@ -62,25 +61,42 @@ JALR-only 将函数调用窗口降到 128,444 cycles、8,106 次误预测，IPC 
 
 ## 验证
 
-组合候选配置：
+当前稳定默认配置（2-bit + JALR）：
 
 - 全部 RTL/testbench 编译：Errors 0，Warnings 0；
 - L3G benchmark：1,057,061 cycles、1,396,279 instret、IPC 1.3209；
 - `sink=0x3B3FAB5E`，六窗口 exceptions=0，测试通过。
 
-默认宏关闭配置：
+实验期旧预测器基线（1-bit、不预测 JALR）：
 
-- 全部 RTL/testbench 编译：Errors 0，Warnings 0；
-- `tb_issue_stage`、`tb_multi_issue_l2`、`tb_multi_issue_l3` 通过；
-- L3G benchmark 保持 1,147,161 cycles、IPC 1.2172，测试通过；
-- `tb_multi_issue_l3` 保持 27 cycles、34 instret、IPC 1.259。
+- L3G benchmark 为 1,147,161 cycles、IPC 1.2172，测试通过。
+
+转为默认 RTL 后再次回归：全部 RTL/testbench 编译 Errors 0、Warnings 0；`tb_issue_stage`、`tb_multi_issue_l2`、`tb_multi_issue_l3` 和 L3G benchmark 均通过；L3 微基准保持 27 cycles、34 instret、IPC 1.259。
 
 Questa 在 divider 初始化时仍有两条既有除零警告；L2/L3 testbench 仍有未连接 debug 端口的既有警告，不影响本阶段结果。
+
+## 后路由签核
+
+组合候选已在实际 125/130 MHz PLL 约束下完成综合、实现和后路由物理检查：
+
+| 主频 | CPU setup WNS | TNS | 失败端点 | hold WNS |
+| --- | ---: | ---: | ---: | ---: |
+| 125 MHz | +0.242 ns | 0 | 0 / 25,441 | +3.358 ns |
+| 130 MHz | +0.174 ns | 0 | 0 / 25,441 | +3.204 ns |
+
+资源在两档一致：13,273 LUT、15,040 FF、64 BRAM Tile、8 DSP。CPU 与 50 MHz UART 域的 125 条跨时钟路径均由 Asynchronous Groups 排除，没有作为同步路径参与时序优化。
+
+最差路径仍是 CPU 内存阶段到 DRAM BRAM 写使能：
+
+- 125 MHz：`u_mem_stage1/es_ms_bus_r_reg[91]` → DRAM BRAM `WEA[0]`，数据路径 7.025 ns，路由 6.096 ns（86.8%）；
+- 130 MHz：`u_mem_stage0/ms_valid_reg` → DRAM BRAM `WEA[0]`，数据路径 6.792 ns，路由 5.967 ns（87.9%）。
+
+关键路径并未转移到预测查表、计数器更新或 next-PC 选择。130 MHz 裕量从 L3D 的 2 ps 提高到 174 ps，当前可以作为性能签核频点，无需降频。
 
 ## 决策与下一步
 
 1. 64 项 BTB 不再继续，保持 16 项表。
-2. 2-bit 方向计数和 JALR BTB 预测均有独立收益，组合收益接近相加，保留为同一个 L3G 综合候选。
-3. 候选默认关闭，L3D 125/130 MHz 签核基线不变。
-4. 下一阶段在云端对 `L3G_BP_2BIT + L3G_BP_PREDICT_JALR` 运行 125 MHz 稳健档，随后尝试 130 MHz 性能档；重点检查 IF 预测查表、表更新和 PC 选择路径。
-5. 只有 post-route setup/hold 通过且 `IPC × Fmax` 高于现有基线，才将组合候选转为默认 RTL。
+2. 2-bit 方向计数和 JALR BTB 预测均有独立收益，组合收益接近相加，并已通过双频后路由签核，转为稳定默认 RTL。
+3. L3G 的性能签核档为 130 MHz、setup WNS +0.174 ns；稳健档为 125 MHz、setup WNS +0.242 ns。
+4. 130 MHz 下六窗口 benchmark 约为 171.7 MIPS，相比旧默认预测器在相同频率下约 158.2 MIPS，提高约 8.52%。
+5. 下一阶段不再扩大 BTB；应继续从仿真计数归因，优先研究低时序风险的返回地址栈或分支恢复气泡，同时保持 CPU→DRAM BRAM 写使能路径为并行时序观察重点。

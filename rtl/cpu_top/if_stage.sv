@@ -44,11 +44,7 @@ module if_stage (
     localparam BP_TAG_WIDTH = `ADDR_WIDTH - BP_INDEX_WIDTH - 2;
 
     logic bp_valid [BP_ENTRIES-1:0];
-    `ifdef L3G_BP_2BIT
     logic [1:0] bp_counter [BP_ENTRIES-1:0];
-    `else
-    logic bp_taken [BP_ENTRIES-1:0];
-    `endif
     logic [BP_TAG_WIDTH-1:0] bp_tag [BP_ENTRIES-1:0];
     logic [`ADDR_WIDTH-1:0] bp_target [BP_ENTRIES-1:0];
 
@@ -73,13 +69,8 @@ module if_stage (
                      (bp_tag[bp_lookup_index0] == bp_lookup_tag0);
     assign bp_hit1 = bp_valid[bp_lookup_index1] &&
                      (bp_tag[bp_lookup_index1] == bp_lookup_tag1);
-    `ifdef L3G_BP_2BIT
     assign bp_pred_taken0 = bp_hit0 && bp_counter[bp_lookup_index0][1];
     assign bp_pred_taken1 = bp_hit1 && bp_counter[bp_lookup_index1][1];
-    `else
-    assign bp_pred_taken0 = bp_hit0 && bp_taken[bp_lookup_index0];
-    assign bp_pred_taken1 = bp_hit1 && bp_taken[bp_lookup_index1];
-    `endif
     assign bp_pred_target0 = bp_target[bp_lookup_index0];
     assign bp_pred_target1 = bp_target[bp_lookup_index1];
     assign bp_update_index = bp_update_pc[BP_INDEX_WIDTH+1:2];
@@ -128,22 +119,12 @@ module if_stage (
         if (!rst_n) begin
             for (i = 0; i < BP_ENTRIES; i = i + 1) begin
                 bp_valid[i] <= 1'b0;
-                `ifdef L3G_BP_2BIT
                 bp_counter[i] <= 2'b01;
-                `else
-                bp_taken[i] <= 1'b0;
-                `endif
                 bp_tag[i] <= '0;
                 bp_target[i] <= '0;
             end
-        end else if (bp_update_valid &&
-                     (!bp_update_is_jalr
-                      `ifdef L3G_BP_PREDICT_JALR
-                      || bp_update_is_jalr
-                      `endif
-                     )) begin
+        end else if (bp_update_valid) begin
             bp_valid[bp_update_index] <= 1'b1;
-            `ifdef L3G_BP_2BIT
             if (!bp_valid[bp_update_index] ||
                 (bp_tag[bp_update_index] != bp_update_tag)) begin
                 bp_counter[bp_update_index] <=
@@ -157,9 +138,6 @@ module if_stage (
                 bp_counter[bp_update_index] <=
                     bp_counter[bp_update_index] - 1'b1;
             end
-            `else
-            bp_taken[bp_update_index] <= bp_update_taken;
-            `endif
             bp_tag[bp_update_index] <= bp_update_tag;
             bp_target[bp_update_index] <= bp_update_target;
         end
