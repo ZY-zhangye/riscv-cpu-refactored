@@ -1,5 +1,7 @@
 # L3P 125 MHz 提交候选
 
+> 状态更新：后续 L3Q 检查发现 multiplier IP 为 6 拍而 RTL 控制原为 4 拍，并建立了多组可选性能配置。修正后的结果与综合建议见 `multi_issue_l3q_performance_candidates.md`。
+
 ## 决策
 
 150 MHz 压力优化暂告一段落，提交候选固定为 125 MHz。L3M/L3N/L3O 针对物理路径的 RTL 改动回退到 L3K 功能基线，保留 L3L 的外设高位地址译码；这些实验虽改善了部分关键路径，但未在可靠 benchmark 镜像上完成发布级功能验证。

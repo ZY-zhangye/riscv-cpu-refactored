@@ -89,7 +89,7 @@
 `define CSR_PERF_ISSUE_WAW 12'h7CD
 `define CSR_PERF_ISSUE_STRUCT 12'h7CE
 
-`define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
+`define MUL_CYCLE 6 // 与multiplier.xci的C_LATENCY/PipeStages保持一致
 
 //MIMO外设地址
 `define SW_LOW_ADDR  32'h8020_0000

@@ -38,6 +38,7 @@ module tb_issue_stage;
     localparam logic [31:0] ADDI_X1_X0_1 = 32'h0010_0093;
     localparam logic [31:0] ADDI_X2_X0_2 = 32'h0020_0113;
     localparam logic [31:0] ADDI_X2_X1_2 = 32'h0020_8113;
+    localparam logic [31:0] XORI_X2_X1_2 = 32'h0020_c113;
     localparam logic [31:0] ADDI_X1_X0_2 = 32'h0020_0093;
     localparam logic [31:0] LW_X3_0_X0 = 32'h0000_2183;
     localparam logic [31:0] LW_X1_0_X0 = 32'h0000_2083;
@@ -49,6 +50,7 @@ module tb_issue_stage;
     localparam logic [31:0] ADDI_X5_X0_5 = 32'h0050_0293;
     localparam logic [31:0] ADDI_X6_X0_6 = 32'h0060_0313;
     localparam logic [31:0] SH1ADD_X3_X1_X2 = 32'h2020_a1b3;
+    localparam logic [31:0] MUL_X3_X1_X2 = 32'h0220_81b3;
 
     issue_stage dut (
         .clk(clk),
@@ -159,8 +161,13 @@ module tb_issue_stage;
         send_pair(ADDI_X1_X0_1, ADDI_X2_X1_2);
         check("RAW lane0 issues", is_to_ds_valid0);
         `ifdef L3F_SAME_CYCLE_ALU_BYPASS
+        `ifdef L3F_BYPASS_LOGIC_ONLY
+        check("non-logic RAW lane1 blocked", !is_to_ds_valid1);
+        check("non-logic RAW reject event", issue_raw_reject_event);
+        `else
         check("bypassable RAW lane1 issues", is_to_ds_valid1);
         check("bypassable RAW no reject", !issue_raw_reject_event);
+        `endif
         `else
         check("RAW lane1 blocked", !is_to_ds_valid1);
         check("RAW reject event", issue_raw_reject_event);
@@ -168,6 +175,13 @@ module tb_issue_stage;
         #1;
         check("RAW younger preserved", is_to_ds_valid0 &&
               (bus_inst(is_to_ds_bus0) == ADDI_X2_X1_2));
+        `endif
+
+        `ifdef L3F_BYPASS_LOGIC_ONLY
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, XORI_X2_X1_2);
+        check("logic RAW lane1 issues", is_to_ds_valid1);
+        check("logic RAW no reject", !issue_raw_reject_event);
         `endif
 
         reset_dut();
@@ -226,6 +240,29 @@ module tb_issue_stage;
         send_pair(ADDI_X5_X0_5, SH1ADD_X3_X1_X2);
         check("ALU plus bitman lane1", is_to_ds_valid1);
         check("bitman pair event", issue_bitman_pair_event);
+
+        reset_dut();
+        send_pair(ADDI_X4_X3_4, MUL_X3_X1_X2);
+        `ifdef L3Q_MULDIV_SIMPLE_PAIR
+        check("ALU plus mul lane1", is_to_ds_valid1);
+        `else
+        check("ALU plus mul blocked", !is_to_ds_valid1);
+        `endif
+
+        reset_dut();
+        send_pair(MUL_X3_X1_X2, ADDI_X5_X0_5);
+        `ifdef L3Q_MULDIV_SIMPLE_PAIR
+        check("mul plus ALU lane1", is_to_ds_valid1);
+        `else
+        check("mul plus ALU blocked", !is_to_ds_valid1);
+        `endif
+
+        `ifdef L3Q_MULDIV_SIMPLE_PAIR
+        reset_dut();
+        send_pair(ADDI_X1_X0_1, MUL_X3_X1_X2);
+        check("ALU to mul RAW blocked", !is_to_ds_valid1);
+        check("ALU to mul RAW event", issue_raw_reject_event);
+        `endif
 
         // 四项队列允许保留的包尾指令与下一fetch packet队首重新配对。
         reset_dut();

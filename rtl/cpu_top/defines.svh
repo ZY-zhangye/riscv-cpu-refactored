@@ -8,7 +8,9 @@
 // 125 MHz release configuration: allow a simple lane1 ALU operation to consume
 // the current packet's lane0 ALU result.  This removes a large class of
 // artificial same-packet RAW serialization without changing architectural state.
+`ifndef L3P_DISABLE_ALU_BYPASS
 `define L3F_SAME_CYCLE_ALU_BYPASS
+`endif
 //定义位宽
 `define DATA_WIDTH 32
 `define ADDR_WIDTH 32
@@ -101,7 +103,7 @@
 `define CSR_PERF_RESULT_DEP 12'h7D5
 `define L3_PERF_COUNTERS
 
-`define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
+`define MUL_CYCLE 6 // 与multiplier.xci的C_LATENCY/PipeStages保持一致
 
 //MIMO外设地址
 `define SW_LOW_ADDR  32'h8020_0000

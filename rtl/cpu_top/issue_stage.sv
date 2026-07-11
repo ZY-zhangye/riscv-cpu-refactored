@@ -52,6 +52,9 @@ module issue_stage (
         logic lsu;
         logic control;
         logic bitman;
+        `ifdef L3Q_MULDIV_SIMPLE_PAIR
+        logic muldiv;
+        `endif
         `ifdef L3F_SAME_CYCLE_ALU_BYPASS
         logic bypassable_producer;
         logic bypassable_consumer;
@@ -138,6 +141,7 @@ module issue_stage (
         logic is_branch;
         logic is_jal;
         logic is_jalr;
+        logic is_muldiv;
         logic legal_load;
         logic legal_store;
         logic legal_branch;
@@ -156,6 +160,7 @@ module issue_stage (
             is_branch = (opcode == 7'b1100011);
             is_jal = (opcode == 7'b1101111);
             is_jalr = (opcode == 7'b1100111) && (funct3 == 3'b000);
+            is_muldiv = is_op_reg && (funct7 == 7'b0000001);
 
             legal_op_imm = (funct3 == 3'b000) ||
                            (funct3 == 3'b010) ||
@@ -226,13 +231,20 @@ module issue_stage (
             info.write_gpr = (is_op_imm && legal_op_imm) ||
                              (is_op_reg && legal_op_reg) ||
                              is_lui || is_auipc || legal_load ||
-                             is_jal || is_jalr || bitman_any;
+                             is_jal || is_jalr || bitman_any
+                             `ifdef L3Q_MULDIV_SIMPLE_PAIR
+                             || is_muldiv
+                             `endif
+                             ;
             info.simple_int = (is_op_imm && legal_op_imm) ||
                               (is_op_reg && legal_op_reg) ||
                               is_lui || is_auipc || bitman_any;
             info.lsu = legal_load || legal_store;
             info.control = legal_branch || is_jal || is_jalr;
             info.bitman = bitman_any;
+            `ifdef L3Q_MULDIV_SIMPLE_PAIR
+            info.muldiv = is_muldiv;
+            `endif
             `ifdef L3F_SAME_CYCLE_ALU_BYPASS
             info.bypassable_producer = (is_op_imm && legal_op_imm) ||
                                        (is_op_reg && legal_op_reg) ||
@@ -261,7 +273,12 @@ module issue_stage (
     assign pair_class_ok = (info0.simple_int && info1.simple_int) ||
                            (info0.lsu && info1.simple_int) ||
                            (info0.simple_int && info1.lsu) ||
-                           (info0.simple_int && info1.control);
+                           (info0.simple_int && info1.control)
+                           `ifdef L3Q_MULDIV_SIMPLE_PAIR
+                           || (info0.simple_int && info1.muldiv)
+                           || (info0.muldiv && info1.simple_int)
+                           `endif
+                           ;
     `ifdef L3F_SAME_CYCLE_ALU_BYPASS
     assign can_pair = buf_valid0 && buf_valid1 && pair_class_ok &&
                       !pair_waw &&
