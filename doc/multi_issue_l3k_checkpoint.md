@@ -73,3 +73,26 @@ RAS 的提交态/推测态更新仍使用当前解析控制流，以保持 redir
 2. 确认原 `MEM → bp_counter/D` 路径簇消失，并检查新最差路径是否变为 IF 本地 update register → BTB、RAS next-PC 或原 DRAM WEA 路径。
 3. 若本地 update → BTB 仍超时，再把数组写法改为逐项 CE/局部译码或评估小型 RAM 化；当前先不同时做第二层结构改造。
 4. 若 128 项最终仍不能保持有竞争力的 `IPC × Fmax`，使用 `L3H_BTB_16_ENTRIES` 独立回退，RAS 可继续保留。
+
+## 125 MHz 标准 QoR 复核
+
+L3K `6760658` 已在标准优化与标准快速路由流程下完成 125 MHz 后路由实现：
+
+- setup WNS +0.025 ns、TNS 0、0 / 40,067 失败端点；
+- hold WNS +3.358 ns、TNS 0；
+- 33,445 / 33,445 可路由网络完成，0 错误；
+- CPU 与 50 MHz 域的 125 条路径均由 Asynchronous Groups 排除；
+- 19,068 LUT、22,215 FF、64 BRAM Tile、8 DSP。
+
+原 `MEM/flush → bp_counter/D` 路径簇已完全退出关键路径，证明本地更新寄存器达到了预期目标。最差路径恢复为：
+
+```text
+mem_stage1/es_ms_bus_r_reg[95] → DRAM BRAM WEA[0]
+```
+
+- 数据路径 7.241 ns；
+- 14 级逻辑；
+- 逻辑 0.861 ns（11.9%）；
+- 路由 6.380 ns（88.1%）。
+
+125 MHz 已满足硬时序要求，但只有 25 ps 裕量，应定义为临界通过档，而不是稳健签核档。由于最差路径以物理路由为主，下一步先使用高性能实现 directive 与 post-route physical optimization 尝试 130 MHz；同时可复跑高质量 125 MHz 以建立明确工程余量。在这些实现手段耗尽前不再修改访存协议。
