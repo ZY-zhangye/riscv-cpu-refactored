@@ -239,6 +239,50 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_ISSUE_QFULL,  32'd1, "perf_issue_qfull");
         expect_csr(`CSR_PERF_RESULT_DEP,   32'd1, "perf_result_dep");
 
+        // Trap and mret redirects are registered one cycle after the MEM/CSR
+        // request, with the corresponding target captured on the same edge.
+        drive_cycle(1'b1, `CSR_MTVEC, 32'h8000_0100,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        @(negedge clk);
+        csr_wdata = 32'h8000_0080;
+        exception_mtval = 32'h0000_0002;
+        exception_code = `EXC_IAM;
+        #1;
+        if (exception_flag !== 1'b0) begin
+            $fatal(1, "exception redirect must not be combinational");
+        end
+        @(posedge clk);
+        #1;
+        if (!exception_flag || (exception_addr != 32'h8000_0100)) begin
+            $fatal(1, "registered exception redirect mismatch");
+        end
+        exception_code = `EXC_NONE;
+        exception_mtval = 32'b0;
+        csr_wdata = 32'b0;
+        @(posedge clk);
+        #1;
+        if (exception_flag) begin
+            $fatal(1, "exception redirect pulse did not clear");
+        end
+
+        @(negedge clk);
+        exception_code = 7'b100_0000;
+        #1;
+        if (exception_flag !== 1'b0) begin
+            $fatal(1, "mret redirect must not be combinational");
+        end
+        @(posedge clk);
+        #1;
+        if (!exception_flag || (exception_addr != 32'h8000_0080)) begin
+            $fatal(1, "registered mret redirect mismatch");
+        end
+        exception_code = `EXC_NONE;
+        @(posedge clk);
+        #1;
+        if (exception_flag) begin
+            $fatal(1, "mret redirect pulse did not clear");
+        end
+
         $display("PERF COUNTER TEST PASSED");
         $finish;
     end

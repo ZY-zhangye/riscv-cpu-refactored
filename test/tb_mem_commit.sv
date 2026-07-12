@@ -30,6 +30,7 @@ module tb_mem_commit;
     logic [6:0] exception_code;
     logic [31:0] exception_mtval;
     logic [1:0] retire_count;
+    logic exception_flag;
     int failures;
 
     mem_stage dut (
@@ -54,7 +55,7 @@ module tb_mem_commit;
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
         .mem_result(mem_result),
-        .exception_flag(1'b0),
+        .exception_flag(exception_flag),
         .exe_exc_bus(exe_exc_bus),
         .plic_irq(1'b0),
         .external_irq_enable(1'b0),
@@ -113,6 +114,7 @@ module tb_mem_commit;
             ws_allowin = 1'b1;
             dmem_rdata = 32'h1234_5678;
             commit_kill = 1'b0;
+            exception_flag = 1'b0;
             exe_exc_bus = '0;
             repeat (2) @(posedge clk);
             #1 rst_n = 1'b1;
@@ -165,6 +167,22 @@ module tb_mem_commit;
                           4'b0, 32'b0, 5'd6, 1'b1));
         check("younger killed GPR write suppressed", !mem_regfile_wen);
         check("younger killed ALU not retired", retire_count == 2'd0);
+
+        reset_dut();
+        ws_allowin = 1'b0;
+        send_bus(make_bus(32'h8000_0500, 32'h0000_0028, `SW,
+                          4'b1111, 32'h5566_7788, 5'b0, 1'b0));
+        check("resident store held before trap", ms_valid);
+        @(negedge clk);
+        exception_flag = 1'b1;
+        #1;
+        check("registered trap suppresses resident store", !store_commit_valid);
+        check("registered trap suppresses resident retire", retire_count == 2'd0);
+        @(posedge clk);
+        #1;
+        exception_flag = 1'b0;
+        ws_allowin = 1'b1;
+        check("registered trap clears resident MEM packet", !ms_valid);
 
         if (failures == 0) begin
             $display("MEM_COMMIT_TEST_PASSED");

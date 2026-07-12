@@ -302,7 +302,22 @@ module regfile_csr (
     logic mret_jmp_flag;
     assign mret_jmp_flag = mret_flag && prev_exception_flag; //仅当mret_flag为1且之前发生过异常时mret_jmp_flag才为1
     assign external_irq_enable = mstatus[3] && mie[11]; //MIE与MEIE同时有效时才响应PLIC外部中断
-    assign exception_flag = exception_code[5] || mret_jmp_flag;
-    assign exception_addr = mret_jmp_flag ? {mepc[31:2], 2'b0} : mtvec; //当mret_jmp_flag为1时异常地址为mepc，否则为mtvec
+
+    // Register the global trap/mret redirect before it fans out to IF and all
+    // pipeline stages. Architectural trap state is still written on the
+    // detection edge above; the registered pulse flushes younger work on the
+    // following cycle and breaks the MEM->exception->EX allow feedback cone.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            exception_flag <= 1'b0;
+            exception_addr <= 32'b0;
+        end else begin
+            exception_flag <= exception_code[5] || mret_jmp_flag;
+            if (exception_code[5] || mret_jmp_flag) begin
+                exception_addr <= mret_jmp_flag ?
+                                  {mepc[31:2], 2'b0} : mtvec;
+            end
+        end
+    end
 
 endmodule

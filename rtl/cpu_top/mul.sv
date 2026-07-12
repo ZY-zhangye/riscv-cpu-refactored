@@ -31,6 +31,7 @@ module mul (
     // --------------------
     logic [31:0] div_src1, div_src2;
     logic [63:0] div_result;
+    logic [31:0] div_special_result;
     logic        div_0;
     logic        div_1;
     logic [1:0]  div_state;
@@ -63,7 +64,9 @@ module mul (
     assign mul_src1_ext = src1_signed ? {mul_src1[31], mul_src1} : {1'b0, mul_src1};
     assign mul_src2_ext = src2_signed ? {mul_src2[31], mul_src2} : {1'b0, mul_src2};
 
-    assign div_0 = (div_src2 == 32'b0);
+    // Zero detection does not need the signed-magnitude conversion. Keeping it
+    // on the raw operand avoids a 32-bit negate carry chain in the special path.
+    assign div_0 = (mul_src2 == 32'b0);
     assign div_1 = src1_signed && src2_signed &&
                    (mul_src1 == 32'h8000_0000) &&
                    (mul_src2 == 32'hffff_ffff);
@@ -117,27 +120,35 @@ module mul (
             end
             mul_op[1]: begin
                 // DIV: DEBUG仿真divider输出{remainder, quotient}，工程IP输出{quotient, remainder}
+                if (div_state == 2'b10) begin
+                    mul_result = div_special_result;
+                end else begin
 `ifdef DEBUG_EN
-                mul_result = (s1 && div_state == 2'b11) ?
-                             (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
-                             div_result[31:0];
+                    mul_result = (s1 && div_state == 2'b11) ?
+                                 (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
+                                 div_result[31:0];
 `else
-                mul_result = (s1 && div_state == 2'b11) ?
-                             (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
-                             div_result[63:32];
+                    mul_result = (s1 && div_state == 2'b11) ?
+                                 (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
+                                 div_result[63:32];
 `endif
+                end
             end
             mul_op[0]: begin
                 // REM: DEBUG仿真divider输出{remainder, quotient}，工程IP输出{quotient, remainder}
+                if (div_state == 2'b10) begin
+                    mul_result = div_special_result;
+                end else begin
 `ifdef DEBUG_EN
-                mul_result = (s2 && div_state == 2'b11) ?
-                             (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
-                             div_result[63:32];
+                    mul_result = (s2 && div_state == 2'b11) ?
+                                 (~m_axis_dout_tdata_reg[63:32] + 1'b1) :
+                                 div_result[63:32];
 `else
-                mul_result = (s2 && div_state == 2'b11) ?
-                             (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
-                             div_result[31:0];
+                    mul_result = (s2 && div_state == 2'b11) ?
+                                 (~m_axis_dout_tdata_reg[31:0] + 1'b1) :
+                                 div_result[31:0];
 `endif
+                end
             end
             default: begin
                 mul_result = 32'b0;
@@ -161,6 +172,9 @@ module mul (
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             div_state <= 2'b00;
+            div_result <= 64'b0;
+            div_special_result <= 32'b0;
+            m_axis_dout_tdata_reg <= 64'b0;
         end else begin
             unique case (div_state)
                 2'b00: begin
@@ -171,13 +185,16 @@ module mul (
                         div_state <= 2'b01;
                     end else if (is_multicycle && is_mul && mul_op_div && (div_0 || div_1)) begin
                         div_state <= 2'b10;
-`ifdef DEBUG_EN
-                        div_result <= div_0 ? {mul_src1, 32'hffff_ffff} :
-                                       {32'h0000_0000, 32'h8000_0000} ;
-`else
-                        div_result <= div_0 ? {32'hffff_ffff, mul_src1} :
-                                       {32'h8000_0000, 32'h0000_0000} ;
-`endif
+                        if (mul_op[1]) begin
+                            // DIV/DIVU: divide-by-zero is -1; signed overflow
+                            // returns INT_MIN.
+                            div_special_result <= div_0 ? 32'hffff_ffff :
+                                                          32'h8000_0000;
+                        end else begin
+                            // REM/REMU: divide-by-zero returns the dividend;
+                            // signed overflow has a zero remainder.
+                            div_special_result <= div_0 ? mul_src1 : 32'b0;
+                        end
                     end else begin
                         div_state <= 2'b00;
                     end

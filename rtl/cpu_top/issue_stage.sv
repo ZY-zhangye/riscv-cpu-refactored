@@ -107,11 +107,13 @@ module issue_stage (
     logic can_pair;
     logic lane0_fire;
     logic lane1_fire;
+    logic lane0_shift;
+    logic lane1_shift;
     logic packet_accept;
+    logic capacity_allow;
     logic [2:0] consume_count;
     logic [2:0] incoming_count;
     logic [2:0] remaining_count;
-    logic can_accept_one;
     logic can_accept_two;
     logic queue_full_event_now;
 
@@ -299,35 +301,38 @@ module issue_stage (
 
     assign lane0_fire = is_to_ds_valid0 && ds_bundle_allowin;
     assign lane1_fire = is_to_ds_valid1 && ds_bundle_allowin;
-    assign consume_count = lane1_fire ? 3'd2 : lane0_fire ? 3'd1 : 3'd0;
+    // Physical queue movement is independent of redirect. A flush clears the
+    // architectural count below, so shifting invalid payloads in that cycle is
+    // harmless and keeps redirect off the wide queue CE/D cone.
+    assign lane0_shift = buf_valid0 && ds_bundle_allowin;
+    assign lane1_shift = can_pair && ds_bundle_allowin;
+    assign consume_count = lane1_shift ? 3'd2 : lane0_shift ? 3'd1 : 3'd0;
     assign incoming_count = fs_to_is_valid0 ?
                             (fs_to_is_valid1 ? 3'd2 : 3'd1) : 3'd0;
     assign remaining_count = queue_count - consume_count;
-    // 深度固定为4，显式容量判断避免在EX反压到IF路径上推导减法/比较进位链。
+    // The IF interface is physically two instructions wide. Reserve two
+    // entries regardless of the current prediction result so RAS/BTB lane1
+    // validity cannot feed back through capacity_allow into IF state updates.
+    // A single-instruction packet may leave one slot unused for a cycle, but
+    // queue safety and full dual-fetch throughput are preserved.
     always_comb begin
-        can_accept_one = 1'b0;
         can_accept_two = 1'b0;
         unique case (queue_count)
             3'd0, 3'd1, 3'd2: begin
-                can_accept_one = 1'b1;
                 can_accept_two = 1'b1;
             end
             3'd3: begin
-                can_accept_one = 1'b1;
                 can_accept_two = (consume_count != 3'd0);
             end
             3'd4: begin
-                can_accept_one = (consume_count != 3'd0);
                 can_accept_two = (consume_count == 3'd2);
             end
             default: ;
         endcase
     end
-    // IF当前尚无有效packet时为下一次双字返回预留两个槽位。
-    assign is_allowin = global_flush ||
-                        ((!fs_to_is_valid0 || fs_to_is_valid1) ?
-                         can_accept_two : can_accept_one);
-    assign packet_accept = fs_to_is_valid0 && is_allowin && !global_flush;
+    assign capacity_allow = can_accept_two;
+    assign is_allowin = global_flush || capacity_allow;
+    assign packet_accept = fs_to_is_valid0 && capacity_allow;
 
     assign dual_issue_event = lane1_fire;
     assign single_issue_event = lane0_fire && !lane1_fire;
@@ -357,93 +362,94 @@ module issue_stage (
         next_queue_count = queue_count;
         next_next_packet_tag = next_packet_tag;
 
-        if (global_flush) begin
-            // payload、预译码和tag在count=0后均为无效数据，不必由EX redirect
-            // 高扇出清零；后续有效入队会按槽位自然覆盖。
-            next_queue_count = 3'd0;
-            next_next_packet_tag = 1'b0;
-        end else begin
-            unique case (consume_count)
-                3'd1: begin
-                    next_queue0 = queue1;
-                    next_queue1 = queue2;
-                    next_queue2 = queue3;
-                    next_queue3 = '0;
-                    next_queue_tag0 = queue_tag1;
-                    next_queue_tag1 = queue_tag2;
-                    next_queue_tag2 = queue_tag3;
-                    next_queue_tag3 = 1'b0;
-                    next_queue_info0 = queue_info1;
-                    next_queue_info1 = queue_info2;
-                    next_queue_info2 = queue_info3;
-                    next_queue_info3 = '0;
-                end
-                3'd2: begin
-                    next_queue0 = queue2;
-                    next_queue1 = queue3;
-                    next_queue2 = '0;
-                    next_queue3 = '0;
-                    next_queue_tag0 = queue_tag2;
-                    next_queue_tag1 = queue_tag3;
-                    next_queue_tag2 = 1'b0;
-                    next_queue_tag3 = 1'b0;
-                    next_queue_info0 = queue_info2;
-                    next_queue_info1 = queue_info3;
-                    next_queue_info2 = '0;
-                    next_queue_info3 = '0;
-                end
-                default: ;
-            endcase
-            next_queue_count = remaining_count;
+        // Flush already masks lane*_fire and packet_accept. Keep payload and
+        // predecode registers on the ordinary path so redirect only reaches
+        // the narrow validity/tag state below, not every wide queue CE/D.
+        unique case (consume_count)
+            3'd1: begin
+                next_queue0 = queue1;
+                next_queue1 = queue2;
+                next_queue2 = queue3;
+                next_queue3 = '0;
+                next_queue_tag0 = queue_tag1;
+                next_queue_tag1 = queue_tag2;
+                next_queue_tag2 = queue_tag3;
+                next_queue_tag3 = 1'b0;
+                next_queue_info0 = queue_info1;
+                next_queue_info1 = queue_info2;
+                next_queue_info2 = queue_info3;
+                next_queue_info3 = '0;
+            end
+            3'd2: begin
+                next_queue0 = queue2;
+                next_queue1 = queue3;
+                next_queue2 = '0;
+                next_queue3 = '0;
+                next_queue_tag0 = queue_tag2;
+                next_queue_tag1 = queue_tag3;
+                next_queue_tag2 = 1'b0;
+                next_queue_tag3 = 1'b0;
+                next_queue_info0 = queue_info2;
+                next_queue_info1 = queue_info3;
+                next_queue_info2 = '0;
+                next_queue_info3 = '0;
+            end
+            default: ;
+        endcase
+        next_queue_count = remaining_count;
 
-            if (packet_accept) begin
-                unique case (remaining_count)
-                    3'd0: begin
-                        next_queue0 = fs_to_is_bus0;
-                        next_queue_tag0 = next_packet_tag;
-                        next_queue_info0 = decode_issue_info(
-                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
-                        if (fs_to_is_valid1) begin
-                            next_queue1 = fs_to_is_bus1;
-                            next_queue_tag1 = next_packet_tag;
-                            next_queue_info1 = decode_issue_info(
-                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
-                        end
-                    end
-                    3'd1: begin
-                        next_queue1 = fs_to_is_bus0;
+        if (packet_accept) begin
+            unique case (remaining_count)
+                3'd0: begin
+                    next_queue0 = fs_to_is_bus0;
+                    next_queue_tag0 = next_packet_tag;
+                    next_queue_info0 = decode_issue_info(
+                        fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                    if (fs_to_is_valid1) begin
+                        next_queue1 = fs_to_is_bus1;
                         next_queue_tag1 = next_packet_tag;
                         next_queue_info1 = decode_issue_info(
-                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
-                        if (fs_to_is_valid1) begin
-                            next_queue2 = fs_to_is_bus1;
-                            next_queue_tag2 = next_packet_tag;
-                            next_queue_info2 = decode_issue_info(
-                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
-                        end
+                            fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
                     end
-                    3'd2: begin
-                        next_queue2 = fs_to_is_bus0;
+                end
+                3'd1: begin
+                    next_queue1 = fs_to_is_bus0;
+                    next_queue_tag1 = next_packet_tag;
+                    next_queue_info1 = decode_issue_info(
+                        fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                    if (fs_to_is_valid1) begin
+                        next_queue2 = fs_to_is_bus1;
                         next_queue_tag2 = next_packet_tag;
                         next_queue_info2 = decode_issue_info(
-                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
-                        if (fs_to_is_valid1) begin
-                            next_queue3 = fs_to_is_bus1;
-                            next_queue_tag3 = next_packet_tag;
-                            next_queue_info3 = decode_issue_info(
-                                fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
-                        end
+                            fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
                     end
-                    default: begin
-                        next_queue3 = fs_to_is_bus0;
+                end
+                3'd2: begin
+                    next_queue2 = fs_to_is_bus0;
+                    next_queue_tag2 = next_packet_tag;
+                    next_queue_info2 = decode_issue_info(
+                        fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                    if (fs_to_is_valid1) begin
+                        next_queue3 = fs_to_is_bus1;
                         next_queue_tag3 = next_packet_tag;
                         next_queue_info3 = decode_issue_info(
-                            fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                            fs_to_is_bus1[`FS_DS_WIDTH-1 -: 32]);
                     end
-                endcase
-                next_queue_count = remaining_count + incoming_count;
-                next_next_packet_tag = ~next_packet_tag;
-            end
+                end
+                default: begin
+                    next_queue3 = fs_to_is_bus0;
+                    next_queue_tag3 = next_packet_tag;
+                    next_queue_info3 = decode_issue_info(
+                        fs_to_is_bus0[`FS_DS_WIDTH-1 -: 32]);
+                end
+            endcase
+            next_queue_count = remaining_count + incoming_count;
+            next_next_packet_tag = ~next_packet_tag;
+        end
+
+        if (global_flush) begin
+            next_queue_count = 3'd0;
+            next_next_packet_tag = 1'b0;
         end
     end
 

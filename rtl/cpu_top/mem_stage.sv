@@ -53,8 +53,61 @@ module mem_stage (
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_skid;
     logic [`EXE_EXC_BUS-1:0] exe_exc_bus_skid;
     logic es_flush_skid;
+    logic exception_iam_r;
+    logic exception_lam_r;
+    logic exception_sam_r;
+    logic exception_iam_skid;
+    logic exception_lam_skid;
+    logic exception_sam_skid;
     logic es_flush_r;
     logic ms_flush;
+
+    // Decode alignment exceptions from the incoming EX/MEM packet once, then
+    // carry the narrow results with the packet. This prevents the registered
+    // MEM payload store bit from driving the global exception/flush cone.
+    logic [31:0] in_exe_result;
+    logic [5:0] in_load_inst;
+    logic [31:0] in_mem_pc;
+    logic [31:0] in_mem_inst;
+    logic [3:0] in_pending_store_wen;
+    logic [31:0] in_pending_store_wdata;
+    logic [4:0] in_rd_addr;
+    logic in_regfile_wen;
+    logic in_reg_fpu_wen;
+    logic [1:0] in_wb_sel;
+    logic in_csr_wen;
+    logic [11:0] in_csr_addr;
+    logic [31:0] in_csr_data;
+    logic in_br_taken;
+    logic [31:0] in_br_target;
+    logic in_exception_iam;
+    logic in_exception_lam;
+    logic in_exception_sam;
+    assign {
+        in_mem_pc,
+        in_mem_inst,
+        in_exe_result,
+        in_load_inst,
+        in_pending_store_wen,
+        in_pending_store_wdata,
+        in_rd_addr,
+        in_regfile_wen,
+        in_reg_fpu_wen,
+        in_wb_sel,
+        in_csr_wen,
+        in_csr_addr,
+        in_csr_data
+    } = es_to_ms_bus;
+    assign in_br_taken = exe_exc_bus[`EXE_EXC_BUS-1];
+    assign in_br_target = exe_exc_bus[`EXE_EXC_BUS-2 -: 32];
+    assign in_exception_iam = in_br_taken && (in_br_target[1:0] != 2'b00);
+    assign in_exception_lam =
+        (((in_load_inst == `LW) && (in_exe_result[1:0] != 2'b00)) ||
+         (((in_load_inst == `LH) || (in_load_inst == `LHU)) &&
+          in_exe_result[0]));
+    assign in_exception_sam =
+        (((in_load_inst == `SW) && (in_exe_result[1:0] != 2'b00)) ||
+         ((in_load_inst == `SH) && in_exe_result[0]));
     assign ms_ready_go = 1'b1;
     assign ms_core_allowin = !ms_valid || ms_ready_go && ws_allowin;
     assign ms_allowin = ms_allowin_r;
@@ -84,6 +137,18 @@ module mem_stage (
             es_ms_bus_skid <= '0;
             exe_exc_bus_skid <= '0;
             es_flush_skid <= 1'b0;
+            exception_iam_r <= 1'b0;
+            exception_lam_r <= 1'b0;
+            exception_sam_r <= 1'b0;
+            exception_iam_skid <= 1'b0;
+            exception_lam_skid <= 1'b0;
+            exception_sam_skid <= 1'b0;
+        end else if (exception_flag) begin
+            // The registered trap belongs to an older MEM instruction. Drop
+            // any younger resident/skid packet admitted on the detection edge.
+            ms_valid <= 1'b0;
+            ms_allowin_r <= 1'b1;
+            ms_skid_valid <= 1'b0;
         end else begin
             ms_skid_valid <= ms_skid_valid_next;
             ms_allowin_r <= !ms_skid_valid_next;
@@ -94,22 +159,31 @@ module mem_stage (
                     es_ms_bus_r <= es_ms_bus_skid;
                     exe_exc_bus_r <= exe_exc_bus_skid;
                     es_flush_r <= es_flush_skid;
+                    exception_iam_r <= exception_iam_skid;
+                    exception_lam_r <= exception_lam_skid;
+                    exception_sam_r <= exception_sam_skid;
                 end else begin
                     ms_valid <= ms_in_fire;
                     if (ms_in_fire) begin
                         es_ms_bus_r <= es_to_ms_bus;
                         exe_exc_bus_r <= exe_exc_bus;
                         es_flush_r <= es_flush;
+                        exception_iam_r <= in_exception_iam;
+                        exception_lam_r <= in_exception_lam;
+                        exception_sam_r <= in_exception_sam;
                     end
                 end
             end else if (ms_in_fire && !ms_skid_valid) begin
                 es_ms_bus_skid <= es_to_ms_bus;
                 exe_exc_bus_skid <= exe_exc_bus;
                 es_flush_skid <= es_flush;
+                exception_iam_skid <= in_exception_iam;
+                exception_lam_skid <= in_exception_lam;
+                exception_sam_skid <= in_exception_sam;
             end
         end
     end
-    assign ms_flush = rst_n && es_flush_r;
+    assign ms_flush = rst_n && (es_flush_r || exception_flag);
 
     //解包
     logic [31:0] mem_pc;
@@ -248,17 +322,13 @@ end
     logic exception_sam;
     logic sync_exception;
     logic take_irq;
-    assign exception_iam = ms_valid && (br_taken && (br_target[1:0] != 2'b00)) && !ms_flush;
+    assign exception_iam = ms_valid && exception_iam_r && !ms_flush;
     logic is_word_access;
     logic is_half_access;
     assign is_word_access = (load_inst == `LW) || (load_inst == `SW);
     assign is_half_access = (load_inst == `LH) || (load_inst == `LHU) || (load_inst == `SH);
-    assign exception_lam = ms_valid && !ms_flush &&
-                       (((load_inst == `LW) && (data_offest != 2'b00)) ||
-                        (((load_inst == `LH) || (load_inst == `LHU)) && data_offest[0]));
-    assign exception_sam = ms_valid && !ms_flush &&
-                       (((load_inst == `SW) && (data_offest != 2'b00)) ||
-                        ((load_inst == `SH) && data_offest[0]));
+    assign exception_lam = ms_valid && exception_lam_r && !ms_flush;
+    assign exception_sam = ms_valid && exception_sam_r && !ms_flush;
     assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];
     assign take_irq = ms_valid && !ms_flush && !sync_exception && plic_irq && external_irq_enable;
     assign exception_code = ms_flush ? `EXC_NONE :

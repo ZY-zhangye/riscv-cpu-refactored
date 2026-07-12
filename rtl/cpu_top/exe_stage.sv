@@ -38,6 +38,10 @@ module exe_stage(
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
     output logic [`EXE_EXC_BUS - 1:0] exe_exc_bus,
     input logic exception_flag,
+    // Registered redirect from the preceding branch-resolution boundary.
+    // It kills the younger bundle that may have entered EX while the redirect
+    // event was being registered.
+    input logic branch_flush,
     //跳转接口
     output logic br_taken,
     output logic [31:0] br_target,
@@ -54,6 +58,7 @@ module exe_stage(
     output logic branch_event,
     output logic branch_mispredict_event,
     output logic execute_stall_event,
+    output logic execute_muldiv_op,
     //EX只生成访存请求信息；store副作用在MEM确认提交后产生
     output logic store_event,
     output logic [31:0] store_pc,
@@ -108,7 +113,7 @@ module exe_stage(
 
     always_comb begin
         es_skid_valid_next = skid_valid;
-        if (exception_flag) begin
+        if (exception_flag || branch_flush) begin
             es_skid_valid_next = 1'b0;
         end else if (es_core_allowin) begin
             es_skid_valid_next = 1'b0;
@@ -140,6 +145,12 @@ module exe_stage(
             skid_exe_result1 <= '0;
             skid_mem_result1 <= '0;
             skid_reg_fpu_data3 <= '0;
+        end else if (exception_flag || branch_flush) begin
+            // The resolving branch/trap is older than the resident bundle.
+            // Discard both resident and skid state before either can advance.
+            es_valid <= 1'b0;
+            es_allowin_r <= 1'b1;
+            skid_valid <= 1'b0;
         end else begin
             skid_valid <= es_skid_valid_next;
             es_allowin_r <= !es_skid_valid_next;
@@ -183,7 +194,7 @@ module exe_stage(
             end
         end
     end
-    assign es_flush = rst_n && (ds_flush_r || exception_flag);
+    assign es_flush = rst_n && (ds_flush_r || exception_flag || branch_flush);
     //一级解包
     `ifdef Z_BITMAIN_ENABLE
         logic [`BITMAN_PACKET_WIDTH-1:0] bitman_packet;
@@ -254,6 +265,7 @@ module exe_stage(
     logic [31:0] exe_pc;
     logic [31:0] exe_inst;
     assign {exe_pc, exe_inst, exe_result_sel, is_bitman, is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp, rd_addr, regfile_wen, reg_fpu_wen, is_multicycle} = ctrl_packet;
+    assign execute_muldiv_op = es_valid && is_mul;
     //SRC_PACKET解包
     logic [31:0] reg_src1;
     logic [31:0] reg_src2;

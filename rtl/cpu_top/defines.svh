@@ -11,6 +11,14 @@
 `ifndef L3Q_DISABLE_MULDIV_SIMPLE_PAIR
 `define L3Q_MULDIV_SIMPLE_PAIR
 `endif
+// Pipeline the issue-to-ID bundle handoff by default. Define
+// L3_DISABLE_ISSUE_OUTPUT_PIPE to reproduce the Q1 direct handoff.
+`ifndef L3_DISABLE_ISSUE_OUTPUT_PIPE
+`define L3_PIPELINED_ISSUE_OUTPUT
+`endif
+// Optional experiment: pass +define+L3Q_MULDIV_BLOCKING_BYPASS to let a younger
+// simple ALU leave EX while an older M op is stalled. It is intentionally
+// disabled for the Q1 release baseline.
 //定义位宽
 `define DATA_WIDTH 32
 `define ADDR_WIDTH 32

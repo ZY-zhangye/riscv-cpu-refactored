@@ -66,7 +66,8 @@ module cpu_top (
     logic issue_allowin;
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
 
-    // branch/exception redirect：每个bundle最多一条控制流，按lane年龄选择
+    // Branch/exception redirect. EX produces raw resolution signals; the
+    // merged event is registered below before it fans out to IF/Issue/ID.
     logic br_redirect;
     logic [31:0] br_redirect_target;
     logic bp_update_valid;
@@ -102,11 +103,21 @@ module cpu_top (
     logic bp_update_is_call1;
     logic bp_update_is_return1;
 
-    // issue -> ID bundle
+    // issue -> ID bundle. The registered handoff isolates issue queue control
+    // from the downstream ID/EX backpressure cone.
     logic is_to_ds_valid0;
     logic is_to_ds_valid1;
     logic [`FS_DS_WIDTH-1:0] is_to_ds_bus0;
     logic [`FS_DS_WIDTH-1:0] is_to_ds_bus1;
+    logic issue_to_ds_valid0;
+    logic issue_to_ds_valid1;
+    logic [`FS_DS_WIDTH-1:0] issue_to_ds_bus0;
+    logic [`FS_DS_WIDTH-1:0] issue_to_ds_bus1;
+    logic issue_to_ds_valid0_r;
+    logic issue_to_ds_valid1_r;
+    logic [`FS_DS_WIDTH-1:0] issue_to_ds_bus0_r;
+    logic [`FS_DS_WIDTH-1:0] issue_to_ds_bus1_r;
+    logic issue_to_ds_allowin;
     logic ds_bundle_allowin;
     logic issue_flush;
     logic dual_issue_event;
@@ -209,7 +220,11 @@ module cpu_top (
     logic ex_branch_mispredict_event;
     logic execute_stall_event0;
     logic execute_stall_event1;
+    logic execute_muldiv_op0;
+    logic execute_muldiv_op1;
     logic ex_bundle_advance;
+    logic ex_lane1_allowin;
+    logic m_bypass_advance;
     logic ex_lanes_ready;
 
     // 双EX lane访存请求，顶层仲裁到单路数据存储器
@@ -275,6 +290,9 @@ module cpu_top (
     logic ws_bundle_allowin;
     logic ws_allowin0_raw;
     logic ws_allowin1_raw;
+    logic m_bypass_pending;
+    logic mem_ws_allowin0;
+    logic mem_ws_allowin1;
 
     logic csr_we1;
     logic [11:0] csr_waddr1;
@@ -341,11 +359,11 @@ module cpu_top (
         .fs_to_is_bus0(fs_to_is_bus0),
         .fs_to_is_bus1(fs_to_is_bus1),
         .is_allowin(issue_allowin),
-        .is_to_ds_valid0(is_to_ds_valid0),
-        .is_to_ds_valid1(is_to_ds_valid1),
-        .is_to_ds_bus0(is_to_ds_bus0),
-        .is_to_ds_bus1(is_to_ds_bus1),
-        .ds_bundle_allowin(ds_bundle_allowin),
+        .is_to_ds_valid0(issue_to_ds_valid0),
+        .is_to_ds_valid1(issue_to_ds_valid1),
+        .is_to_ds_bus0(issue_to_ds_bus0),
+        .is_to_ds_bus1(issue_to_ds_bus1),
+        .ds_bundle_allowin(issue_to_ds_allowin),
         .br_redirect(br_redirect),
         .exception_flag(exception_flag),
         .issue_flush(issue_flush),
@@ -369,6 +387,43 @@ module cpu_top (
         .debug_issue_valid1(debug_issue_valid1)
         `endif
     );
+
+    `ifdef L3_PIPELINED_ISSUE_OUTPUT
+        assign issue_to_ds_allowin = issue_flush || !issue_to_ds_valid0_r ||
+                                     ds_bundle_allowin;
+        assign is_to_ds_valid0 = issue_to_ds_valid0_r && !issue_flush;
+        assign is_to_ds_valid1 = issue_to_ds_valid1_r && !issue_flush;
+        assign is_to_ds_bus0 = issue_to_ds_bus0_r;
+        assign is_to_ds_bus1 = issue_to_ds_bus1_r;
+
+        // One-entry atomic bundle register. On redirect it is cleared before ID
+        // can observe a younger instruction; otherwise it supports same-cycle
+        // consume/refill when the ID pair is ready.
+        always_ff @(posedge clk or negedge rst_n) begin
+            if (!rst_n) begin
+                issue_to_ds_valid0_r <= 1'b0;
+                issue_to_ds_valid1_r <= 1'b0;
+                issue_to_ds_bus0_r <= '0;
+                issue_to_ds_bus1_r <= '0;
+            end else if (issue_flush) begin
+                issue_to_ds_valid0_r <= 1'b0;
+                issue_to_ds_valid1_r <= 1'b0;
+            end else if (issue_to_ds_allowin) begin
+                issue_to_ds_valid0_r <= issue_to_ds_valid0;
+                issue_to_ds_valid1_r <= issue_to_ds_valid1;
+                if (issue_to_ds_valid0) begin
+                    issue_to_ds_bus0_r <= issue_to_ds_bus0;
+                    issue_to_ds_bus1_r <= issue_to_ds_bus1;
+                end
+            end
+        end
+    `else
+        assign issue_to_ds_allowin = ds_bundle_allowin;
+        assign is_to_ds_valid0 = issue_to_ds_valid0;
+        assign is_to_ds_valid1 = issue_to_ds_valid1;
+        assign is_to_ds_bus0 = issue_to_ds_bus0;
+        assign is_to_ds_bus1 = issue_to_ds_bus1;
+    `endif
 
     // ID bundle coupling. ds_to_es_valid本身只表示lane就绪，真正送入EX时再用
     // id_bundle_advance门控，避免其中一条因相关停顿时另一条先行。
@@ -498,23 +553,80 @@ module cpu_top (
     );
 
     // EX bundle coupling
+    assign m_bypass_advance =
+        `ifdef L3Q_MULDIV_BLOCKING_BYPASS
+        execute_stall_event0 && execute_muldiv_op0 && es_valid0 &&
+        es_valid1 && !execute_stall_event1 && es_to_ms_valid1_raw &&
+        ms_allowin1_raw && !lsu_store_load_conflict;
+        `else
+        1'b0;
+        `endif
     assign ex_lanes_ready = (!es_valid0 || es_to_ms_valid0_raw) &&
                             (!es_valid1 || es_to_ms_valid1_raw);
     assign ex_bundle_advance = ms_allowin0_raw && ms_allowin1_raw &&
                                ex_lanes_ready && !lsu_store_load_conflict;
+    assign ex_lane1_allowin = ex_bundle_advance || m_bypass_advance;
     assign es_to_ms_valid0 = es_to_ms_valid0_raw && ex_bundle_advance;
-    assign es_to_ms_valid1 = es_to_ms_valid1_raw && ex_bundle_advance;
+    assign es_to_ms_valid1 = es_to_ms_valid1_raw && ex_lane1_allowin;
 
-    // lane0控制流年龄更老；当前配对规则不会让两个lane同时包含控制流。
-    assign br_redirect = br_redirect0 || br_redirect1;
-    assign br_redirect_target = br_redirect0 ? br_redirect_target0 : br_redirect_target1;
-    assign bp_update_valid = bp_update_valid0 || bp_update_valid1;
-    assign bp_update_pc = bp_update_valid0 ? bp_update_pc0 : bp_update_pc1;
-    assign bp_update_taken = bp_update_valid0 ? bp_update_taken0 : bp_update_taken1;
-    assign bp_update_target = bp_update_valid0 ? bp_update_target0 : bp_update_target1;
-    assign bp_update_is_jalr = bp_update_valid0 ? bp_update_is_jalr0 : bp_update_is_jalr1;
-    assign bp_update_is_call = bp_update_valid0 ? bp_update_is_call0 : bp_update_is_call1;
-    assign bp_update_is_return = bp_update_valid0 ? bp_update_is_return0 : bp_update_is_return1;
+    // A bypassed younger result waits in MEM until the older M instruction
+    // reaches the same boundary, preserving in-order retirement.
+    assign mem_ws_allowin0 = m_bypass_pending ? ws_allowin0_raw : ws_bundle_allowin;
+    assign mem_ws_allowin1 = m_bypass_pending ? 1'b0 : ws_bundle_allowin;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            m_bypass_pending <= 1'b0;
+        end else if (m_bypass_pending) begin
+            if (es_to_ms_valid0) begin
+                m_bypass_pending <= 1'b0;
+            end
+        end else if (m_bypass_advance) begin
+            m_bypass_pending <= 1'b1;
+        end
+    end
+
+    // Only register a resolution when the branch actually advances out of EX.
+    // This boundary removes the JALR/compare cone from the global redirect
+    // network. Lane0 is older; pairing rules prevent two branch events in one
+    // bundle, but the priority remains explicit here.
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            br_redirect <= 1'b0;
+            br_redirect_target <= '0;
+            bp_update_valid <= 1'b0;
+            bp_update_pc <= '0;
+            bp_update_taken <= 1'b0;
+            bp_update_target <= '0;
+            bp_update_is_jalr <= 1'b0;
+            bp_update_is_call <= 1'b0;
+            bp_update_is_return <= 1'b0;
+        end else begin
+            br_redirect <= 1'b0;
+            bp_update_valid <= 1'b0;
+            if (ex_branch_event) begin
+                br_redirect <= br_redirect0;
+                br_redirect_target <= br_redirect_target0;
+                bp_update_valid <= bp_update_valid0;
+                bp_update_pc <= bp_update_pc0;
+                bp_update_taken <= bp_update_taken0;
+                bp_update_target <= bp_update_target0;
+                bp_update_is_jalr <= bp_update_is_jalr0;
+                bp_update_is_call <= bp_update_is_call0;
+                bp_update_is_return <= bp_update_is_return0;
+            end else if (branch_event1) begin
+                br_redirect <= br_redirect1;
+                br_redirect_target <= br_redirect_target1;
+                bp_update_valid <= bp_update_valid1;
+                bp_update_pc <= bp_update_pc1;
+                bp_update_taken <= bp_update_taken1;
+                bp_update_target <= bp_update_target1;
+                bp_update_is_jalr <= bp_update_is_jalr1;
+                bp_update_is_call <= bp_update_is_call1;
+                bp_update_is_return <= bp_update_is_return1;
+            end
+        end
+    end
 
     exe_stage u_exe_stage0 (
         .clk(clk),
@@ -547,6 +659,7 @@ module cpu_top (
         .ds_exc_bus(ds_exc_bus0),
         .exe_exc_bus(exe_exc_bus0),
         .exception_flag(exception_flag),
+        .branch_flush(br_redirect),
         .br_taken(br_taken0),
         .br_target(br_target0),
         .br_redirect(br_redirect0),
@@ -561,6 +674,7 @@ module cpu_top (
         .branch_event(ex_branch_event),
         .branch_mispredict_event(ex_branch_mispredict_event),
         .execute_stall_event(execute_stall_event0),
+        .execute_muldiv_op(execute_muldiv_op0),
         .store_event(store_event0),
         .store_pc(store_pc0),
         .store_addr(store_addr0),
@@ -580,7 +694,7 @@ module cpu_top (
         .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid1),
         .es_allowin(es_allowin1_raw),
-        .ms_allowin(ex_bundle_advance),
+        .ms_allowin(ex_lane1_allowin),
         .es_to_ms_valid(es_to_ms_valid1_raw),
         .ds_flush(ds_flush1),
         .ds_to_es_bus(ds_to_es_bus1),
@@ -606,6 +720,7 @@ module cpu_top (
         .ds_exc_bus(ds_exc_bus1),
         .exe_exc_bus(exe_exc_bus1),
         .exception_flag(exception_flag),
+        .branch_flush(br_redirect),
         .br_taken(br_taken1),
         .br_target(br_target1),
         .br_redirect(br_redirect1),
@@ -620,6 +735,7 @@ module cpu_top (
         .branch_event(branch_event1),
         .branch_mispredict_event(branch_mispredict_event1),
         .execute_stall_event(execute_stall_event1),
+        .execute_muldiv_op(execute_muldiv_op1),
         .store_event(unused_store_event1),
         .store_pc(unused_store_pc1),
         .store_addr(unused_store_addr1),
@@ -660,7 +776,7 @@ module cpu_top (
         .es_to_ms_valid(es_to_ms_valid0),
         .ms_to_ws_valid(ms_to_ws_valid0),
         .ms_allowin(ms_allowin0_raw),
-        .ws_allowin(ws_bundle_allowin),
+        .ws_allowin(mem_ws_allowin0),
         .ms_valid(ms_valid0),
         .dmem_rdata(dmem_rdata),
         .commit_kill(1'b0),
@@ -694,7 +810,7 @@ module cpu_top (
         .es_to_ms_valid(es_to_ms_valid1),
         .ms_to_ws_valid(ms_to_ws_valid1),
         .ms_allowin(ms_allowin1_raw),
-        .ws_allowin(ws_bundle_allowin),
+        .ws_allowin(mem_ws_allowin1),
         .ms_valid(ms_valid1),
         .dmem_rdata(dmem_rdata),
         .commit_kill(lane1_commit_kill),
