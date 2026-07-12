@@ -5,11 +5,11 @@
 `define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
 `define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
 `define Z_BITMAIN_ENABLE 1'b1   //是否启用Z-bitman指令集扩展，1为启用，0为不启用
-// 125 MHz release configuration: allow a simple lane1 ALU operation to consume
-// the current packet's lane0 ALU result.  This removes a large class of
-// artificial same-packet RAW serialization without changing architectural state.
-`ifndef L3P_DISABLE_ALU_BYPASS
-`define L3F_SAME_CYCLE_ALU_BYPASS
+// L3Q 125 MHz release configuration: pair independent simple integer and M
+// operations. Same-cycle cross-ALU bypass remains an explicit experiment because
+// both tested variants failed ordinary 125 MHz implementation.
+`ifndef L3Q_DISABLE_MULDIV_SIMPLE_PAIR
+`define L3Q_MULDIV_SIMPLE_PAIR
 `endif
 //定义位宽
 `define DATA_WIDTH 32

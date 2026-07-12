@@ -1,6 +1,6 @@
 # L3P 125 MHz 提交候选
 
-> 状态更新：后续 L3Q 检查发现 multiplier IP 为 6 拍而 RTL 控制原为 4 拍，并建立了多组可选性能配置。修正后的结果与综合建议见 `multi_issue_l3q_performance_candidates.md`。
+> 状态更新：后续 L3Q 检查发现 multiplier IP 为 6 拍而 RTL 控制原为 4 拍，并完成四组 125 MHz 云端实现。最终发布配置选择 Q1（M+简单整数配对、关闭同周期 ALU 旁路），结果见 `multi_issue_l3q_performance_candidates.md`。
 
 ## 决策
 

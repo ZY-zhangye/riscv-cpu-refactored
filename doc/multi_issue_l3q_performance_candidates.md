@@ -1,5 +1,7 @@
 # L3Q 125 MHz 性能候选矩阵
 
+> 签核结论：云端普通 125 MHz 实现选择 Q1。Q1 的 WNS 为 +0.292 ns，优于 Q0 的 +0.240 ns；Q3/Q4 分别为 -2.539 ns 和 -3.057 ns，退出发布候选。当前 RTL 默认配置已切换为 Q1。
+
 ## 目标
 
 在不依赖本机 Vivado 的条件下，为 125 MHz 提交版准备多组可独立综合的性能候选。所有结果使用同一份九窗口 benchmark，`sink=0x9D3BF787`、exceptions=0，九个窗口均一次完成。
@@ -43,3 +45,20 @@ Q2/Q3 只允许 lane1 AND/OR/XOR 消费 lane0 当前 ALU 结果。lane0 仍可�
 - Q1/Q3 是否出现 issue queue `can_pair`/预译码到 CE 或 D 的新路径；
 - Q3/Q4 是否出现 lane0 `forward_ex_result0` 到 lane1 ALU 的新关键路径；
 - multiplier 实例的真实 6 拍输出是否与 `mul_done` 对齐。
+
+## 云端签核结果
+
+四组均使用 Vivado 2023.2、`xc7k325tffg900-2`、普通 125 MHz synth + route，不使用特殊 QoR directive。
+
+| 配置 | WNS | TNS | 失败端点 | LUT | FF | 结果 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Q0 | +0.240 ns | 0 | 0 / 40,071 | 19,115 | 22,219 | 通过 |
+| Q1 | +0.292 ns | 0 | 0 / 40,080 | 19,058 | 22,224 | 通过，选为发布配置 |
+| Q3 | -2.539 ns | -7,664.104 ns | 6,286 / 40,163 | 19,664 | 22,304 | 失败 |
+| Q4 | -3.057 ns | -8,502.209 ns | 6,584 / 40,147 | 19,606 | 22,300 | 失败 |
+
+Q0 最差路径仍为 `mem_stage0/es_ms_bus_r_reg[92]` 到 DRAM BRAM `WEA[0]`。Q1 最差路径转移为 EX0 result 到 issue queue CE，20 级逻辑、73.6% routing，但仍保留 292 ps setup 裕量。
+
+Q3/Q4 的旁路没有首先表现为单纯的 lane0 ALU 到 lane1 ALU 路径，而是把数据依赖和 issue queue 写入控制连接成 28/29 级长锥。说明这类旁路后续必须配合结构隔离或流水线拆分，不能以当前组合形式进入 125 MHz 发布版。
+
+默认 RTL 不再定义 `L3F_SAME_CYCLE_ALU_BYPASS`，并默认定义 `L3Q_MULDIV_SIMPLE_PAIR`。若需要复现无 M 配对的 Q0，可定义 `L3Q_DISABLE_MULDIV_SIMPLE_PAIR`。
