@@ -855,7 +855,11 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.5.1 directed tests passed 8/8 and run_all.bat all passed 78/78; compile 0 errors / 0 warnings
               - A7.5.1 cycles=2285194, exact IPC=0.997488; sink/instret/branch/brmisp/exceptions/hashes unchanged
               - LSU pair launches rose from 8180 to 108164; MEMORY cycles fell by 92874 and RETURN by 16008
-              - next: measure the remaining 8000 non-prefer domain exits before any deeper LSU change; A7.6 timing remains deferred
+              - A7.5.2 SIGNED_OFF in 9d91ff3: supported back-to-back LSU pairs remain in one domain but execute as serialized four-beat accesses
+              - A7.5.2 directed tests passed 8/8 and run_all.bat all passed 78/78; compile 0 errors / 0 warnings
+              - A7.5.2 cycles=2165216, exact IPC=1.052761; RETURN cycles fell by 119978; all architectural invariants and hashes unchanged
+              - dual-to-legacy transitions fell from 8000 to 1; the remaining event is a lookahead gap, not another optimizable class
+              - next: audit post-LSU bottlenecks; any RAW/long-unit restructuring remains behind an explicit timing-risk decision
 ```
 
 ### 17.3 A0 签核记录
@@ -2290,3 +2294,112 @@ A7.5→A7.5.1 的退休数、branch、branch mispredict、sink、exceptions 和�
 每窗口与总计满足 class 守恒：`1223311 = 345465 simple pair + 421907 simple singleton + 91346 control singleton + 2000 MULDIV singleton + 171570 lane1 control + 68859 control0 simple + 108164 LSU pair + 14000 MULDIV pair`；退休守恒为 `1223311 = 520559 retire1 + 702752 retire2`。固定四拍 LSU 进入 dual resident 的次数增加后，zero-retire 和 dual-wait 会随 resident 等待增加，但双退休与单退休的有效密度提高，最终总周期仍净减 `108882`，因此签核以架构结果和 overall cycles 为准，不以单个 stall 计数替代性能结论。
 
 剩余 `8000` 次 dual→legacy transition 全部集中在 BRANCH_RETURN，且九窗口仍有 `8002` 次 non-prefer legacy fallback。A7.5.1 不猜测其具体类别并贸然打开 back-to-back LSU；下一步先做 measurement-only 分类。若后续方案需要多个 outstanding、改变四拍状态机、引入 response→Dispatch/Issue 长组合路径或显著扩大 ready/stall 扇出，必须先交由用户决定。
+
+#### 17.10.7 A7.5.2 串行四拍 LSU 链驻留签核
+
+```text
+baseline:              9a97222 (A7.5.1 signed off, clean worktree)
+implementation commit: 9d91ff3
+status:                SIGNED_OFF
+scope:                 measurement-only exit classification + supported LSU-pair continuation gate
+hard invariant:        one shared LSU, one outstanding access, and a complete E0-E3 cadence per access
+out of scope:          request overlap, multiple outstanding, LSU state/response changes,
+                       simple RAW bypass, long-unit split retirement, BTB/RAS or timing constraints
+rollback gate:         any four-beat/request/store/exception mismatch, architectural/hash change,
+                       regression failure or no overall cycle reduction
+next:                  post-LSU bottleneck audit with timing-risk classification before implementation
+```
+
+A7.5.2 先只扩展 measurement wrapper，对每次 `legacy_bundle_pop && dual_mode` 按当前包和下一包分类。A7.5.1 的冻结九窗口结果为：
+
+```text
+dual-to-legacy total: 8000
+prefer:                  0
+non-LSU current bundle:  0
+LSU + lookahead gap:     1
+LSU + fast follower:     0
+LSU + supported LSU:  7999
+LSU + MULDIV:            0
+LSU + other:             0
+```
+
+因此本阶段没有改变四拍访存，而只消除明确测得的域切换：
+
+1. 当前 LSU 包仍须处于 established dual mode，且当前/下一包都必须通过既有 `next_pair_candidate`，保证每包恰好一个 LSU 和一个 independent simple lane。
+2. Dispatch 仅把既有 `next_lsu_pair` 加入 `lsu_run_candidate`；下一 LSU 在前一 resident 完成并释放后才启动，同一 LSU 单元串行执行自己的 E0、E1、E2、E3。
+3. `lsu_exec_unit`、data-port arbitration、registered response、precise Store、exception/kill、stale-response quarantine 和所有 MEM 接口均未修改；没有请求重叠，也没有第二个 outstanding slot。
+4. 新增连续 Load 定向覆盖：第一个请求完成并稳定后，第二个请求从独立 E0 启动；E1/E2 均不得重复 request，E3 才释放第二份 response，最终 request count 必须严格为 2。
+5. 组合逻辑只复用现有 `next_pair_candidate` 和 `next_lsu*`，在 Dispatch 增加一个浅层 AND/OR；没有 DRAM response→Dispatch 反馈、跨流水线 ready 链或全局 stall 扇出扩张。本阶段预估主频风险低，未代替用户运行综合。
+
+定向与完整回归：
+
+```text
+directed: tb_a3_dual_backend
+          tb_a6_lsu_pair
+          tb_a6_simple_control
+          tb_a6_muldiv_pair
+          tb_lsu_four_beat_load
+          tb_lsu_store_commit
+          tb_lsu_store_load_order
+          tb_lsu_exception_age
+result:   8/8 passed; simulations 0 errors / 0 warnings
+logs:     F:\Tools\Temp\a752_lsu_chain_<top>.log
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+elapsed:          143.5 s
+run_all log:      F:\Tools\Temp\a752_lsu_chain_run_all.log
+protected HEX:    C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3 before/after
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.5.1 cycles | A7.5.2 cycles | Delta | A7.5.1 IPC x1000 | A7.5.2 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 144030 | 144030 | 0 | 1499 | 1499 |
+| MEXT | 166041 | 166041 | 0 | 325 | 325 |
+| BRANCH_RANDOM | 201056 | 201056 | 0 | 1223 | 1223 |
+| BRANCH_REGULAR | 57047 | 57047 | 0 | 1683 | 1683 |
+| BRANCH_SHORT | 66049 | 66049 | 0 | 1408 | 1408 |
+| BRANCH_CALL | 108405 | 108405 | 0 | 1328 | 1328 |
+| BRANCH_CAPACITY | 72216 | 72216 | 0 | 957 | 957 |
+| BRANCH_RETURN | 776125 | 656147 | -119978 | 979 | 1158 |
+| MEMORY | 694225 | 694225 | 0 | 866 | 866 |
+| **Overall** | **2285194** | **2165216** | **-119978** | **997** | **1052** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2165216, instret=2279454, ipc_x1000=1052
+exact IPC:    1.0527605559907187
+sink:         0x9D3BF787
+branch:       396041
+brmisp:       19405
+compile:      0 errors / 0 warnings
+compile log:  F:\Tools\Temp\a752_lsu_chain_perf_compile.log
+direct log:   F:\Tools\Temp\a752_lsu_chain_perf_direct.log
+profile log:  F:\Tools\Temp\a752_lsu_chain_perf_profile.log
+comparison:   direct/profile header, all nine reports, overall and PASS have zero differences
+frozen hashes:test/tb_top.sv, benchmark source/build files, inst/data HEX and protected ISA HEX all unchanged
+```
+
+A7.5.1→A7.5.2 的真实退休数、branch、branch mispredict、sink、exceptions 和八项冻结 SHA256 均不变。overall cycles 减少 `119978`（`-5.250%`），精确 IPC 提升 `5.541%`；收益全部来自 BRANCH_RETURN，其 cycles 减少 `15.459%`、精确 IPC 从 `0.979256` 提升到 `1.158315`。从 A7.5 到 A7.5.2 累计减少 `228860` cycles（`-9.559%`），IPC 累计提升 `10.570%`。
+
+| Profile metric | A7.5.1 | A7.5.2 | Delta |
+| --- | ---: | ---: | ---: |
+| Actual dual launch | 1223311 | 1415284 | +191973 |
+| Simple pair | 345465 | 393457 | +47992 |
+| Simple singleton | 421907 | 437905 | +15998 |
+| Control singleton | 91346 | 107344 | +15998 |
+| Lane1-control pair | 171570 | 187568 | +15998 |
+| Control0-simple pair | 68859 | 100854 | +31995 |
+| LSU pair | 108164 | 172156 | +63992 |
+| Dual retire1 | 520559 | 552556 | +31997 |
+| Dual retire2 | 702752 | 862728 | +159976 |
+| Legacy pair fallback | 160556 | 579 | -159977 |
+| Legacy non-prefer fallback | 8002 | 3 | -7999 |
+| Dual→legacy transition | 8000 | 1 | -7999 |
+| Legacy drain wait cycles | 328857 | 904 | -327953 |
+| Dual backend wait cycles | 444490 | 652464 | +207974 |
+
+总计继续满足 class 守恒：`1415284 = 393457 simple pair + 437905 simple singleton + 107344 control singleton + 2000 MULDIV singleton + 187568 lane1 control + 100854 control0 simple + 172156 LSU pair + 14000 MULDIV pair`；退休守恒为 `1415284 = 552556 retire1 + 862728 retire2`。四拍 LSU resident 增加会提高 dual wait，但 legacy drain 减少更多，且 retire2 增加 `159976`，最终真实总周期净减 `119978`。
+
+签核后只剩 `1` 次 dual→legacy transition，原因是 BRANCH_CAPACITY 的 lookahead gap；该事件没有可稳定利用的后继包，不值得增加预测或组合反馈。LSU 域切换优化至此收敛。后续 IPC 缺口主要落在固定四拍 MEMORY wait、共享 MULDIV 等待和 simple RAW 等类别；其中改变 LSU 吞吐、MULDIV resident/退休结构或增加同拍 RAW 旁路都可能进入主频敏感路径，实施前必须先给出测量结果和主频风险供用户决定。
