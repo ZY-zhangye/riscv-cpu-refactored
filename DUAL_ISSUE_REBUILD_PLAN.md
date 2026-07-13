@@ -526,7 +526,6 @@ vlog -sv +define+PERF_BENCH +define+DEBUG_EN `
   +incdir+rtl/cpu_top +incdir+rtl/my_cpu `
   rtl/cpu_top/*.sv rtl/cpu_top/*.svh `
   rtl/my_cpu/*.svh rtl/my_cpu/*.sv `
-  vivado-project/jyd2025-reference/rtl/board/dram_driver.sv `
   test/*.sv
 
 vsim -c -do "run -all; quit -force" tb_uart_benchmark `
@@ -720,7 +719,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
-| A4 | IN_PROGRESS | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
+| A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
@@ -775,12 +774,17 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS
               - A3 remains an interim performance regression until the legacy backend is replaced in A4/A5
               - next: A4 modular ALU/Branch/LSU/MUL/DIV and local resident hold
-2026-07-13  A4 IN_PROGRESS
+2026-07-13  A4 SIGNED_OFF
               - freeze A3 implementation commit f3d4b6a and protected HEX SHA256 before edits
               - split ALU, branch, LSU shell, multiplier and divider behind explicit local execution protocols
               - make the EX resident the sole owner of start-once, completion retention, kill and release
               - keep A3 dual-issue eligibility unchanged; A4 does not pre-open control/LSU/MULDIV pairing
               - defer four-cycle load, two-cycle store and precise memory side effects to A5
+              - seven directed tests and all eight M-extension ISA tests passed
+              - run_all.bat all passed 78/78 with compile 0 errors / 0 warnings
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS; metrics exactly match A3
+              - protected HEX and all frozen benchmark fixture hashes remained unchanged
+              - next: A5 four-cycle Load, two-cycle Store, fixed EX/MEM and precise memory commit
 ```
 
 ### 17.3 A0 签核记录
@@ -1121,3 +1125,79 @@ status:              IN_PROGRESS
 3. resident 被 hold 时不能被新输入覆盖；kill-before-start 不启动，kill-during-wait 立即释放且不提交。
 4. forwarding 操作数在 start 边沿锁存，等待期间上游输入变化不改变在途运算。
 5. A3 directed tests、MULDIV ISA 回归、`run_all.bat all` 和九窗口全部通过；sink、exceptions 与冻结夹具不变。
+
+实现提交：
+
+```text
+commit:  542ea992082a9143330d0ea31ca46e251063c858
+subject: backend: add modular resident execution units
+status:  SIGNED_OFF
+```
+
+实现结果：
+
+- 新增 `alu_exec_unit`、`simple_alu_exec_unit`、`branch_exec_unit` 和 `lsu_exec_unit`；A3 双 ALU 与 legacy EX 复用同一模块化 ALU 语义。
+- 新增 `ex_resident_control`，统一保存 `started/completed/killed/result`。单周期单元在 start 拍完成；MUL/DIV 在完成拍释放，若 MEM backpressure 则锁存结果并保持，不重新 start。
+- `mul` 与 `divider` 拆分为独立共享多周期单元。MUL 的 `MUL_CYCLE=4` 包含 start 边沿；DIV 对除零和 `INT_MIN/-1` 提供 RISC-V 规定结果，普通除法保持原 12 拍仿真延迟。
+- LSU shell 只在 resident start 脉冲产生一次 request；kill 时 request/write-enable 为零。四拍 Load、两拍 Store 与 commit-only Store 仍明确留给 A5。
+- Branch 的 taken/target/mispredict metadata 在 resident hold 期间保持稳定；redirect、预测器更新和 branch event 仍只在 bundle 真正离开 EX 时发生一次。
+- 新增断言检查 busy 单元重复 start、无 resident start 的 done、killed resident 启动、killed side effect，以及非 start 拍的 LSU request。
+
+定向测试：
+
+```text
+tests:   tb_perf_counters
+         tb_fetch_fifo_2wide
+         tb_issue_bundle_fifo
+         tb_if_sync_btb
+         tb_regfiles_4r2w
+         tb_a3_dual_backend
+         tb_a4_execute_units
+result:  7/7 passed; simulations 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a4-directed-final.log
+```
+
+`tb_a4_execute_units` 覆盖 ALU 算术右移、signed branch、JALR target mask、byte-store 地址/data/mask、MUL/DIV start-once/done-once、输入在 start 后变化、完成后下游 hold、signed divide overflow、kill-before-start 和 kill-during-wait。八项 `rv32um-p-{mul,mulh,mulhu,mulhsu,div,divu,rem,remu}` 也逐项通过；最紧的 `rv32um-p-mul` 在不变的 10 us timeout 下约 9.55 us 完成。
+
+官方回归：
+
+```text
+command: cmd /c "run_all.bat all < nul"
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a4-run_all_all-final.log
+protected HEX after restore:
+         C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Brmisp | Result dependency | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216029 | 216013 | 999 | 2 | 12002 | 0 |
+| MEXT | 190041 | 54016 | 284 | 4 | 0 | 0 |
+| BRANCH_RANDOM | 324355 | 245975 | 758 | 9475 | 24000 | 0 |
+| BRANCH_REGULAR | 111046 | 96017 | 864 | 1505 | 1501 | 0 |
+| BRANCH_SHORT | 117046 | 93015 | 794 | 3005 | 23999 | 0 |
+| BRANCH_CALL | 196442 | 144022 | 733 | 4061 | 0 | 0 |
+| BRANCH_CAPACITY | 141968 | 69133 | 486 | 1152 | 0 | 0 |
+| BRANCH_RETURN | 848131 | 760025 | 896 | 16 | 1 | 0 |
+| MEMORY | 649046 | 601238 | 926 | 185 | 2 | 0 |
+
+```text
+command:      vlog -sv +define+PERF_BENCH +define+DEBUG_EN ...; vsim tb_uart_benchmark
+sink:         0x9D3BF787
+overall:      cycles=2794104, instret=2279454, ipc_x1000=815
+result:       PERF_BENCHMARK_PASSED
+compile:      0 errors / 0 warnings
+simulation:   0 errors / 0 warnings
+compile log:  F:\Tools\temp\riscv-dual-rebuild-a4-nine-window-compile-final.log
+run log:      F:\Tools\temp\riscv-dual-rebuild-a4-nine-window-final.log
+```
+
+A4 九个窗口的 cycles、instret、IPC、branch mispredict、result dependency、sink 和 exceptions 与 A3 逐项完全一致。A4 因此只签核执行协议边界，不宣称吞吐提升；A3/A4 的 `0.815` 仍是 A5 统一 LSU/MEM 以及 A6 逐类开放配对前的稳定基线。
+
+九窗口命令曾按第 12.3 节的历史示例引用当前工作树不存在的 `vivado-project/.../dram_driver.sv`，因此只产生一次编译前置失败、未运行仿真。第 12.3 节现已校正为 A3/A4 实际签核使用的源文件集合；最终日志均为 0 error / 0 warning。
+
+签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv`；SHA256 全部与 A0/A3 记录一致，未重建软件、未修改 golden。
