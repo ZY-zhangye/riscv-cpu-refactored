@@ -18,6 +18,12 @@ module regfile_csr (
     input logic branch_mispredict_event,
     input logic load_use_stall_event,
     input logic execute_stall_event,
+    input logic issue_dual_event,
+    input logic issue_single_event,
+    input logic issue_raw_event,
+    input logic issue_waw_event,
+    input logic issue_struct_event,
+    input logic issue_qfull_event,
     output logic exception_flag,
     output logic [31:0] exception_addr,
     output logic external_irq_enable
@@ -42,6 +48,12 @@ module regfile_csr (
     logic [31:0] perf_loaduse;
     logic [31:0] perf_exstall;
     logic [31:0] perf_exception;
+    logic [31:0] perf_dual_issue;
+    logic [31:0] perf_single_issue;
+    logic [31:0] perf_issue_raw;
+    logic [31:0] perf_issue_waw;
+    logic [31:0] perf_issue_struct;
+    logic [31:0] perf_issue_qfull;
 
     assign perf_clear = csr_wen && (csr_waddr == `CSR_PERF_CTRL) && csr_wdata[1];
 
@@ -69,6 +81,12 @@ module regfile_csr (
             perf_loaduse <= 32'b0;
             perf_exstall <= 32'b0;
             perf_exception <= 32'b0;
+            perf_dual_issue <= 32'b0;
+            perf_single_issue <= 32'b0;
+            perf_issue_raw <= 32'b0;
+            perf_issue_waw <= 32'b0;
+            perf_issue_struct <= 32'b0;
+            perf_issue_qfull <= 32'b0;
         end else begin
             if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 perf_enable <= csr_wdata[0];
@@ -84,6 +102,12 @@ module regfile_csr (
                 perf_loaduse <= 32'b0;
                 perf_exstall <= 32'b0;
                 perf_exception <= 32'b0;
+                perf_dual_issue <= 32'b0;
+                perf_single_issue <= 32'b0;
+                perf_issue_raw <= 32'b0;
+                perf_issue_waw <= 32'b0;
+                perf_issue_struct <= 32'b0;
+                perf_issue_qfull <= 32'b0;
             end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
                 //控制写本身不计入测量窗口。
             end else if (perf_enable) begin
@@ -106,6 +130,24 @@ module regfile_csr (
                 end
                 if (exception_code[5]) begin
                     perf_exception <= perf_exception + 1'b1;
+                end
+                if (issue_dual_event) begin
+                    perf_dual_issue <= perf_dual_issue + 1'b1;
+                end
+                if (issue_single_event) begin
+                    perf_single_issue <= perf_single_issue + 1'b1;
+                end
+                if (issue_raw_event) begin
+                    perf_issue_raw <= perf_issue_raw + 1'b1;
+                end
+                if (issue_waw_event) begin
+                    perf_issue_waw <= perf_issue_waw + 1'b1;
+                end
+                if (issue_struct_event) begin
+                    perf_issue_struct <= perf_issue_struct + 1'b1;
+                end
+                if (issue_qfull_event) begin
+                    perf_issue_qfull <= perf_issue_qfull + 1'b1;
                 end
             end
         end
@@ -188,6 +230,12 @@ module regfile_csr (
             `CSR_PERF_LOADUSE: csr_rdata = perf_loaduse;
             `CSR_PERF_EXSTALL: csr_rdata = perf_exstall;
             `CSR_PERF_EXCEPTION: csr_rdata = perf_exception;
+            `CSR_PERF_DUAL_ISSUE: csr_rdata = perf_dual_issue;
+            `CSR_PERF_SINGLE_ISSUE: csr_rdata = perf_single_issue;
+            `CSR_PERF_ISSUE_RAW: csr_rdata = perf_issue_raw;
+            `CSR_PERF_ISSUE_WAW: csr_rdata = perf_issue_waw;
+            `CSR_PERF_ISSUE_STRUCT: csr_rdata = perf_issue_struct;
+            `CSR_PERF_ISSUE_QFULL: csr_rdata = perf_issue_qfull;
             default: csr_rdata = 32'b0;
         endcase
         end

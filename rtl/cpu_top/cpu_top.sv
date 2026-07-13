@@ -42,6 +42,29 @@ module cpu_top (
     logic ds_allowin;
     logic fs_to_ds_valid;
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus;
+    logic frontend_redirect;
+    logic [1:0] fetch_push_count;
+    logic [`FETCH_UOP_WIDTH-1:0] fetch_push_uop0;
+    logic [`FETCH_UOP_WIDTH-1:0] fetch_push_uop1;
+    logic [1:0] fetch_pop_count;
+    logic [3:0] fetch_count;
+    logic [3:0] fetch_free_count;
+    logic fetch_peek_valid0;
+    logic fetch_peek_valid1;
+    logic [`FETCH_UOP_WIDTH-1:0] fetch_peek_uop0;
+    logic [`FETCH_UOP_WIDTH-1:0] fetch_peek_uop1;
+    logic issue_bundle_valid;
+    logic [`ISSUE_BUNDLE_WIDTH-1:0] issue_bundle;
+    logic issue_pair_accepted;
+    logic issue_reject_raw;
+    logic issue_reject_waw;
+    logic issue_reject_struct;
+    logic bundle_push_ready;
+    logic bundle_head_valid;
+    logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_head;
+    logic bundle_pop;
+    logic [2:0] bundle_count;
+    logic issue_queue_full_event;
     logic br_taken;
     logic [31:0] br_target;
     logic br_redirect;
@@ -129,9 +152,11 @@ module cpu_top (
         .inst_ren(imem_en),
         .inst_in(imem_rdata),
         .inst_in1(imem_rdata1),
-        .ds_allowin(ds_allowin),
-        .fs_to_ds_valid(fs_to_ds_valid),
-        .fs_to_ds_bus(fs_to_ds_bus),
+        .fetch_free_count(fetch_free_count),
+        .fetch_push_count(fetch_push_count),
+        .fetch_push_uop0(fetch_push_uop0),
+        .fetch_push_uop1(fetch_push_uop1),
+        .frontend_redirect(frontend_redirect),
         .br_taken(br_redirect),
         .br_target(br_redirect_target),
         .bp_update_valid(bp_update_valid),
@@ -143,6 +168,66 @@ module cpu_top (
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
     );
+
+    fetch_fifo u_fetch_fifo (
+        .clk(clk),
+        .rst_n(rst_n),
+        .clear(frontend_redirect),
+        .push_count(fetch_push_count),
+        .push_uop0(fetch_push_uop0),
+        .push_uop1(fetch_push_uop1),
+        .pop_count(fetch_pop_count),
+        .count(fetch_count),
+        .free_count(fetch_free_count),
+        .peek_valid0(fetch_peek_valid0),
+        .peek_valid1(fetch_peek_valid1),
+        .peek_uop0(fetch_peek_uop0),
+        .peek_uop1(fetch_peek_uop1)
+    );
+
+    issue_stage u_issue_stage (
+        .redirect(frontend_redirect),
+        .fetch_count(fetch_count),
+        .fetch_uop0(fetch_peek_uop0),
+        .fetch_uop1(fetch_peek_uop1),
+        .bundle_ready(bundle_push_ready),
+        .fetch_pop_count(fetch_pop_count),
+        .bundle_valid(issue_bundle_valid),
+        .bundle(issue_bundle),
+        .pair_accepted(issue_pair_accepted),
+        .reject_raw(issue_reject_raw),
+        .reject_waw(issue_reject_waw),
+        .reject_struct(issue_reject_struct)
+    );
+
+    issue_bundle_fifo u_issue_bundle_fifo (
+        .clk(clk),
+        .rst_n(rst_n),
+        .clear(frontend_redirect),
+        .push_valid(issue_bundle_valid),
+        .push_bundle(issue_bundle),
+        .pop_valid(bundle_pop),
+        .head_valid(bundle_head_valid),
+        .head_bundle(bundle_head),
+        .count(bundle_count),
+        .push_ready(bundle_push_ready)
+    );
+
+    bundle_decode_adapter u_bundle_decode_adapter (
+        .clk(clk),
+        .rst_n(rst_n),
+        .redirect(frontend_redirect),
+        .bundle_valid(bundle_head_valid),
+        .bundle(bundle_head),
+        .bundle_pop(bundle_pop),
+        .ds_allowin(ds_allowin),
+        .fs_to_ds_valid(fs_to_ds_valid),
+        .fs_to_ds_bus(fs_to_ds_bus)
+    );
+
+    assign issue_queue_full_event = !frontend_redirect &&
+                                    (fetch_count != 0) &&
+                                    !bundle_push_ready;
 
     id_stage u_id_stage (
         .clk(clk),
@@ -335,6 +420,12 @@ module cpu_top (
         .branch_mispredict_event(branch_mispredict_event),
         .load_use_stall_event(load_use_stall_event),
         .execute_stall_event(execute_stall_event),
+        .issue_dual_event(issue_bundle_valid && issue_pair_accepted),
+        .issue_single_event(issue_bundle_valid && !issue_pair_accepted),
+        .issue_raw_event(issue_reject_raw),
+        .issue_waw_event(issue_reject_waw),
+        .issue_struct_event(issue_reject_struct),
+        .issue_qfull_event(issue_queue_full_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)

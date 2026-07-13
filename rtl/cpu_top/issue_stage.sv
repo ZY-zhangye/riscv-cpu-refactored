@@ -1,0 +1,148 @@
+`include "defines.svh"
+
+module issue_stage (
+    input  logic                         redirect,
+    input  logic [3:0]                   fetch_count,
+    input  logic [`FETCH_UOP_WIDTH-1:0]  fetch_uop0,
+    input  logic [`FETCH_UOP_WIDTH-1:0]  fetch_uop1,
+    input  logic                         bundle_ready,
+    output logic [1:0]                   fetch_pop_count,
+    output logic                         bundle_valid,
+    output logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle,
+    output logic                         pair_accepted,
+    output logic                         reject_raw,
+    output logic                         reject_waw,
+    output logic                         reject_struct
+);
+
+    logic [`FETCH_EPOCH_WIDTH-1:0] epoch0;
+    logic [`FETCH_AGE_WIDTH-1:0] age0;
+    logic [31:0] inst0;
+    logic [31:0] pc0;
+    logic pred_taken0;
+    logic [31:0] pred_target0;
+    logic [`BP_TYPE_WIDTH-1:0] pred_type0;
+    logic btb_hit0;
+    logic ras_valid0;
+    logic [31:0] ras_target0;
+
+    logic [`FETCH_EPOCH_WIDTH-1:0] epoch1;
+    logic [`FETCH_AGE_WIDTH-1:0] age1;
+    logic [31:0] inst1;
+    logic [31:0] pc1;
+    logic pred_taken1;
+    logic [31:0] pred_target1;
+    logic [`BP_TYPE_WIDTH-1:0] pred_type1;
+    logic btb_hit1;
+    logic ras_valid1;
+    logic [31:0] ras_target1;
+
+    logic simple0;
+    logic simple1;
+    logic uses_rs1_0;
+    logic uses_rs2_0;
+    logic uses_rd_0;
+    logic uses_rs1_1;
+    logic uses_rs2_1;
+    logic uses_rd_1;
+    logic [4:0] rs1_0;
+    logic [4:0] rs2_0;
+    logic [4:0] rd_0;
+    logic [4:0] rs1_1;
+    logic [4:0] rs2_1;
+    logic [4:0] rd_1;
+    logic raw_hazard;
+    logic waw_hazard;
+    logic structural_hazard;
+    logic can_pair;
+
+    assign {epoch0, age0, inst0, pc0, pred_taken0, pred_target0,
+            pred_type0, btb_hit0, ras_valid0, ras_target0} = fetch_uop0;
+    assign {epoch1, age1, inst1, pc1, pred_taken1, pred_target1,
+            pred_type1, btb_hit1, ras_valid1, ras_target1} = fetch_uop1;
+
+    function automatic logic is_simple(input logic [31:0] inst);
+        logic [6:0] opcode;
+        begin
+            opcode = inst[6:0];
+            is_simple = (opcode == 7'b0110111) || // LUI
+                        (opcode == 7'b0010111) || // AUIPC
+                        (opcode == 7'b0010011) || // OP-IMM / bitman immediate
+                        ((opcode == 7'b0110011) &&
+                         (inst[31:25] != 7'b0000001)); // OP, excluding M
+        end
+    endfunction
+
+    function automatic logic uses_rs1(input logic [31:0] inst);
+        logic [6:0] opcode;
+        begin
+            opcode = inst[6:0];
+            uses_rs1 = (opcode == 7'b0010011) || (opcode == 7'b0110011);
+        end
+    endfunction
+
+    function automatic logic uses_rs2(input logic [31:0] inst);
+        uses_rs2 = (inst[6:0] == 7'b0110011);
+    endfunction
+
+    function automatic logic uses_rd(input logic [31:0] inst);
+        logic [6:0] opcode;
+        begin
+            opcode = inst[6:0];
+            uses_rd = (opcode == 7'b0110111) || (opcode == 7'b0010111) ||
+                      (opcode == 7'b0010011) || (opcode == 7'b0110011);
+        end
+    endfunction
+
+    assign simple0 = is_simple(inst0);
+    assign simple1 = is_simple(inst1);
+    assign uses_rs1_0 = uses_rs1(inst0);
+    assign uses_rs2_0 = uses_rs2(inst0);
+    assign uses_rd_0 = uses_rd(inst0);
+    assign uses_rs1_1 = uses_rs1(inst1);
+    assign uses_rs2_1 = uses_rs2(inst1);
+    assign uses_rd_1 = uses_rd(inst1);
+    assign rs1_0 = inst0[19:15];
+    assign rs2_0 = inst0[24:20];
+    assign rd_0 = inst0[11:7];
+    assign rs1_1 = inst1[19:15];
+    assign rs2_1 = inst1[24:20];
+    assign rd_1 = inst1[11:7];
+
+    assign raw_hazard = uses_rd_0 && (rd_0 != 0) &&
+                        ((uses_rs1_1 && (rs1_1 == rd_0)) ||
+                         (uses_rs2_1 && (rs2_1 == rd_0)));
+    assign waw_hazard = uses_rd_0 && uses_rd_1 &&
+                        (rd_0 != 0) && (rd_1 != 0) && (rd_0 == rd_1);
+    assign structural_hazard = !simple0 || !simple1;
+    assign can_pair = (fetch_count >= 2) && !structural_hazard &&
+                      !raw_hazard && !waw_hazard;
+
+    always_comb begin
+        fetch_pop_count = 2'd0;
+        bundle_valid = 1'b0;
+        bundle = '0;
+        pair_accepted = 1'b0;
+        reject_raw = 1'b0;
+        reject_waw = 1'b0;
+        reject_struct = 1'b0;
+
+        if (!redirect && bundle_ready && (fetch_count != 0)) begin
+            bundle_valid = 1'b1;
+            if (can_pair) begin
+                fetch_pop_count = 2'd2;
+                bundle = {1'b1, 1'b1, fetch_uop1, fetch_uop0};
+                pair_accepted = 1'b1;
+            end else begin
+                fetch_pop_count = 2'd1;
+                bundle = {1'b0, 1'b1, {`FETCH_UOP_WIDTH{1'b0}}, fetch_uop0};
+                if (fetch_count >= 2) begin
+                    reject_raw = raw_hazard;
+                    reject_waw = waw_hazard;
+                    reject_struct = structural_hazard;
+                end
+            end
+        end
+    end
+
+endmodule
