@@ -721,7 +721,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | SIGNED_OFF | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
-| A6 | IN_PROGRESS | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
+| A6 | SIGNED_OFF | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
 
 ### 17.1 每阶段统一签核流程
@@ -797,7 +797,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.758, PASS
               - protected HEX and all frozen benchmark fixture hashes remained unchanged
               - next: A6, open pairing classes one at a time with an independent commit and full signoff per class
-2026-07-13  A6 IN_PROGRESS
+2026-07-13  A6 SIGNED_OFF
               - freeze A5 signoff commit d5a0973 and protected HEX SHA256 before edits
               - A6.1 first freezes and independently signs off the existing simple+simple path
               - A6.2 only adds lane0 simple + lane1 control after precise redirect/age tests
@@ -807,7 +807,9 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A6.1 SIGNED_OFF in 40eb13a: unified simple predecode; 78/78 and nine-window PASS
               - A6.2 SIGNED_OFF in 7f063ba: lane0 simple + lane1 control; precise redirect/IAM; 78/78 and nine-window PASS
               - A6.3 SIGNED_OFF in 8fa3608: one LSU per pair, registered MEM/precise Store and LAM/SAM; 78/78 and nine-window PASS
-              - current: A6.4 simple + MULDIV / MULDIV + simple
+              - A6.4 SIGNED_OFF in c2924e6: one shared MUL/DIV, atomic hold/retire and completion-edge bypass; 78/78 and nine-window PASS
+              - A6 final: cycles=2999204, instret=2279454, ipc_x1000=760, sink=0x9D3BF787, exceptions=0
+              - next: A7 final functional/performance audit and 200 MHz timing convergence
 ```
 
 ### 17.3 A0 签核记录
@@ -1338,13 +1340,15 @@ A4→A5 的真实退休数、sink、exceptions 与九窗口完成次数不变。
 
 ### 17.9 A6 设计与签核记录
 
-A6 开始基线：
+A6 基线与最终状态：
 
 ```text
 start commit:       d5a097369b0c3c6aa9a37385f690ebd652ced3b4
 protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
-status:              IN_PROGRESS
-current substage:    A6.4 simple + MULDIV / MULDIV + simple
+status:              SIGNED_OFF
+final implementation: c2924e6edd74a0efdaac09a5a085fd8d6f9001ab
+completed substage:  A6.4 simple + MULDIV / MULDIV + simple
+next stage:          A7
 ```
 
 统一年龄与提交规则：
@@ -1546,3 +1550,82 @@ protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA
 A6.2→A6.3 的真实退休数、sink、exceptions 和九窗口完成次数不变。overall cycles 增加 `7640`（`+0.255%`），精确 IPC 从 `0.759930` 降至 `0.757999`；其中 BRANCH_RETURN 的 `7998` 个真实 LSU pair 对应 cycles 增加 `7996`，MEMORY 则减少 `356` cycles。BRANCH_CALL 没有满足 RAW/WAW、单 LSU 和成本门限的 simple/LSU bundle，因此保持 A6.2 的 `204567` cycles；不能通过强行配对相关栈访问或关闭已签核 control pairing 来制造改善。该小幅成本来自 A6.3 原子 bundle 边界与分裂后端，已与最初无门限调度造成的结构性长驻留回退区分，并如实保留给后续统一调度阶段处理。
 
 签核时重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`：全部 SHA256 与 12.2/17.3 相同，未重建软件、未修改 golden。下一子阶段是 A6.4 `simple + MULDIV` / `MULDIV + simple`。
+
+#### 17.9.4 A6.4 `simple + MULDIV` / `MULDIV + simple` 签核
+
+实现提交：
+
+```text
+commit:  c2924e6edd74a0efdaac09a5a085fd8d6f9001ab
+subject: backend: pair simple with MULDIV
+status:  SIGNED_OFF
+```
+
+Issue 现在接受 `PAIR_SIMPLE_MULDIV` 与 `PAIR_MULDIV_SIMPLE`，仍禁止包内 RAW/WAW、两个 RV32M 指令争用同一个共享单元以及 bitman 等尚未开放类别。两个 MULDIV 形成通用 `reject_struct`；`dual/single/raw/waw/struct` 继续记录 Issue 决策，新增 `CSR_PERF_MULDIV_PAIR=0x7D6` 只统计真正进入 dual resident 的 MULDIV bundle。
+
+dual resident 根据 RV32M `funct3` 选择唯一的 `mul` 或 `divider`，并从对应 lane 的同步 RF 端口锁定操作数。一个 bundle 只产生一次 `mul_start` 或 `div_start`；等待期间两个 lane、年龄/epoch、目的寄存器和 simple 结果保持原子 resident，不允许提前退休或被年轻 bundle 覆盖。MUL/MULH/MULHSU/MULHU 的 signed/high-half 选择，以及 DIV/DIVU/REM/REMU 的 signed/remainder 选择与 legacy 解码一致；divider 的除零和 `INT_MIN / -1` 快速完成仍经过同一个原子双退休边界。
+
+共享单元 `done` 有效时两条 lane 同拍退休，MULDIV lane 选择共享结果，simple lane 选择保持稳定的 ALU 结果。该完成拍解除 resident exclusion，允许下一 dual bundle 同步读或 legacy bundle 进入 adapter；若下一 bundle 消费刚完成的任一 lane，scoreboard 在 `done` 拍把结果从 pending 转为 valid，并由 2W→4R WB bypass 在同一边沿供数。外部 redirect 在完成前杀死共享单元与两个 lane，禁止迟到 `done`、GPR 写和 retire。
+
+Dispatch 的最终规则保留 `legacy_idle` 作为硬跨域边界：旧 adapter/Decode/EX/MEM 未排空时不能进入 dual，最终 legacy WB 只通过已签核的同拍旁路重叠。独立 simple+MULDIV 本身可把 simple 与长运算重叠且不占数据端口，因此可直接建立 dual run；MULDIV candidate 不受历史 4-bundle legacy cooldown 永久回送，否则 MEXT 连续长运算会使已开放类别实际计数恒为零。该例外不绕过 `legacy_idle`、RAW/WAW 或共享单元结构检查。
+
+定向与受影响回归：
+
+```text
+tests:   tb_perf_counters
+         tb_fetch_fifo_2wide
+         tb_issue_bundle_fifo
+         tb_if_sync_btb
+         tb_regfiles_4r2w
+         tb_a3_dual_backend
+         tb_a4_execute_units
+         tb_a6_simple_control
+         tb_a6_lsu_pair
+         tb_a6_muldiv_pair
+         tb_lsu_four_beat_load
+         tb_lsu_store_commit
+         tb_lsu_store_load_order
+         tb_lsu_exception_age
+result:  14/14 passed; compile/simulation 0 errors / 0 warnings
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-4-*-directed-final.log
+compile: F:\Tools\temp\riscv-dual-rebuild-a6-4-directed-compile-final.log
+
+ISA:     rv32um-p-{mul,mulh,mulhu,mulhsu,div,divu,rem,remu}
+result:  8/8 passed; simulation 0 errors / 0 warnings
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-4-um-*-final.log
+compile: F:\Tools\temp\riscv-dual-rebuild-a6-4-isa-compile-final.log
+```
+
+`tb_a6_muldiv_pair` 覆盖八种 RV32M 操作和两种 lane 顺序、每 uop 一次 start/done、完成前原子 hold、除零、signed overflow、MUL 与 DIV 等待期 redirect kill、结果在完成周期内稳定、精确双退休，以及完成同拍让依赖 pair 通过 2W→4R bypass 接续。Issue/Dispatch 测试另外覆盖 MULDIV RAW、双 MULDIV 结构冲突、直接建立 dual run、`legacy_idle` 排空边界和 cooldown 不得使类别不可达。`tb_a6_muldiv_perf_probe` 是冻结 `tb_uart_benchmark` 外的被动 wrapper，不改变 `test/tb_top.sv` 或 21-word 报告，只在九个窗口关闭时读取 `0x7D6` 实际计数。
+
+官方回归与九窗口：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\temp\riscv-dual-rebuild-a6-4-run_all_all-final.log
+sink:            0x9D3BF787
+overall:         cycles=2999204, instret=2279454, ipc_x1000=760
+exact IPC:       0.7600196585494018
+result:          PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+compile log:     F:\Tools\temp\riscv-dual-rebuild-a6-4-nine-window-compile-final.log
+run log:         F:\Tools\temp\riscv-dual-rebuild-a6-4-nine-window-final.log
+probe log:       F:\Tools\temp\riscv-dual-rebuild-a6-4-nine-window-probe-final.log
+actual pairs:    MEXT=13994; other eight windows=0; total=13994
+protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+| Window | Cycles | Instret | IPC x1000 | Dual | Single | MULDIV pair | RAW | WAW | Struct | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216028 | 216013 | 999 | 60001 | 96013 | 0 | 48008 | 24003 | 5 | 0 |
+| MEXT | 182052 | 54016 | 296 | 24006 | 6025 | 13994 | 4013 | 2003 | 2002 | 0 |
+| BRANCH_RANDOM | 319213 | 245975 | 770 | 60481 | 148861 | 0 | 53022 | 25449 | 15181 | 0 |
+| BRANCH_REGULAR | 111050 | 96017 | 864 | 37512 | 27011 | 0 | 4 | 0 | 12003 | 0 |
+| BRANCH_SHORT | 117048 | 93015 | 794 | 42007 | 15013 | 0 | 3003 | 1 | 4 | 0 |
+| BRANCH_CALL | 204567 | 144022 | 704 | 36011 | 92292 | 0 | 32112 | 20108 | 12 | 0 |
+| BRANCH_CAPACITY | 141971 | 69133 | 486 | 1032 | 70402 | 0 | 1026 | 1025 | 1790 | 0 |
+| BRANCH_RETURN | 920166 | 760025 | 825 | 304009 | 152084 | 0 | 72019 | 48005 | 40012 | 0 |
+| MEMORY | 787109 | 601238 | 763 | 184410 | 233334 | 0 | 230838 | 137883 | 186 | 0 |
+
+表中 `Dual/Single` 是 Issue 原子 bundle 决策，`MULDIV pair` 是 `0x7D6` 的真实 dual resident 进入次数。A6.3→A6.4 的真实退休数、sink、exceptions、LSU pair 与其余八窗口 cycles 全部不变；MEXT cycles 从 `190046` 降到 `182052`（`-7994`, `-4.206%`），精确 MEXT IPC 从 `0.284226` 升到 `0.296706`。overall 同样减少 `7994` cycles（`-0.266%`），精确 IPC 从 `0.757999` 升到 `0.760020`（`+0.267%`）。
+
+A6 的四个子阶段至此全部独立实现、提交并完成 full regression/九窗口签核，阶段状态改为 `SIGNED_OFF`。签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`，八项 SHA256 全部与 12.2/17.3 相同，未重建软件、未修改 golden。A7 的最终 `IPC > A0` 门槛当前尚未满足（A6 为 `0.760`，A0 为 `0.824`），下一阶段必须把该功能/性能差距与 200 MHz 时序收敛一起如实处理。
