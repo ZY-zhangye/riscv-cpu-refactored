@@ -871,7 +871,9 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.5.5 run_all.bat all passed 78/78; direct/profile match; no RTL or fixture changes
               - no complete younger simple bundle is strictly independent during 86076 Load residents
               - only 8000 registered-companion RAW uops and 15998 speculative post-LSU uops remain; optimistic combined IPC ceiling is 1.110186
-              - next: do not implement either LSU candidate without explicit user approval; audit M blocking or predictor before A7.6
+              - user ended further IPC exploration; A7.6 timing convergence is now the active direction
+              - bare-core/SoC/OOC synthesis checklist is frozen in doc/core_bare_synthesis_guide.md
+              - next: user runs per-module 5.000 ns quick synthesis, fixes clearly bad modules first, then promotes to cpu_top and SoC integration
 ```
 
 ### 17.3 A0 签核记录
@@ -2648,4 +2650,30 @@ inst.hex SHA256: 459D81149CDD2A8886AE58F32AD27F58976AEECB82844B9BF4B1174FE96F9C7
 data.hex SHA256: DDB214EE5E790F797FD84456E23DB9CBFF3DCA8E37DF59DC7AD8EB3EB409364B
 ```
 
-A7.5.5 不支持直接实施一个“简单 LSU latency-hiding slot”：严格候选为零。若要继续 IPC 优先探索，应先审计不涉及四拍访存的有限 M blocking 或 predictor miss 类别；若仍选择上述两个 LSU 特例，必须先由用户决定是否接受 partial bundle/精确退休状态或推测跨 LSU 执行，且不得改变 E0-E3、single-outstanding 和 SoC response-valid 边界。
+A7.5.5 不支持直接实施一个“简单 LSU latency-hiding slot”：严格候选为零。用户随后决定结束 IPC 探索并转入 A7.6；上述两个 LSU 特例保持不实施，E0-E3、single-outstanding 和 SoC response-valid 边界继续冻结。
+
+#### 17.10.11 A7.6 裸核移植与时序综合入口
+
+```text
+entry baseline:        294fc2a (A7.5.5 signed off; clean worktree)
+status:                READY_FOR_SYNTHESIS
+active direction:      timing convergence; no further IPC RTL exploration
+target core top:       cpu_top
+target part:           xc7k325tffg900-2
+target period:         5.000 ns
+detailed checklist:    doc/core_bare_synthesis_guide.md
+```
+
+用户决定结束后续 IPC 探索，原因是固定四拍 Load 与 single-outstanding 已构成主要性能上限，而剩余非同拍 LSU 候选的乐观 IPC 也只有 `1.110186`。A7.6 先按 leaf module、cluster、`cpu_top`、SoC memory integration 的顺序推进；快速综合下明显差的 module 先修，有充分余量的 module 不做无关重构，直接提升到上一级综合。
+
+进入综合前必须先处理/确认以下配置边界：
+
+1. `cpu_top` 才是裸核 top；裸核 file set 只用 `rtl/cpu_top`，不编译 `test` 或 `rtl/my_cpu` 的 DEBUG RAM 占位。
+2. `DEBUG_EN` 当前在两份 `defines.svh` 中源码硬定义。正式综合必须关闭，并以独立配置提交改为只由 simulation file set 打开；否则 debug ports 保留且 `mul` 会使用行为级 `*`，结果不代表真实 multiplier IP。
+3. `PERF_BENCH` 在真实 SoC 关闭，reset PC 保持 `0x80000000`；`SYNTHESIS` 打开；Z-bitman、多周期 M 和 `MUL_CYCLE=4` 保持签核配置。
+4. `DEBUG_EN=Off` 必须提供端口/latency 匹配的真实 `multiplier` IP。仓库当前没有 XCI/DCP，black box WNS 不能签核。
+5. instruction interface 是无 ready/valid 的固定一拍双读；data Load 是 E0 request、E1 memory、E2 data/valid、E3 release，且 request 无 ready。SoC 必须统一 RAM/IO/PLIC 的 target/data/valid 寄存对齐。
+6. 同步 BRAM 的 output register 可直接充当 E2 data register，不能再重复打一拍；当前 DEBUG bridge 的同拍 `ram_rdata_r` capture 不能原样用于同步 BRAM。
+7. 所有 OOC module 使用同一 5.000 ns clock、uncertainty、IO budget 或 register wrapper，并检查 unconstrained path 与 black box；纯组合 module 未约束的 WNS没有意义。
+
+A7.6 当前尚未进行 Vivado synthesis，不得标为 `SIGNED_OFF`。每个模块的 part、defines、IP、约束、WNS/TNS、critical path、资源和 FIX/HOLD 决策按详细指南模板记录；整体修改后继续以 `78/78`、冻结九窗口、sink、exceptions 和 HEX SHA256 为功能签核门。
