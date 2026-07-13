@@ -721,7 +721,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | SIGNED_OFF | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
-| A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
+| A6 | IN_PROGRESS | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
 
 ### 17.1 每阶段统一签核流程
@@ -797,6 +797,13 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.758, PASS
               - protected HEX and all frozen benchmark fixture hashes remained unchanged
               - next: A6, open pairing classes one at a time with an independent commit and full signoff per class
+2026-07-13  A6 IN_PROGRESS
+              - freeze A5 signoff commit d5a0973 and protected HEX SHA256 before edits
+              - A6.1 first freezes and independently signs off the existing simple+simple path
+              - A6.2 only adds lane0 simple + lane1 control after precise redirect/age tests
+              - A6.3 adds exactly one LSU per bundle with registered response and precise Store/exception commit
+              - A6.4 adds exactly one shared MUL/DIV per bundle and holds both lanes until completion
+              - every substage has a separate commit, directed tests, run_all.bat all and frozen nine-window run
 ```
 
 ### 17.3 A0 签核记录
@@ -1324,3 +1331,32 @@ run log:      F:\Tools\temp\riscv-dual-rebuild-a5-nine-window-final.log
 A4→A5 的真实退休数、sink、exceptions 与九窗口完成次数不变。强制四拍 Load/两拍 Store 使 overall cycles 从 `2794104` 增至 `3004606`（`+210502`, `+7.534%`），IPC 从 `0.815809` 降至 `0.758653`。MEMORY cycles 从 `649046` 增至 `787465`（`+138419`, `+21.327%`），IPC 从 `0.926341` 降至 `0.763511`；其余八窗口聚合 cycles 从 `2145058` 增至 `2217141`（`+72083`, `+3.360%`），聚合 IPC 从 `0.782364` 降至 `0.756928`。其中非 MEMORY 增量几乎全部来自仍包含栈访存的 BRANCH_RETURN 窗口。该性能下降是计划规定的 LSU 时序代价，A6 将按类别逐步开放安全配对，不能通过缩短 LSU、提前 Store 副作用或扩大未经签核的白名单掩盖。
 
 签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv`；SHA256 全部与 A0/A4 记录一致，未重建软件、未修改 golden。
+
+### 17.9 A6 设计与签核记录
+
+A6 开始基线：
+
+```text
+start commit:       d5a097369b0c3c6aa9a37385f690ebd652ced3b4
+protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+status:              IN_PROGRESS
+current substage:    A6.1 simple + simple
+```
+
+统一年龄与提交规则：
+
+- Issue 仍然只做最小预译码、RAW/WAW/结构检查和原子 bundle 形成；`lane0` 永远更老，WAR 允许，RAW/WAW 禁止双发，`x0` 不形成依赖。
+- 一个 dual resident 必须原子接收和释放两个 lane。共享 Branch、LSU、MUL、DIV 每包最多一个；单元 `start` 对同一 uop 只出现一次，等待期间两个 lane 都不能被覆盖或越过。
+- 正常 bundle 只允许同拍按 lane0→lane1 顺序退休 0/1/2 条。lane0 同步异常时 lane1 的 GPR/Store/redirect/retire 全部抑制；lane1 同步异常时只允许已完成的更老 lane0 退休。
+- redirect 清空两个 lane 及所有年轻 FIFO 状态；lane1 control 的 redirect 只能在 lane0 结果已确定且二者到达同一精确提交边界时生效。
+- A5 的单端口 LSU 仲裁、四拍 Load、两拍 Store 和 commit-only Store 不得因配对而缩短；MULDIV 等待完成前结果保持 pending。
+- 每个子阶段只增加一种 pairing class；未开放类别继续由 legacy adapter 顺序执行，不能用关闭既有安全类别换取通过。
+
+子阶段顺序与签核点：
+
+1. **A6.1 `simple + simple`**：冻结 A3 已开放的标准双 ALU 白名单；补充 pairing matrix、年龄、连续 pair、RAW/WAW/WAR、redirect 和双写回定向覆盖。完整回归与九窗口应与 A5 功能一致，作为后续类别的 A/B 基线。
+2. **A6.2 `simple + control`**：只开放 lane1 control；覆盖 BEQ/BNE/有符号与无符号分支、JAL/JALR、taken/not-taken、预测正确/错误、target 对齐、lane0 写回与 lane1 redirect 同拍，以及 lane0 fault/kill 对 lane1 的抑制。
+3. **A6.3 `simple + LSU` / `LSU + simple`**：每包恰好一个 LSU；覆盖 Load E0-E3、Store E0-E1→MEM commit、两种 lane 顺序、单端口冲突、load-use pending、misaligned LAM/SAM、kill/stale response 和按年龄的部分退休。
+4. **A6.4 `simple + MULDIV` / `MULDIV + simple`**：每包恰好一个共享 MUL/DIV；覆盖两种 lane 顺序、start/done once、完成前双 lane hold、除零/溢出、redirect kill、结果稳定和精确双退休。
+
+每个子阶段必须分别记录：实现提交、directed tests、`run_all.bat all` 的通过数和编译 0/0、九窗口九条 report、overall cycles/instret/IPC、sink、exceptions、实际 class pairing 次数与拒绝原因。A6 只有四个子阶段全部签核后才能标记 `SIGNED_OFF`。
