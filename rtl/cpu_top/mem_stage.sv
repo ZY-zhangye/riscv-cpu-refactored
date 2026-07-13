@@ -13,8 +13,6 @@ module mem_stage (
     output logic ms_allowin,
     input logic ws_allowin,
     output logic ms_valid,
-    //数据存储器接口
-    input logic [31:0] dmem_rdata,
     //数据前递接口
     output logic [4:0] mem_dst_addr,
     output logic mem_regfile_wen,
@@ -33,7 +31,13 @@ module mem_stage (
     output logic [6:0] exception_code,
     output logic [31:0] exception_mtval,
     //未来双发可直接扩展为0/1/2，本阶段只会输出0或1
-    output logic [1:0] retire_count
+    output logic [1:0] retire_count,
+    //Store 只允许在精确 MEM commit 点产生一次物理写
+    output logic store_commit_valid,
+    output logic [31:0] store_commit_pc,
+    output logic [31:0] store_commit_addr,
+    output logic [3:0] store_commit_wen,
+    output logic [31:0] store_commit_wdata
 );
 
     logic [`ES_MS_WIDTH-1:0] es_ms_bus_r;
@@ -108,6 +112,9 @@ module mem_stage (
     logic [31:0] mem_pc;
     logic [31:0] mem_inst;
     logic [31:0] exe_result;
+    logic [31:0] load_response_data;
+    logic [3:0] store_write_enable;
+    logic [31:0] store_write_data;
     logic [5:0] load_inst;
     logic [4:0] rd_addr;
     logic regfile_wen;
@@ -120,6 +127,9 @@ module mem_stage (
         mem_pc,
         mem_inst,
         exe_result,
+        load_response_data,
+        store_write_enable,
+        store_write_data,
         load_inst,
         rd_addr,
         regfile_wen,
@@ -153,22 +163,22 @@ logic [15:0] load_half;
 
 always_comb begin
     unique case (data_offest)
-        2'b00:  load_byte = dmem_rdata[7:0];
-        2'b01:  load_byte = dmem_rdata[15:8];
-        2'b10:  load_byte = dmem_rdata[23:16];
-        default: load_byte = dmem_rdata[31:24];
+        2'b00:  load_byte = load_response_data[7:0];
+        2'b01:  load_byte = load_response_data[15:8];
+        2'b10:  load_byte = load_response_data[23:16];
+        default: load_byte = load_response_data[31:24];
     endcase
 end
 
 always_comb begin
     unique case (data_offest[1])
-        1'b0:    load_half = dmem_rdata[15:0];
-        default: load_half = dmem_rdata[31:16];
+        1'b0:    load_half = load_response_data[15:0];
+        default: load_half = load_response_data[31:16];
     endcase
 end
 
 always_comb begin
-    load_data = dmem_rdata;
+    load_data = load_response_data;
 
     unique case (1'b1)
         load_lb: begin
@@ -188,7 +198,7 @@ always_comb begin
         end
 
         default: begin
-            load_data = dmem_rdata;
+            load_data = load_response_data;
         end
     endcase
 end
@@ -197,8 +207,10 @@ end
     assign mem_result = ({32{wb_sel[1]}} & exe_result) |
                          ({32{~wb_sel[1]}} & load_data);
     assign mem_dst_addr = rd_addr;
-    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush && !exception_flag;
-    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush && !exception_flag;
+    assign mem_regfile_wen = ms_valid && regfile_wen && !ms_flush &&
+                             !exception_flag && !exception_code[5];
+    assign mem_reg_fpu_wen = ms_valid && reg_fpu_wen && !ms_flush &&
+                             !exception_flag && !exception_code[5];
     assign csr_we = ms_valid && csr_wen && !ms_flush && !exception_code[5];
     assign csr_waddr = csr_addr;
     assign csr_wdata = exception_code[5] ? mem_pc : csr_data; //当发生异常时将当前指令地址写入CSR寄存器，而不是正常的CSR写数据
@@ -258,6 +270,33 @@ end
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :
                             exc_mtval;
+
+    logic is_store_access;
+    assign is_store_access = load_inst[0];
+    mem_store_commit u_store_commit (
+        .resident_valid(ms_valid),
+        .commit_ready(ms_ready_go && ws_allowin),
+        .resident_kill(ms_flush),
+        .resident_exception(exception_flag || exception_code[5]),
+        .is_store(is_store_access),
+        .address(exe_result),
+        .write_data(store_write_data),
+        .write_enable(store_write_enable),
+        .commit_valid(store_commit_valid),
+        .commit_address(store_commit_addr),
+        .commit_write_data(store_commit_wdata),
+        .commit_write_enable(store_commit_wen)
+    );
+    assign store_commit_pc = mem_pc;
     assign retire_count = {1'b0, ms_to_ws_valid};
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && store_commit_valid &&
+            (!ms_to_ws_valid || !ws_allowin || exception_code[5])) begin
+            $fatal(1, "Store write did not coincide with precise MEM commit");
+        end
+    end
+`endif
 
 endmodule

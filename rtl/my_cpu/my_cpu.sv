@@ -39,6 +39,7 @@ module my_cpu (
     logic        imem_en;
 
     logic [31:0] cpu_dmem_rdata;
+    logic        cpu_dmem_rvalid;
     logic [31:0] cpu_dmem_addr;
     logic [3:0]  cpu_dmem_wen;
     logic        cpu_dmem_en;
@@ -78,6 +79,7 @@ module my_cpu (
         .imem_addr1(imem_addr1),
         .imem_en(imem_en),
         .dmem_rdata(cpu_dmem_rdata),
+        .dmem_rvalid(cpu_dmem_rvalid),
         .dmem_addr(cpu_dmem_addr),
         .dmem_wen(cpu_dmem_wen),
         .dmem_en(cpu_dmem_en),
@@ -134,6 +136,7 @@ module my_cpu (
         .cpu_dmem_wen(cpu_dmem_wen),
         .cpu_dmem_wdata(cpu_dmem_wdata),
         .cpu_dmem_rdata(cpu_dmem_rdata),
+        .cpu_dmem_rvalid(cpu_dmem_rvalid),
         .ram_en(ram_en),
         .ram_addr(ram_addr),
         .ram_wen(ram_wen),

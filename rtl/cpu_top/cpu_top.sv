@@ -10,6 +10,7 @@ module cpu_top (
     output logic imem_en,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
+    input logic dmem_rvalid,
     output logic [31:0] dmem_addr,
     output logic [3:0] dmem_wen,
     output logic dmem_en,
@@ -165,11 +166,11 @@ module cpu_top (
     logic branch_event;
     logic branch_mispredict_event;
     logic execute_stall_event;
-    logic store_event;
-    logic [31:0] store_pc;
-    logic [31:0] store_addr;
-    logic [3:0] store_wen;
-    logic [31:0] store_wdata;
+    logic ex_dmem_en;
+    logic [31:0] ex_dmem_addr;
+    logic [3:0] ex_dmem_wen;
+    logic [31:0] ex_dmem_wdata;
+    logic lsu_port_ready;
 
     //连接ms模块
     logic ms_valid;
@@ -183,6 +184,11 @@ module cpu_top (
     logic [31:0] exception_mtval;
     logic [1:0] legacy_retire_count;
     logic [1:0] retire_count;
+    logic store_event;
+    logic [31:0] store_pc;
+    logic [31:0] store_addr;
+    logic [3:0] store_wen;
+    logic [31:0] store_wdata;
 
     //实例化
     if_stage u_if_stage (
@@ -416,10 +422,13 @@ module cpu_top (
         .es_to_ms_valid(es_to_ms_valid),
         .es_flush(es_flush),
         .es_to_ms_bus(es_to_ms_bus),
-        .dmem_addr(dmem_addr),
-        .dmem_wen(dmem_wen),
-        .dmem_en(dmem_en),
-        .dmem_wdata(dmem_wdata),
+        .dmem_rdata(dmem_rdata),
+        .dmem_rvalid(dmem_rvalid),
+        .lsu_port_ready(lsu_port_ready),
+        .dmem_addr(ex_dmem_addr),
+        .dmem_wen(ex_dmem_wen),
+        .dmem_en(ex_dmem_en),
+        .dmem_wdata(ex_dmem_wdata),
         .exe_dest_addr(exe_dest_addr),
         .exe_regfile_wen(exe_regfile_wen),
         .exe_reg_fpu_wen(exe_reg_fpu_wen),
@@ -442,11 +451,6 @@ module cpu_top (
         .branch_event(branch_event),
         .branch_mispredict_event(branch_mispredict_event),
         .execute_stall_event(execute_stall_event),
-        .store_event(store_event),
-        .store_pc(store_pc),
-        .store_addr(store_addr),
-        .store_wen(store_wen),
-        .store_wdata(store_wdata),
         .mem_result(mem_result),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus)
@@ -462,7 +466,6 @@ module cpu_top (
         .ms_to_ws_valid(ms_to_ws_valid),
         .ms_allowin(ms_allowin),
         .ws_allowin(ws_allowin),
-        .dmem_rdata(dmem_rdata),
         .mem_dst_addr(mem_dest_addr),
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
@@ -477,8 +480,21 @@ module cpu_top (
         .csr_wdata(csr_wdata),
         .exception_code(exception_code),
         .exception_mtval(exception_mtval),
-        .retire_count(legacy_retire_count)
+        .retire_count(legacy_retire_count),
+        .store_commit_valid(store_event),
+        .store_commit_pc(store_pc),
+        .store_commit_addr(store_addr),
+        .store_commit_wen(store_wen),
+        .store_commit_wdata(store_wdata)
     );
+
+    // The data port is single-ported.  An older Store at MEM commit wins over
+    // a younger EX LSU request; the resident remains unstarted and retries.
+    assign lsu_port_ready = !store_event;
+    assign dmem_en = store_event || ex_dmem_en;
+    assign dmem_addr = store_event ? store_addr : ex_dmem_addr;
+    assign dmem_wen = store_event ? store_wen : 4'b0000;
+    assign dmem_wdata = store_event ? store_wdata : ex_dmem_wdata;
 
     wb_stage u_wb_stage (
         .clk(clk),

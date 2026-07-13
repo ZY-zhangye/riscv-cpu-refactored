@@ -18,6 +18,9 @@ module exe_stage(
     //reg_fpu数据3接口，仅在部分情况使用
     input logic [31:0] reg_fpu_data3,
     //DMEM接口
+    input logic [31:0] dmem_rdata,
+    input logic dmem_rvalid,
+    input logic lsu_port_ready,
     output logic [31:0] dmem_addr,
     output logic [31:0] dmem_wdata,
     output logic [3:0] dmem_wen,
@@ -48,13 +51,7 @@ module exe_stage(
     //性能计数事件
     output logic branch_event,
     output logic branch_mispredict_event,
-    output logic execute_stall_event,
-    //实际数据存储写事件，用于调试trace
-    output logic store_event,
-    output logic [31:0] store_pc,
-    output logic [31:0] store_addr,
-    output logic [3:0] store_wen,
-    output logic [31:0] store_wdata
+    output logic execute_stall_event
 );
 
     logic es_ready_go;
@@ -78,6 +75,7 @@ module exe_stage(
     logic selected_unit_busy;
     logic selected_unit_done;
     logic [31:0] selected_unit_result;
+    logic selected_unit_ready;
 
     assign es_ready_go = is_fpu ? !fpu_stall : resident_ready;
     assign es_core_allowin = !es_valid || es_ready_go && ms_allowin;
@@ -449,12 +447,20 @@ module exe_stage(
     );
 
     //MEM访问
-    logic [5:0] load_inst;
+    logic [5:0] lsu_load_metadata;
     logic lsu_busy;
     logic lsu_done;
+    logic [31:0] lsu_store_wdata;
+    logic [3:0] lsu_store_wen;
+    logic [31:0] lsu_response_data;
+    logic lsu_misaligned;
     lsu_exec_unit u_lsu (
+        .clk(clk),
+        .rst_n(rst_n),
         .start(resident_start && is_mem),
         .kill(resident_killed),
+        .response_valid(dmem_rvalid),
+        .response_data(dmem_rdata),
         .base(src1),
         .store_data(src2),
         .immediate(mem_imm),
@@ -462,12 +468,16 @@ module exe_stage(
         .is_store(is_store),
         .busy(lsu_busy),
         .done(lsu_done),
-        .request_valid(dmem_en),
+        .load_request_valid(dmem_en),
         .address(dmem_addr),
-        .write_data(dmem_wdata),
-        .write_enable(dmem_wen),
-        .load_metadata(load_inst)
+        .write_data(lsu_store_wdata),
+        .write_enable(lsu_store_wen),
+        .load_metadata(lsu_load_metadata),
+        .load_response_data(lsu_response_data),
+        .misaligned(lsu_misaligned)
     );
+    assign dmem_wen = 4'b0000;
+    assign dmem_wdata = 32'b0;
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
@@ -553,6 +563,7 @@ module exe_stage(
     assign other_done = resident_start &&
                         !is_alu && !is_br_jmp && !is_mem &&
                         !is_mul && !is_fpu;
+    assign selected_unit_ready = !is_mem || lsu_port_ready;
     assign selected_unit_busy = (is_mul && mul_op_mul) ? mul_busy :
                                 (is_mul && mul_op_div) ? div_busy :
                                 alu_busy || branch_busy || lsu_busy;
@@ -577,6 +588,7 @@ module exe_stage(
         .resident_valid(es_valid && !is_fpu),
         .resident_kill(ds_flush_r || exception_flag),
         .slot_replace(es_core_allowin),
+        .unit_ready(selected_unit_ready),
         .unit_busy(selected_unit_busy),
         .unit_done(selected_unit_done),
         .unit_result(selected_unit_result),
@@ -605,18 +617,25 @@ module exe_stage(
     assign exe_result_pending = es_valid && !es_flush && !es_ready_go;
     assign execute_stall_event = exe_result_pending;
 
-    assign store_event = dmem_en && (dmem_wen != 4'b0000);
-    assign store_pc = exe_pc;
-    assign store_addr = dmem_addr;
-    assign store_wen = dmem_wen;
-    assign store_wdata = dmem_wdata;
+    logic [5:0] es_lsu_metadata;
+    logic [31:0] es_lsu_response_data;
+    logic [3:0] es_store_wen;
+    logic [31:0] es_store_wdata;
+    assign es_lsu_metadata = is_mem ? lsu_load_metadata : 6'b0;
+    assign es_lsu_response_data = (is_mem && !is_store) ?
+                                  lsu_response_data : 32'b0;
+    assign es_store_wen = (is_mem && is_store) ? lsu_store_wen : 4'b0;
+    assign es_store_wdata = (is_mem && is_store) ? lsu_store_wdata : 32'b0;
 
     //输出到下一级
     assign es_to_ms_bus = {
         exe_pc,     //32
         exe_inst,   //32
         exe_result, //32
-        load_inst,  //6
+        es_lsu_response_data,
+        es_store_wen,
+        es_store_wdata,
+        es_lsu_metadata,
         rd_addr,
         regfile_wen,
         reg_fpu_wen,
@@ -640,8 +659,11 @@ module exe_stage(
         if (rst_n && dmem_en && (!resident_start || resident_killed)) begin
             $fatal(1, "LSU request was not a live resident start pulse");
         end
+        if (rst_n && (dmem_wen != 4'b0000)) begin
+            $fatal(1, "Store write enable escaped EX before MEM commit");
+        end
         if (rst_n && resident_killed &&
-            (branch_resolve_fire || exe_csr_wen || store_event)) begin
+            (branch_resolve_fire || exe_csr_wen || dmem_en)) begin
             $fatal(1, "killed EX resident produced an architectural side effect");
         end
     end

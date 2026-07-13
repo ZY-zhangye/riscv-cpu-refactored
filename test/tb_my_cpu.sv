@@ -5,7 +5,11 @@
 module tb_my_cpu;
     localparam string MEM_ADDR = "hex/riscv-tests/rv32-p-riscv.hex";
     localparam int CLK_PERIOD_NS = 10;
-    localparam int TIMEOUT_NS = 10000;
+    // A5 makes every Load occupy E0-E3 and every Store occupy E0-E1.
+    // Keep a finite watchdog, but leave enough budget for the mandated LSU
+    // residency so a functionally completed ISA test is not classified as a
+    // hang solely because it crossed the pre-A5 10 us limit.
+    localparam int TIMEOUT_NS = 20000;
 
     logic clk;
     logic clk_uart;

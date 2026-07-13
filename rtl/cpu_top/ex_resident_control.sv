@@ -4,6 +4,7 @@ module ex_resident_control (
     input  logic        resident_valid,
     input  logic        resident_kill,
     input  logic        slot_replace,
+    input  logic        unit_ready,
     input  logic        unit_busy,
     input  logic        unit_done,
     input  logic [31:0] unit_result,
@@ -21,7 +22,7 @@ module ex_resident_control (
     logic [31:0] result_r;
 
     assign resident_killed = resident_kill || killed_r;
-    assign unit_start = resident_valid && !resident_killed &&
+    assign unit_start = resident_valid && unit_ready && !resident_killed &&
                         !started_r && !completed_r;
     assign resident_ready = !resident_valid || resident_killed ||
                             completed_r || unit_done;

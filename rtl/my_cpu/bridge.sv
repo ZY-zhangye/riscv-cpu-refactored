@@ -10,6 +10,7 @@ module bridge (
     input  logic [3:0]  cpu_dmem_wen,
     input  logic [31:0] cpu_dmem_wdata,
     output logic [31:0] cpu_dmem_rdata,
+    output logic        cpu_dmem_rvalid,
 
     // data RAM side
     output logic        ram_en,
@@ -53,7 +54,10 @@ module bridge (
     logic ram_ext_sel;
     logic io_region_sel;
     logic plic_region_sel;
-    logic [1:0] read_target_r;
+    logic [1:0] read_target_stage1;
+    logic [1:0] read_target_stage2;
+    logic read_valid_stage1;
+    logic read_valid_stage2;
     logic [31:0] ram_rdata_r;
     logic [31:0] io_rdata_r;
     logic [31:0] plic_rdata_r;
@@ -94,16 +98,24 @@ module bridge (
 
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            read_target_r <= TARGET_NONE;
-        end else if (cpu_dmem_en) begin
-            unique case (1'b1)
-                ram_sel:         read_target_r <= TARGET_RAM;
-                io_region_sel:   read_target_r <= TARGET_IO;
-                plic_region_sel: read_target_r <= TARGET_PLIC;
-                default:         read_target_r <= TARGET_NONE;
-            endcase
+            read_target_stage1 <= TARGET_NONE;
+            read_target_stage2 <= TARGET_NONE;
+            read_valid_stage1 <= 1'b0;
+            read_valid_stage2 <= 1'b0;
         end else begin
-            read_target_r <= TARGET_NONE;
+            read_target_stage2 <= read_target_stage1;
+            read_valid_stage2 <= read_valid_stage1;
+            read_valid_stage1 <= cpu_read;
+            if (cpu_read) begin
+                unique case (1'b1)
+                    ram_sel:         read_target_stage1 <= TARGET_RAM;
+                    io_region_sel:   read_target_stage1 <= TARGET_IO;
+                    plic_region_sel: read_target_stage1 <= TARGET_PLIC;
+                    default:         read_target_stage1 <= TARGET_NONE;
+                endcase
+            end else begin
+                read_target_stage1 <= TARGET_NONE;
+            end
         end
     end
 
@@ -126,12 +138,14 @@ module bridge (
     end
 
     always_comb begin
-        unique case (read_target_r)
+        unique case (read_target_stage2)
             TARGET_RAM:  cpu_dmem_rdata = ram_rdata_r;
             TARGET_IO:   cpu_dmem_rdata = io_rdata_r;
             TARGET_PLIC: cpu_dmem_rdata = plic_rdata_r;
             default:     cpu_dmem_rdata = 32'd0;
         endcase
     end
+
+    assign cpu_dmem_rvalid = read_valid_stage2;
 
 endmodule

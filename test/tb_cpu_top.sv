@@ -18,6 +18,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     logic [31:0] imem_addr1;
     logic imem_en;
     logic [31:0] dmem_rdata;
+    logic dmem_rvalid;
     logic [31:0] dmem_addr;
     logic [3:0] dmem_wen;
     logic dmem_en;
@@ -38,6 +39,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
         .imem_addr1(imem_addr1),
         .imem_en(imem_en),
         .dmem_rdata(dmem_rdata),
+        .dmem_rvalid(dmem_rvalid),
         .dmem_addr(dmem_addr),
         .dmem_wen(dmem_wen),
         .dmem_en(dmem_en),
@@ -63,6 +65,7 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     //imem与dmem设计与实例化
     logic [31:0] imem [0:5095]; // 5KB指令存储器
     logic [31:0] dmem [0:5095]; // 5KB数据存储器
+    logic dmem_read_stage1;
     initial begin
         //加载测试指令到imem
         $readmemh(MEM_ADDR, imem);
@@ -84,7 +87,11 @@ localparam MEM_ADDR = "F:\\riscv-cpu-refactored\\hex\\riscv-tests\\rv32-p-riscv.
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             dmem_rdata <= 32'b0;
+            dmem_read_stage1 <= 1'b0;
+            dmem_rvalid <= 1'b0;
         end else begin
+            dmem_rvalid <= dmem_read_stage1;
+            dmem_read_stage1 <= dmem_en && (dmem_wen == 4'b0000);
             if (dmem_en) begin
                 if (dmem_wen != 4'b0000) begin
                     // 写操作，根据wen信号选择写入的字节

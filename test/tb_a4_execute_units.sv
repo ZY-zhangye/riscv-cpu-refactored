@@ -47,6 +47,10 @@ module tb_a4_execute_units;
     logic [31:0] lsu_write_data;
     logic [3:0] lsu_write_enable;
     logic [5:0] lsu_load_metadata;
+    logic lsu_response_valid;
+    logic [31:0] lsu_response_data;
+    logic [31:0] lsu_load_response_data;
+    logic lsu_misaligned;
 
     logic resident_valid;
     logic resident_kill;
@@ -100,13 +104,18 @@ module tb_a4_execute_units;
     );
 
     lsu_exec_unit u_lsu (
-        .start(lsu_start), .kill(lsu_kill), .base(lsu_base),
+        .clk(clk), .rst_n(rst_n),
+        .start(lsu_start), .kill(lsu_kill),
+        .response_valid(lsu_response_valid),
+        .response_data(lsu_response_data), .base(lsu_base),
         .store_data(lsu_store_data), .immediate(lsu_immediate),
         .mem_op(lsu_mem_op), .is_store(lsu_is_store), .busy(lsu_busy),
-        .done(lsu_done), .request_valid(lsu_request_valid),
+        .done(lsu_done), .load_request_valid(lsu_request_valid),
         .address(lsu_address), .write_data(lsu_write_data),
         .write_enable(lsu_write_enable),
-        .load_metadata(lsu_load_metadata)
+        .load_metadata(lsu_load_metadata),
+        .load_response_data(lsu_load_response_data),
+        .misaligned(lsu_misaligned)
     );
 
     mul u_mul (
@@ -134,6 +143,7 @@ module tb_a4_execute_units;
     ex_resident_control u_resident (
         .clk(clk), .rst_n(rst_n), .resident_valid(resident_valid),
         .resident_kill(resident_kill), .slot_replace(slot_replace),
+        .unit_ready(1'b1),
         .unit_busy(resident_unit_busy), .unit_done(resident_unit_done),
         .unit_result(resident_unit_result), .unit_start(resident_unit_start),
         .resident_ready(resident_ready), .resident_result(resident_result),
@@ -207,6 +217,8 @@ module tb_a4_execute_units;
         lsu_immediate = 32'b0;
         lsu_mem_op = 5'b0;
         lsu_is_store = 1'b0;
+        lsu_response_valid = 1'b0;
+        lsu_response_data = 32'b0;
         resident_valid = 1'b0;
         resident_kill = 1'b0;
         slot_replace = 1'b0;
@@ -282,18 +294,25 @@ module tb_a4_execute_units;
         lsu_mem_op = 5'b10000;
         lsu_is_store = 1'b1;
         #0.1;
-        if (!lsu_done || !lsu_request_valid ||
+        if (lsu_done || lsu_request_valid ||
             (lsu_address != 32'h1003) ||
             (lsu_write_data != 32'ha5a5_a5a5) ||
             (lsu_write_enable != 4'b1000)) begin
-            $fatal(1, "LSU byte-store shell mismatch");
+            $fatal(1, "LSU Store E0 command mismatch");
+        end
+        @(posedge clk);
+        #0.1;
+        lsu_start = 1'b0;
+        if (!lsu_done || lsu_busy || lsu_request_valid ||
+            (lsu_address != 32'h1003) ||
+            (lsu_write_enable != 4'b1000)) begin
+            $fatal(1, "LSU Store E1 completion mismatch");
         end
         lsu_kill = 1'b1;
         #0.1;
         if (lsu_done || lsu_request_valid || (lsu_write_enable != 4'b0)) begin
             $fatal(1, "killed LSU request escaped");
         end
-        lsu_start = 1'b0;
         lsu_kill = 1'b0;
 
         clear_resident();
