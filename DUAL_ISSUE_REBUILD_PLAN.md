@@ -830,7 +830,8 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.1 SIGNED_OFF in 7640bee: measurement-only probe; no RTL or frozen fixture changes
               - A7.1 run_all.bat all passed 78/78; direct and wrapped nine-window reports match A6.4 exactly
               - A7.1 measured 354773 actual dual launches, 379273 legacy pair fallbacks and 458102 fetch-empty cycles
-              - A7.2 IN_PROGRESS: remove the every-other-cycle IF request ceiling with tagged continuous requests
+              - A7.2 SIGNED_OFF in 5ba2046: tagged live-response bypass plus one complete skid packet
+              - A7.2 run_all.bat all passed 78/78; cycles=2831734, exact IPC=0.804968, sink/exceptions unchanged
               - A7.3 will reduce dual/legacy switching, beginning with safe singleton simple residency
               - A7.4 will open only pair classes justified by the new counters
               - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
@@ -1716,9 +1717,12 @@ A7.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。下一子阶段严格�
 #### 17.10.2 A7.2 连续取指 request/response 设计记录
 
 ```text
-baseline: 0cd312c (A7.1 signed off, clean worktree)
-status:   IN_PROGRESS
-scope:    if_stage + tb_if_sync_btb only
+baseline:              0cd312c (A7.1 signed off, clean worktree)
+design record commit:  596a66010400737c8383d5b57b9a5fad0f2a24f6
+implementation commit: 5ba20465123bada52b3b958afd603b8d883a9ec4
+status:                SIGNED_OFF
+scope:                 if_stage + tb_if_sync_btb only
+next:                  A7.3 reduce dual/legacy domain switching
 ```
 
 同步 IROM 在 request 边沿锁存 PC/PC+4，并在下一完整周期提供 response。A7.2 保留恰好一个 `req_valid` tag 和一个 `packet_valid` skid packet，冻结以下所有权不变量：
@@ -1731,3 +1735,66 @@ scope:    if_stage + tb_if_sync_btb only
 6. A7.2 不改变 Fetch FIFO、Issue、Dispatch、dual/legacy backend、LSU/MULDIV 时序或任何 pairing class。
 
 定向签核新增连续三拍 request/packet、slot0 taken 后目标 request、backpressure skid hold/release、释放同拍 request、redirect 覆盖 in-flight response，以及现有 BTB write-through、lane1 taken、JAL/JALR/RAS 和 age/epoch 检查。正式签核仍需 78/78、冻结九窗口直跑、A7 profile A/B 和全部夹具 SHA256 复核。
+
+实现将同步 IROM response 在空间足够时直接组合到 `fetch_push_*`；该 packet 的预测 next PC 同时旁路到 PC/BTB request 端。若 Fetch FIFO 空间不足，response 的两个 uop、预测 metadata、epoch、RAS snapshot 和 next PC 一起进入原有 `packet_valid` 寄存器，此时 `req_valid` 清零并停止新请求；held packet 释放时才恢复 request。仿真断言禁止 skid 与 in-flight response 重叠、覆盖未消费 response，以及输出非法 packet count。未修改 Fetch FIFO 及其后的任何模块。
+
+定向与完整回归：
+
+```text
+directed: tb_if_sync_btb
+          tb_fetch_fifo_2wide
+          tb_issue_bundle_fifo
+          tb_a3_dual_backend
+          tb_a6_simple_control
+result:   5/5 passed; compile/simulation 0 errors / 0 warnings
+logs:     F:\Tools\Temp\riscv-dual-rebuild-a7-2-*-directed-final.log
+compile:  F:\Tools\Temp\riscv-dual-rebuild-a7-2-directed-compile-final.log
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\Temp\riscv-dual-rebuild-a7-2-run_all_all-final.log
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.1 cycles | A7.2 cycles | Delta | A7.1 IPC x1000 | A7.2 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216028 | 204030 | -11998 | 999 | 1058 |
+| MEXT | 182052 | 182042 | -10 | 296 | 296 |
+| BRANCH_RANDOM | 319213 | 269939 | -49274 | 770 | 911 |
+| BRANCH_REGULAR | 111050 | 117042 | +5992 | 864 | 820 |
+| BRANCH_SHORT | 117048 | 96042 | -21006 | 794 | 968 |
+| BRANCH_CALL | 204567 | 188347 | -16220 | 704 | 764 |
+| BRANCH_CAPACITY | 141971 | 75411 | -66560 | 486 | 916 |
+| BRANCH_RETURN | 920166 | 912135 | -8031 | 825 | 833 |
+| MEMORY | 787109 | 786746 | -363 | 763 | 764 |
+| **Overall** | **2999204** | **2831734** | **-167470** | **760** | **804** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2831734, instret=2279454, ipc_x1000=804
+exact IPC:    0.8049675569809877
+sink:         0x9D3BF787
+compile log:  F:\Tools\Temp\riscv-dual-rebuild-a7-2-nine-window-compile-final.log
+direct log:   F:\Tools\Temp\riscv-dual-rebuild-a7-2-nine-window-final.log
+profile log:  F:\Tools\Temp\riscv-dual-rebuild-a7-2-profile-final.log
+comparison:   direct and profile header, nine reports, overall and PASS are identical
+protected HEX:C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+A7.1→A7.2 的真实退休数、branch mispredict、sink 和 exceptions 不变。overall cycles 减少 `167470`（`-5.584%`），精确 IPC 提升 `5.914%`。相对旧 A0 当前少 `168190` cycles（`-5.606%`）；相对正确退休口径的 A1 仍多 `95107` cycles，留给 A7.3 之后恢复。`BRANCH_REGULAR` 单窗增加 `5992` cycles，是连续供给改变包对齐后 actual dual 从 `33004` 降到 `24003`、legacy pair fallback 从 `3003` 增到 `13504` 的域切换成本；A7.2 未跨范围修改 Dispatch 来隐藏该回退。
+
+| Profile metric | A7.1 | A7.2 | Delta |
+| --- | ---: | ---: | ---: |
+| IMEM request | 1325226 | 1403314 | +78088 |
+| Fetch packet | 1305821 | 1383909 | +78088 |
+| Fetched uop | 2354833 | 2496661 | +141828 |
+| Fetch empty cycles | 458102 | 38810 | -419292 |
+| Issue pair | 749469 | 846538 | +97069 |
+| Actual dual launch / retire2 | 354773 | 407501 | +52728 |
+| Legacy pair fallback | 379273 | 397807 | +18534 |
+| Legacy drain wait cycles | 579167 | 637875 | +58708 |
+| Dual backend wait cycles | 117972 | 118000 | +28 |
+
+前端空供给下降 `91.528%`，实际双退休覆盖从有效退休指令的 `31.128%` 增至 `35.754%`。九窗口仍满足 `imem_requests - fetch_packets = 19405 = branch mispredict total`、fetch packet/uop 恒等式和 actual class launch 恒等式。BRANCH_CAPACITY request/cycle 已达到 `0.9643`，窗口 IPC 从 `0.486` 升至 `0.916`；MEXT 与 MEMORY cycles 几乎不变，同时 legacy fallback 和 legacy wait 继续增长，清晰地把下一瓶颈固定到 A7.3 的 dual/legacy 域切换，而不是继续扩大配对白名单。
+
+签核后重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 `test/tb_top.sv`，八项 SHA256 全部与 A7.1/12.2 记录一致，未重建软件、未修改 golden。A7.2 已独立签核，A7 总阶段保持 `IN_PROGRESS`；下一子阶段只处理安全 singleton simple residency 与域切换，不混入 A7.4 白名单项目。
