@@ -692,3 +692,55 @@ FIFO occupancy/full 和双发率
 - `doc/latest175_p5_signoff_checkpoint.md`：P5 时序瓶颈与历史 IPC。
 - `riscv_sim_perf_bench/README.md`：benchmark 工程说明；邮箱地址以本文件第 12 节为准。
 
+## 17. 执行状态与阶段签核表
+
+本节是实施过程中的唯一状态入口。每个阶段开始、签核或回退时都要更新本节；阶段只有在代码、定向测试、回归日志和提交记录齐全后才能标记为完成。
+
+当前工作区：
+
+```text
+worktree: F:\riscv-cpu-dual-rebuild
+branch:   codex/dual-issue-rebuild-v1
+baseline: 774f8ce974a9e10f7ffcf4f0a9117aa6fe31e18b
+fixture:  65ee12efe65fb21fe6e0a812d34c927c3e9ee12e
+```
+
+状态定义：
+
+```text
+PENDING      尚未开始
+IN_PROGRESS  正在实现或验证
+SIGNED_OFF   阶段全部签核门槛通过
+ROLLED_BACK  阶段失败并已回退到上一稳定提交
+```
+
+| 阶段 | 状态 | 实施范围 | 阶段签核门槛 |
+| --- | --- | --- | --- |
+| A0 | IN_PROGRESS | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
+| A1 | PENDING | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
+| A2 | PENDING | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
+| A3 | PENDING | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
+| A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
+| A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
+| A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
+| A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
+
+### 17.1 每阶段统一签核流程
+
+1. 开始前记录当前提交、工作树状态、测试夹具 SHA256 和受保护 HEX 状态。
+2. 一个提交只改变一个架构边界；不得混入临时 bypass、全局 stall、false path 或关闭关键双发能力的补丁。
+3. 先完成编译与该阶段 directed tests，再运行受影响的现有回归；A0、A6 每个子阶段和 A7 必须运行 `run_all.bat all`。
+4. 九窗口 A/B 始终使用冻结的 `out/inst.hex` 和 `out/data.hex`；除非专门重建软件并记录编译器版本与新 SHA256，否则不得重新生成。
+5. 每次测试后恢复并核对 `hex/riscv-tests/rv32-p-riscv.hex`，避免 batch 覆盖用户或基线内容。
+6. 签核记录至少包含测试命令、日志路径、pass/fail、commit、cycles、instret、IPC、sink、exceptions，以及该阶段新增的断言或覆盖点。
+7. 阶段通过后把状态改为 `SIGNED_OFF` 并提交文档；失败且无法在当前阶段干净修复时回退该阶段提交并标记 `ROLLED_BACK`。
+
+### 17.2 当前进度
+
+```text
+2026-07-13  A0 started
+              - created codex/dual-issue-rebuild-v1 from 774f8ce
+              - froze rebuild plan and nine-window fixture in 65ee12e
+              - verified all seven fixture SHA256 values against section 12.2
+              - next: protect rv32-p-riscv.hex and run the untouched L0 full regression
+```
