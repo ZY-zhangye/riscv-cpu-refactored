@@ -804,6 +804,8 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A6.3 adds exactly one LSU per bundle with registered response and precise Store/exception commit
               - A6.4 adds exactly one shared MUL/DIV per bundle and holds both lanes until completion
               - every substage has a separate commit, directed tests, run_all.bat all and frozen nine-window run
+              - A6.1 SIGNED_OFF in 40eb13a: unified simple predecode; 78/78 and nine-window PASS
+              - current: A6.2 lane0 simple + lane1 control
 ```
 
 ### 17.3 A0 签核记录
@@ -1340,7 +1342,7 @@ A6 开始基线：
 start commit:       d5a097369b0c3c6aa9a37385f690ebd652ced3b4
 protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
 status:              IN_PROGRESS
-current substage:    A6.1 simple + simple
+current substage:    A6.2 simple + control
 ```
 
 统一年龄与提交规则：
@@ -1360,3 +1362,53 @@ current substage:    A6.1 simple + simple
 4. **A6.4 `simple + MULDIV` / `MULDIV + simple`**：每包恰好一个共享 MUL/DIV；覆盖两种 lane 顺序、start/done once、完成前双 lane hold、除零/溢出、redirect kill、结果稳定和精确双退休。
 
 每个子阶段必须分别记录：实现提交、directed tests、`run_all.bat all` 的通过数和编译 0/0、九窗口九条 report、overall cycles/instret/IPC、sink、exceptions、实际 class pairing 次数与拒绝原因。A6 只有四个子阶段全部签核后才能标记 `SIGNED_OFF`。
+
+#### 17.9.1 A6.1 `simple + simple` 签核
+
+实现提交：
+
+```text
+commit:  40eb13a787159ee79ffb9cbccc086ba0f2d582b5
+subject: issue: freeze simple pair classification
+status:  SIGNED_OFF
+```
+
+`pair_predecode` 统一了 Issue 与 Dispatch 对标准双 ALU 指令的定义，并输出后续子阶段复用的 control/LSU/MULDIV、源寄存器和目的寄存器最小分类。Issue 新增显式 `pair_class`；A6.1 仍只接受 `PAIR_SIMPLE_SIMPLE`。此前会在 Issue 被计成 pair、随后又由 Dispatch 回退 legacy 的 bitman/非标准 OP 现在直接按结构冲突留在单发路径，因此 `dual` 计数继续只表示实际已开放的 simple pairing class。
+
+定向测试覆盖独立 pair、连续 pair、双写回、同步读 WB bypass、年龄/epoch、redirect kill、RAW、WAW、WAR、`x0`、bitman/control/LSU/MULDIV 白名单边界。结果：
+
+```text
+tb_issue_bundle_fifo: PASS
+tb_a3_dual_backend:   PASS
+compile:              0 errors / 0 warnings
+logs:                 F:\Tools\temp\riscv-dual-rebuild-a6-1-tb_issue_bundle_fifo-directed-1.log
+                      F:\Tools\temp\riscv-dual-rebuild-a6-1-tb_a3_dual_backend-directed-1.log
+compile log:          F:\Tools\temp\riscv-dual-rebuild-a6-1-compile-2.log
+```
+
+官方回归与九窗口：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\temp\riscv-dual-rebuild-a6-1-run_all_all-final.log
+sink:            0x9D3BF787
+overall:         cycles=3004606, instret=2279454, ipc_x1000=758
+result:          PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+compile log:     F:\Tools\temp\riscv-dual-rebuild-a6-1-nine-window-compile-final.log
+run log:         F:\Tools\temp\riscv-dual-rebuild-a6-1-nine-window-final.log
+protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+| Window | Cycles | Instret | IPC x1000 | Dual | Single | RAW | WAW | Struct | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216032 | 216013 | 999 | 48002 | 120014 | 48009 | 24004 | 12009 | 0 |
+| MEXT | 190045 | 54016 | 284 | 10008 | 34018 | 16008 | 2003 | 32005 | 0 |
+| BRANCH_RANDOM | 324358 | 245975 | 758 | 54312 | 164903 | 54314 | 25530 | 37560 | 0 |
+| BRANCH_REGULAR | 111050 | 96017 | 864 | 27008 | 48016 | 3 | 0 | 22510 | 0 |
+| BRANCH_SHORT | 117050 | 93015 | 794 | 39005 | 21019 | 3004 | 0 | 6011 | 0 |
+| BRANCH_CALL | 196463 | 144022 | 733 | 12006 | 132197 | 44111 | 32106 | 24025 | 0 |
+| BRANCH_CAPACITY | 141973 | 69133 | 486 | 1030 | 70407 | 1026 | 1025 | 2305 | 0 |
+| BRANCH_RETURN | 920170 | 760025 | 825 | 152000 | 456092 | 80018 | 56004 | 320003 | 0 |
+| MEMORY | 787465 | 601238 | 763 | 92785 | 416404 | 276913 | 138239 | 230664 | 0 |
+
+A6.1 的九个 cycles/instret/IPC、dual/single/struct、sink 和 exceptions 与 A5 相同，证明 simple 双执行行为未改变。RAW 计数增加是统一预译码现在也观察到尚未开放的 control/LSU 类别中的真实包内相关；拒绝原因允许多因并存，不代表额外 stall 或执行行为变化。
