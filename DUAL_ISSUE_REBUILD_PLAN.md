@@ -720,7 +720,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
-| A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
+| A5 | IN_PROGRESS | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
 
@@ -785,6 +785,13 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS; metrics exactly match A3
               - protected HEX and all frozen benchmark fixture hashes remained unchanged
               - next: A5 four-cycle Load, two-cycle Store, fixed EX/MEM and precise memory commit
+2026-07-13  A5 IN_PROGRESS
+              - freeze A4 signoff commit 19014ee and protected HEX SHA256 before edits
+              - add an explicit bridge read-response-valid path and carry response data in EX/MEM metadata
+              - make Load occupy E0-E3 and Store occupy E0-E1 under the EX resident owner
+              - move the only physical Store write pulse from EX to precise MEM commit
+              - arbitrate the single data port in age order: older MEM Store commit before younger EX LSU start
+              - keep A3/A4 pairing whitelist unchanged; LSU dual pairing remains an A6 step
 ```
 
 ### 17.3 A0 签核记录
@@ -1201,3 +1208,30 @@ A4 九个窗口的 cycles、instret、IPC、branch mispredict、result dependenc
 九窗口命令曾按第 12.3 节的历史示例引用当前工作树不存在的 `vivado-project/.../dram_driver.sv`，因此只产生一次编译前置失败、未运行仿真。第 12.3 节现已校正为 A3/A4 实际签核使用的源文件集合；最终日志均为 0 error / 0 warning。
 
 签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv`；SHA256 全部与 A0/A3 记录一致，未重建软件、未修改 golden。
+
+### 17.8 A5 设计与签核记录
+
+A5 开始基线：
+
+```text
+start commit:       19014ee05d4961ae6b5a9fe19976b085f4ca96ec
+protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+status:              IN_PROGRESS
+```
+
+实现边界：
+
+- bridge/CPU data-memory 接口增加显式 read response valid。Load 在 E0 只发一次 request；request 的 address、访问宽度/符号、目的寄存器及异常 metadata 随 resident 保存，E3 将锁存的 response data 与同一 uop 原子送入固定 EX/MEM 寄存器。
+- Store 在 E0 形成 address/data/mask 并锁存，E1 完成并进入 EX/MEM；EX 的物理 `dmem_wen` 永远为零。MEM 只有在 `valid && commit && !kill && !exception` 时产生一次实际 write pulse。
+- 数据端口为单端口、blocking、单 outstanding。若更老 Store 正在 MEM commit，年轻 EX LSU 的 start-ready 为零；resident 保持未 started，下一拍再发请求，禁止请求丢失或年轻访问越过。
+- E0 计算 load/store alignment。misaligned 访问不发外部 request/write；地址和访问类型仍进入 MEM，由既有异常优先级产生 LAM/SAM，且不退休、不写 GPR/memory。
+- kill-before-start 不产生请求；kill-after-load-request 清除 resident request-valid 并忽略随后 response，不等待 done、不进入 MEM。bridge 的旧 response valid 不能匹配到后续 resident。
+- A5 不开放 LSU 双发，lane1 年龄/异常抑制继续由现有 atomic bundle 和 dispatch 边界保持；A6 开放 LSU pairing 前必须复用本阶段的单端口仲裁和 commit-only Store 规则。
+
+阶段签核要点：
+
+1. `tb_lsu_four_beat_load`：E0 唯一 request、E1/E2 hold、E3 response/release，byte/half/word 扩展与 metadata 对齐。
+2. `tb_lsu_store_commit`：E0/E1 无物理写，MEM commit 只有一个 write pulse；MEM backpressure 不重复写。
+3. `tb_lsu_store_load_order`：更老 Store commit 与年轻 Load/Store 冲突时 Store 优先，年轻 resident 未 start 且下一拍请求不丢。
+4. `tb_lsu_exception_age`：misaligned、kill-before-start、kill-during-wait、外部异常均无 request/store/GPR/retire 副作用。
+5. A4 directed tests、load/store ISA、`run_all.bat all` 与九窗口通过；sink/exceptions/夹具不变，并如实记录 MEMORY 与 overall IPC。
