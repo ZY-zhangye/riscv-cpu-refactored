@@ -375,7 +375,7 @@ wb     lane0/lane1: valid, dest, result_valid, kill
 
 ### A7：性能恢复与 200 MHz 时序收敛
 
-A7 在最终时序签核前先完成可观测性与两项已确认的性能恢复，按以下子阶段独立提交、回归和九窗口签核，不得跨阶段混入白名单扩展：
+A7 在最终时序签核前先完成可观测性、性能恢复与安全执行域融合，按以下子阶段独立提交、回归和九窗口签核，不得跨阶段混入未经验证的白名单扩展：
 
 1. **A7.1 性能可观测性与冻结基线**
    - 使用冻结 `tb_uart_benchmark` 外的 measurement-only probe，记录前端 request/packet/uop、单 uop packet、Issue 可接收但 Fetch FIFO 为空、实际 dual launch、实际 simple pair、双退休、pair 回退 legacy、prefer-legacy 回退、等待 legacy 排空和等待 dual resident。
@@ -391,7 +391,11 @@ A7 在最终时序签核前先完成可观测性与两项已确认的性能恢�
 4. **A7.4 数据驱动的选择性配对**
    - 只根据 A7.1–A7.3 数据选择候选；优先评估纯 simple WAW younger-wins、单周期 simple RAW lane0->lane1 bypass、bitman+simple 和 control0+simple1 精确取消。
    - 双 LSU、双 MULDIV 在没有新增物理端口/执行单元时继续禁止；当前原子 LSU resident 下不得仅为提高配对计数放宽门限。
-5. **A7.5 200 MHz 最终收敛**
+5. **A7.5 消除安全 singleton 的空退役与域切换**
+   - measurement probe 增加零退役、Dispatch 零退役、control/MULDIV singleton、legacy→dual 和 dual→legacy 计数。
+   - 只把已经具备完整执行、kill、异常和退休语义的 lane0 control 与 MULDIV singleton 纳入 dual backend；LSU singleton/isolated pair 保留原成本门限。
+   - `MULDIV_PAIR` 等既有事件继续只统计真正双 lane bundle；所有 singleton 只退休 lane0，禁止制造 lane1 或 pair-class 事件。
+6. **A7.6 200 MHz 最终收敛**
    - 功能和九窗口性能门槛通过后再做综合/实现。
    - 首先检查 RF output -> forwarding -> ALU/branch/AGU，以及 Fetch FIFO peek -> pairing -> bundle FIFO write。
    - 若 5.000 ns 未通过，只在报告指出的边界增加寄存，不进行平均切拍；每次时序改动都重新运行九窗口 IPC A/B。
@@ -738,7 +742,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | SIGNED_OFF | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | SIGNED_OFF | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
-| A7 | IN_PROGRESS | A7.1 可观测性、A7.2 前端供给、A7.3 域切换、A7.4 选择性配对、A7.5 最终时序 | 每个子阶段独立提交、回归和九窗口 A/B；最终官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；以修正后有效退休口径报告 IPC，并同时记录相对 A0 的 cycles 与 `IPC x Fmax`；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果 |
+| A7 | IN_PROGRESS | A7.1 可观测性、A7.2 前端供给、A7.3 域切换、A7.4 选择性配对、A7.5 安全 singleton 驻留、A7.6 最终时序 | 每个子阶段独立提交、回归和九窗口 A/B；最终官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；以修正后有效退休口径报告 IPC，并同时记录相对 A0 的 cycles 与 `IPC x Fmax`；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果 |
 
 ### 17.1 每阶段统一签核流程
 
@@ -842,7 +846,12 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.4.1 measured 74506 control0 launches and 5308 lane1 kills; structural rejects fell from 145238 to 19971
               - A7.4.1 also qualified MEM exception outputs with ms_valid; this removed a stale-exception frontend redirect exposed by rv32mi-p-ma_fetch
               - WAW-only and bitman+simple each have zero frozen-workload opportunities; simple RAW remains deferred behind a separate timing gate
-              - next: A7.5 200 MHz timing convergence and IPC x Fmax signoff; A7 overall remains IN_PROGRESS
+              - A7.5 SIGNED_OFF in ff35e70: lane0 control and MULDIV singleton reuse the existing dual branch/shared-unit residents
+              - A7.5 affected directed tests passed 8/8 and run_all.bat all passed 78/78; compile 0 errors / 0 warnings
+              - A7.5 cycles=2394076, exact IPC=0.952123; sink/instret/branch/brmisp/exceptions/hashes unchanged
+              - A7.5 measured 91163 control-singleton and 2000 MULDIV-singleton launches; zero-retire cycles fell by 57686
+              - dual-to-legacy transitions fell from 27420 to 8182; the remainder is concentrated at frozen LSU boundaries
+              - next: A7.6 staged timing convergence and IPC x Fmax signoff; A7 overall remains IN_PROGRESS
 ```
 
 ### 17.3 A0 签核记录
@@ -1918,7 +1927,7 @@ scope:                 defines + Issue + Dispatch + dual branch/commit selection
                        + A7 measurement probe
 out of scope:          simple RAW/WAW relaxation, bitman execution, control+control,
                        control+LSU/MULDIV, dual LSU/MULDIV, legacy backend,
-                       predictor/RAS policy, frozen CSR/report and A7.5 timing edits
+                       predictor/RAS policy, frozen CSR/report and A7.6 timing edits
 census compile log:    F:\Tools\Temp\riscv-dual-rebuild-a7-4-census-compile.log
 census log:            F:\Tools\Temp\riscv-dual-rebuild-a7-4-census.log
 rollback gate:         any correctness/event/hash mismatch, regression failure,
@@ -1932,7 +1941,7 @@ A7.3 的九窗口报告含 `477997` 个 RAW、`255495` 个 WAW 和 `145238` 个 
 | Candidate | Clean dynamic opportunities | Decision | Reason |
 | --- | ---: | --- | --- |
 | pure simple WAW younger-wins | 0 WAW-only | 不实施 | `252968` 个 simple WAW 全部同时是 RAW；只放宽写优先级没有性能机会 |
-| simple RAW lane0→lane1 | 100079 RAW-only；另有 252968 RAW+WAW | 本次延后 | 覆盖潜力大，但会形成 RF→ALU0→mux→ALU1 的双 ALU 组合链，直接冲突 A7.5 的 5.000 ns 目标 |
+| simple RAW lane0→lane1 | 100079 RAW-only；另有 252968 RAW+WAW | 本次延后 | 覆盖潜力大，但会形成 RF→ALU0→mux→ALU1 的双 ALU 组合链，直接冲突 A7.6 的 5.000 ns 目标 |
 | bitman0+simple1 / simple0+bitman1 | 0 / 0 | 不实施 | 冻结 workload 无机会，且 dual backend 当前没有 bitman datapath |
 | control0+simple1 | 125265，全部无 RAW/WAW | **本次唯一实施项** | 占全部 structural reject 的 `86.248%`，可复用现有单 branch unit，并行 branch/simple 不增加串联 ALU 路径 |
 
@@ -2081,4 +2090,97 @@ hex/riscv-tests/rv32-p-riscv.hex
 C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
 ```
 
-A7.4.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。下一阶段仅进入 A7.5：以当前功能/性能提交为基线收敛 200 MHz，并同时报告 Fmax、关键路径、overall IPC 和 IPC x Fmax；在取得时序证据前不启动 A7.4.2 simple RAW 旁路设计。
+A7.4.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。根据高 IPC 分支对照，正式时序收敛顺延到 A7.6；A7.5 先消除已经具备完整执行语义的 singleton 所造成的空退役与 dual/legacy 域往返，不启动 simple RAW 旁路。
+
+#### 17.10.5 A7.5 安全 singleton 驻留与域切换签核
+
+```text
+baseline:              72b2aee (A7.4.1 signed off, clean worktree)
+implementation commit: ff35e70
+status:                SIGNED_OFF
+scope:                 control/MULDIV singleton dual residency + lane-valid assertions + measurement probe
+out of scope:          LSU admission/resident redesign, simple RAW/WAW, BTB/RAS, timing constraints or synthesis edits
+rollback gate:         any architectural mismatch, pair-event semantic change, exception/sink/hash change,
+                       regression failure or no overall nine-window cycle reduction
+next:                  A7.6 staged timing convergence
+```
+
+A7.4.1 的新增 probe 基线显示九窗口共有 `666734` 个零退役周期，其中 `515674` 个周期同时存在未弹出的 Bundle head；另有 `101156` 个 control singleton 进入 legacy，`42532` 次从非 dual mode 建立 dual run，以及 `27420` 次 dual→legacy 交接。A7.5 不尝试把不可消除的分支恢复、LSU 等待或共享单元运算周期伪装成空泡，只处理已有执行单元能够完整承接的两类 lane0 singleton：
+
+1. lane0 control singleton 复用现有 branch unit、redirect、BTB update 与 IAM 精确异常路径，可作为 complex candidate 直接建立 dual run；仍服从 `legacy_idle`、`prefer_legacy` 和 active-resident 排斥。
+2. lane0 MULDIV singleton 复用 A6.4 shared-unit resident，可直接建立 dual run并沿用 start-once、done、redirect kill 与 completion-edge release；沿用既有 MULDIV 对历史 cooldown 的例外，避免已支持类别永久回退 legacy。
+3. singleton 的合法退休向量只能是 `01` 或异常下的 `00`；accepted-class 与 branch assertions 改为显式 lane-valid 语义，禁止制造 lane1 retirement。
+4. `MULDIV_PAIR` 继续只在 lane1 有效时计数；control/MULDIV singleton 均不得产生任何 pair-class event。LSU singleton 与 isolated LSU pair 保持 A6.3 成本门限不变。
+5. measurement wrapper 新增 control/MULDIV singleton launch、zero-retire、dispatch-zero、legacy singleton fallback 和双向域交接计数；冻结 benchmark、21-word report、CSR 地址和 RTL 外部接口均不变。
+
+定向与完整回归：
+
+```text
+directed: tb_issue_bundle_fifo
+          tb_a3_dual_backend
+          tb_a6_simple_control
+          tb_a6_lsu_pair
+          tb_a6_muldiv_pair
+          tb_if_sync_btb
+          tb_regfiles_4r2w
+          tb_lsu_exception_age
+result:   8/8 passed; compile and simulations 0 errors / 0 warnings
+logs:     F:\Tools\Temp\a75_domain_<top>.log
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+elapsed:          144.7 s
+run_all log:      F:\Tools\Temp\a75_domain_run_all.log
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.4.1 cycles | A7.5 cycles | Delta | A7.4.1 IPC x1000 | A7.5 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 144030 | 144030 | 0 | 1499 | 1499 |
+| MEXT | 186042 | 166041 | -20001 | 290 | 325 |
+| BRANCH_RANDOM | 208114 | 201056 | -7058 | 1181 | 1223 |
+| BRANCH_REGULAR | 67540 | 57047 | -10493 | 1421 | 1683 |
+| BRANCH_SHORT | 78053 | 66049 | -12004 | 1191 | 1408 |
+| BRANCH_CALL | 117112 | 108405 | -8707 | 1229 | 1328 |
+| BRANCH_CAPACITY | 74384 | 72216 | -2168 | 929 | 957 |
+| BRANCH_RETURN | 792131 | 792133 | +2 | 959 | 959 |
+| MEMORY | 787099 | 787099 | 0 | 763 | 763 |
+| **Overall** | **2454505** | **2394076** | **-60429** | **928** | **952** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2394076, instret=2279454, ipc_x1000=952
+exact IPC:    0.952122656089447
+sink:         0x9D3BF787
+branch:       396041
+brmisp:       19405
+compile:      0 errors / 0 warnings
+compile log:  F:\Tools\Temp\a75_domain_perf_compile.log
+direct log:   F:\Tools\Temp\a75_domain_perf_direct.log
+profile log:  F:\Tools\Temp\a75_domain_perf_profile.log
+comparison:   direct and profile header, nine reports, overall and PASS are identical
+protected HEX:C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+A7.4.1→A7.5 的真实退休数、branch、branch mispredict、sink、exceptions 和八项冻结 SHA256 均不变。overall cycles 减少 `60429`（`-2.462%`），精确 IPC 提升 `2.524%`。所有窗口均无实质性回退；BRANCH_RETURN 的 `+2` cycles 来自跨窗口相位变化，事件总数与架构结果保持一致。
+
+| Profile metric | A7.4.1 | A7.5 | Delta |
+| --- | ---: | ---: | ---: |
+| Actual dual launch | 682572 | 785298 | +102726 |
+| Simple pair | 281638 | 291202 | +9564 |
+| Simple singleton | 185581 | 192404 | +6823 |
+| Control singleton | 0 | 91163 | +91163 |
+| MULDIV singleton | 0 | 2000 | +2000 |
+| Dual retire1 | 190889 | 290872 | +99983 |
+| Dual retire2 | 491683 | 494426 | +2743 |
+| Zero-retire cycles | 666734 | 609048 | -57686 |
+| Dispatch zero-retire cycles | 515674 | 483014 | -32660 |
+| Legacy pair fallback | 378454 | 368888 | -9566 |
+| Legacy→dual establishment | 42532 | 27379 | -15153 |
+| Dual→legacy transition | 27420 | 8182 | -19238 |
+| Legacy drain wait cycles | 738378 | 729507 | -8871 |
+| Dual backend wait cycles | 118720 | 152720 | +34000 |
+
+每窗口与总计满足扩展后的 class 守恒：`785298 = 291202 simple pair + 192404 simple singleton + 91163 control singleton + 2000 MULDIV singleton + 125490 lane1 control + 60859 control0 simple + 8180 LSU pair + 14000 MULDIV pair`；退休守恒为 `785298 = 290872 retire1 + 494426 retire2`。MULDIV singleton 使 shared-unit wait 计数增加 `34000`，但消除了 legacy 管线填充及其前后的域往返，MEXT 实际减少 `20001` cycles，因此该计数变化不构成退化。
+
+剩余 `8182` 次 dual→legacy 交接集中在 BRANCH_RETURN 的 `8001` 次和 MEMORY 的 `180` 次，均对应当前冻结的 LSU admission/resident 边界；非 LSU 的安全 singleton 域往返已经关闭。A7.5 独立签核通过，下一阶段进入 A7.6 分段时序综合与修正。
