@@ -832,8 +832,10 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.1 measured 354773 actual dual launches, 379273 legacy pair fallbacks and 458102 fetch-empty cycles
               - A7.2 SIGNED_OFF in 5ba2046: tagged live-response bypass plus one complete skid packet
               - A7.2 run_all.bat all passed 78/78; cycles=2831734, exact IPC=0.804968, sink/exceptions unchanged
-              - A7.3 design started from clean signed-off commit 6e00e02; scope is safe singleton simple residency only
-              - A7.3 keeps every A6 pair whitelist, legacy_idle exclusion and prefer_legacy cost gate unchanged
+              - A7.3 SIGNED_OFF in 2baec50: safe simple singleton residency; all A6 pair classes and cost gates unchanged
+              - A7.3 directed tests passed 6/6 and run_all.bat all passed 78/78 with compile 0 errors / 0 warnings
+              - A7.3 cycles=2686213, exact IPC=0.848575; sink/exceptions/hashes unchanged
+              - A7.3 measured 197652 singleton launches and 435860 retire2 cycles; actual dual launches rose to 633512
               - A7.4 will open only pair classes justified by the new counters
               - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
 ```
@@ -1800,16 +1802,19 @@ A7.1→A7.2 的真实退休数、branch mispredict、sink 和 exceptions 不变�
 
 签核后重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 `test/tb_top.sv`，八项 SHA256 全部与 A7.1/12.2 记录一致，未重建软件、未修改 golden。A7.2 已独立签核，A7 总阶段保持 `IN_PROGRESS`；下一子阶段只处理安全 singleton simple residency 与域切换，不混入 A7.4 白名单项目。
 
-#### 17.10.3 A7.3 singleton simple dual residency 设计记录
+#### 17.10.3 A7.3 singleton simple dual residency 设计与签核记录
 
 ```text
 baseline:              6e00e029cb5f5a237fda6c3d241259227b15aa17 (A7.2 signed off, clean worktree)
-status:                IN_PROGRESS
+design record commit:  979e92dc2d91136815f62a28cde883fbae08c5ec
+implementation commit: 2baec50eaa175c0ebf28d82b74bc89a245d5cfdf
+status:                SIGNED_OFF
 scope:                 bundle_dispatch + dual_alu_pipeline + directed test + A7 measurement probe
 out of scope:          Issue pairing whitelist, control/LSU/MULDIV/bitman/CSR singleton,
                        legacy pipeline, shared-unit timing and A7.4 pair classes
 rollback gate:         any architectural mismatch, exception/sink/hash change, regression failure,
                        or no overall nine-window cycle reduction
+next:                  A7.4 counter-guided selective pairing
 ```
 
 A7.2 将前端空供给从 `458102` 降至 `38810` cycles，但九窗口仍有 `397807` 个 pair 回退 legacy 和 `637875` 个 legacy-domain drain wait cycles。连续供给也让 single-uop packet 从 `256809` 增至 `271157`；若一个安全 simple singleton 夹在两个 dual-compatible bundle 之间，现有 Dispatch 会先把它送进 legacy，再等待 legacy 全部排空后切回 dual。A7.3 只消除这一类无收益的域往返。
@@ -1824,3 +1829,73 @@ A7.2 将前端空供给从 `458102` 降至 `38810` cycles，但九窗口仍有 `
 6. 性能 probe 将 simple pair 与 simple singleton 分开计数，并增加 dual `retire1` 计数；每窗口必须满足 `dual_launch = simple_pair + simple_singleton + control_pair + lsu_pair + muldiv_pair`，且在无异常的冻结 workload 中 `dual_launch = retire1 + retire2`。
 
 定向签核至少覆盖：dual mode 内 singleton、singleton 与 compatible lookahead 建立/维持 dual run、lookahead gap 等待、非兼容 lookahead 回 legacy、`prefer_legacy` 回退、active legacy/dual exclusion、非 simple singleton 保持 legacy，以及 singleton 的单 lane writeback/retire/redirect kill。随后运行受影响 directed tests、`run_all.bat all`、冻结九窗口直跑与 A7 profile A/B；直跑和 wrapper 的九条 report、overall、sink 与 PASS 行必须一致，并复核八项冻结 SHA256。
+
+实现只扩展 `bundle_dispatch` 对 dual-resident bundle 的定义：原有 pair candidate 完全不变，新增候选严格限定为 `lane0` simple singleton；尚未处于 dual mode 时仍服从 `legacy_idle`、`prefer_legacy` 与 compatible lookahead，已处于 dual mode 时则允许 singleton 保持驻留。`dual_alu_pipeline` 原有 lane0-only 数据路径不需要增加第二套执行逻辑，本阶段只收紧 accepted-class、lane1 event/retire 禁止条件和单 lane 退休断言。probe 新增 singleton 与 `retire1` 计数，不改 CPU 接口、CSR、冻结 report 或 benchmark。
+
+定向与完整回归：
+
+```text
+directed: tb_issue_bundle_fifo
+          tb_regfiles_4r2w
+          tb_a3_dual_backend
+          tb_a6_simple_control
+          tb_a6_lsu_pair
+          tb_a6_muldiv_pair
+result:   6/6 passed; compile and simulations 0 errors / 0 warnings
+logs:     F:\Tools\Temp\riscv-dual-rebuild-a7-3-*-directed-final.log
+compile:  F:\Tools\Temp\riscv-dual-rebuild-a7-3-directed-compile-final.log
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\Temp\riscv-dual-rebuild-a7-3-run_all_all-final.log
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.2 cycles | A7.3 cycles | Delta | A7.2 IPC x1000 | A7.3 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 204030 | 180026 | -24004 | 1058 | 1199 |
+| MEXT | 182042 | 186043 | +4001 | 296 | 290 |
+| BRANCH_RANDOM | 269939 | 270203 | +264 | 911 | 910 |
+| BRANCH_REGULAR | 117042 | 117043 | +1 | 820 | 820 |
+| BRANCH_SHORT | 96042 | 99043 | +3001 | 968 | 939 |
+| BRANCH_CALL | 188347 | 180240 | -8107 | 764 | 799 |
+| BRANCH_CAPACITY | 75411 | 74385 | -1026 | 916 | 929 |
+| BRANCH_RETURN | 912135 | 792131 | -120004 | 833 | 959 |
+| MEMORY | 786746 | 787099 | +353 | 764 | 763 |
+| **Overall** | **2831734** | **2686213** | **-145521** | **804** | **848** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2686213, instret=2279454, ipc_x1000=848
+exact IPC:    0.8485752991292947
+sink:         0x9D3BF787
+compile log:  F:\Tools\Temp\riscv-dual-rebuild-a7-3-nine-window-compile-final.log
+direct log:   F:\Tools\Temp\riscv-dual-rebuild-a7-3-nine-window-final.log
+profile log:  F:\Tools\Temp\riscv-dual-rebuild-a7-3-profile-final.log
+comparison:   direct and profile header, nine reports, overall and PASS are identical
+protected HEX:C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+A7.2→A7.3 的真实退休数、branch mispredict、sink 和 exceptions 不变。overall cycles 减少 `145521`（`-5.139%`），精确 IPC 提升 `5.417%`；相对旧 A0 已少 `313711` cycles（`-10.457%`），相对正确退休口径的 A1 也少 `50414` cycles（`-1.842%`）。收益主要来自 BRANCH_RETURN（`-120004`）、ALU（`-24004`）、BRANCH_CALL（`-8107`）和 BRANCH_CAPACITY（`-1026`）；MEXT、BRANCH_SHORT、BRANCH_RANDOM 与 MEMORY 的局部回退保留为 A7.4 候选成本审计的护栏，不在本阶段跨范围改写共享单元或配对白名单。rollback gate 因整体周期显著下降且所有正确性门槛不变而通过。
+
+| Profile metric | A7.2 | A7.3 | Delta |
+| --- | ---: | ---: | ---: |
+| IMEM request | 1403314 | 1400329 | -2985 |
+| Fetch packet | 1383909 | 1380924 | -2985 |
+| Fetched uop | 2496661 | 2490691 | -5970 |
+| Single-uop packet | 271157 | 271157 | 0 |
+| Fetch empty cycles | 38810 | 38810 | 0 |
+| Actual dual launch | 407501 | 633512 | +226011 |
+| Simple pair | 265458 | 293637 | +28179 |
+| Simple singleton | 0 | 197652 | +197652 |
+| Dual retire1 | 0 | 197652 | +197652 |
+| Dual retire2 | 407501 | 435860 | +28359 |
+| Legacy pair fallback | 397807 | 369447 | -28360 |
+| Prefer-legacy fallback | 345061 | 344701 | -360 |
+| Non-prefer legacy fallback | 52746 | 24746 | -28000 |
+| Legacy drain wait cycles | 637875 | 824620 | +186745 |
+| Dual backend wait cycles | 118000 | 118720 | +720 |
+
+每窗口与总计均满足 class 守恒：`633512 = 293637 simple pair + 197652 singleton + 120043 control + 8180 LSU + 14000 MULDIV`；退休守恒也成立：`633512 = 197652 retire1 + 435860 retire2`。dual backend 覆盖的有效退休指令从 A7.2 的 `815002`（`35.754%`）增至 `1069372`（`46.914%`）。`wait_legacy` 的候选定义在 A7.3 扩展后会额外计入等待 legacy 排空的 singleton，因此其数值不能与 A7.2 直接解释为退化；更稳定的域切换指标是 non-prefer legacy fallback 减少 `28000`，同时整体周期下降 `145521`。
+
+签核后重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`，八项 SHA256 全部与 A7.2/12.2 记录一致，未重建软件、未修改 golden。A7.3 已独立签核，A7 总阶段保持 `IN_PROGRESS`；下一子阶段 A7.4 只根据现有 rejection、class 与窗口计数选择性开放配对，不继续扩大 singleton 类别。
