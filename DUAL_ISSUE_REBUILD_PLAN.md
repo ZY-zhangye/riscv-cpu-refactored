@@ -720,7 +720,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
-| A5 | IN_PROGRESS | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
+| A5 | SIGNED_OFF | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
 
@@ -785,13 +785,18 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS; metrics exactly match A3
               - protected HEX and all frozen benchmark fixture hashes remained unchanged
               - next: A5 four-cycle Load, two-cycle Store, fixed EX/MEM and precise memory commit
-2026-07-13  A5 IN_PROGRESS
+2026-07-13  A5 SIGNED_OFF
               - freeze A4 signoff commit 19014ee and protected HEX SHA256 before edits
               - add an explicit bridge read-response-valid path and carry response data in EX/MEM metadata
               - make Load occupy E0-E3 and Store occupy E0-E1 under the EX resident owner
               - move the only physical Store write pulse from EX to precise MEM commit
               - arbitrate the single data port in age order: older MEM Store commit before younger EX LSU start
               - keep A3/A4 pairing whitelist unchanged; LSU dual pairing remains an A6 step
+              - implementation commit c2f0ecd; 11/11 directed and 8/8 load/store ISA tests passed
+              - run_all.bat all passed 78/78 with compile 0 errors / 0 warnings
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.758, PASS
+              - protected HEX and all frozen benchmark fixture hashes remained unchanged
+              - next: A6, open pairing classes one at a time with an independent commit and full signoff per class
 ```
 
 ### 17.3 A0 签核记录
@@ -1114,7 +1119,7 @@ A4 开始基线：
 ```text
 start commit:       f3d4b6a886a84757fd587a47489401965b01569e
 protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
-status:              IN_PROGRESS
+status:              SIGNED_OFF
 ```
 
 实现边界：
@@ -1235,3 +1240,87 @@ status:              IN_PROGRESS
 3. `tb_lsu_store_load_order`：更老 Store commit 与年轻 Load/Store 冲突时 Store 优先，年轻 resident 未 start 且下一拍请求不丢。
 4. `tb_lsu_exception_age`：misaligned、kill-before-start、kill-during-wait、外部异常均无 request/store/GPR/retire 副作用。
 5. A4 directed tests、load/store ISA、`run_all.bat all` 与九窗口通过；sink/exceptions/夹具不变，并如实记录 MEMORY 与 overall IPC。
+
+实现提交：
+
+```text
+commit:  c2f0ecdae77801c4170ab62b5c169bdd30c70777
+subject: feat: implement precise four-beat LSU
+status:  SIGNED_OFF
+```
+
+实现结果：
+
+- `lsu_exec_unit` 在 E0 锁存地址、Store data/mask、访问宽度与符号；对齐 Load 只发一个 request 并等待显式 `response_valid`，E3 才携带锁存数据离开 EX。Store 在 E1 完成，但 EX 的物理写使能恒为零。
+- `bridge` 对 read target 与 valid 各打两级，使 RAM/IO/PLIC 的锁存响应与 `dmem_rvalid` 同拍返回；被 kill 的旧 Load 响应即使与替代 Load 的 start 同拍到达，也不能完成年轻 resident。
+- 新增 `mem_store_commit`，Store 只有在 MEM resident 被下游接受且未 kill、无异常时才产生一个写脉冲；backpressure、misaligned、flush 和 exception 均抑制写入。
+- 单数据端口显式按年龄仲裁：更老的 MEM Store commit 优先，年轻 EX LSU 保持 `started=0` 并在端口释放后重试；A5 未扩大 A3/A4 pairing 白名单。
+- 新增断言检查 EX 不得产生 Store 写使能、LSU request 必须来自有效 start、killed resident 不得产生副作用，以及 Store write 必须与精确 MEM commit 同拍。
+- A5 的强制 LSU 驻留使 `rv32ui-p-sw/sh` 分别在约 `10.04/10.05 us` 完成，超过 A4 的固定 `10 us` watchdog。`tb_my_cpu` watchdog 调整为有限的 `20 us`，功能成功条件仍是明确退休到 `0x8000_0044` 且结果为 1，不能用单纯“未超时”判定通过。
+
+定向与受影响回归：
+
+```text
+tests:   tb_perf_counters
+         tb_fetch_fifo_2wide
+         tb_issue_bundle_fifo
+         tb_if_sync_btb
+         tb_regfiles_4r2w
+         tb_a3_dual_backend
+         tb_a4_execute_units
+         tb_lsu_four_beat_load
+         tb_lsu_store_commit
+         tb_lsu_store_load_order
+         tb_lsu_exception_age
+result:  11/11 passed; simulations 0 errors / 0 warnings
+logs:    F:\Tools\temp\riscv-dual-rebuild-a5-directed-*-final.log
+         F:\Tools\temp\riscv-dual-rebuild-a5-directed-tb_lsu_exception_age-post-review.log
+
+ISA:     rv32ui-p-{lw,lh,lhu,lb,lbu,sw,sh,sb}
+result:  8/8 passed
+logs:    F:\Tools\temp\riscv-dual-rebuild-a5-ui-*-final.log
+
+compile: 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a5-compile-post-review.log
+```
+
+官方回归：
+
+```text
+command: cmd /c "run_all.bat all < nul"
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a5-run_all_all-final.log
+protected HEX after restore:
+         C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Brmisp | Result dependency | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216032 | 216013 | 999 | 2 | 12002 | 0 |
+| MEXT | 190045 | 54016 | 284 | 4 | 0 | 0 |
+| BRANCH_RANDOM | 324358 | 245975 | 758 | 9475 | 24000 | 0 |
+| BRANCH_REGULAR | 111050 | 96017 | 864 | 1505 | 1501 | 0 |
+| BRANCH_SHORT | 117050 | 93015 | 794 | 3005 | 23999 | 0 |
+| BRANCH_CALL | 196463 | 144022 | 733 | 4061 | 0 | 0 |
+| BRANCH_CAPACITY | 141973 | 69133 | 486 | 1152 | 0 | 0 |
+| BRANCH_RETURN | 920170 | 760025 | 825 | 16 | 0 | 0 |
+| MEMORY | 787465 | 601238 | 763 | 185 | 2 | 0 |
+
+```text
+command:      vlog -sv +define+PERF_BENCH +define+DEBUG_EN ...; vsim tb_uart_benchmark
+sink:         0x9D3BF787
+overall:      cycles=3004606, instret=2279454, ipc_x1000=758
+result:       PERF_BENCHMARK_PASSED
+compile:      0 errors / 0 warnings
+simulation:   0 errors / 0 warnings
+compile log:  F:\Tools\temp\riscv-dual-rebuild-a5-nine-window-compile-final.log
+run log:      F:\Tools\temp\riscv-dual-rebuild-a5-nine-window-final.log
+```
+
+A4→A5 的真实退休数、sink、exceptions 与九窗口完成次数不变。强制四拍 Load/两拍 Store 使 overall cycles 从 `2794104` 增至 `3004606`（`+210502`, `+7.534%`），IPC 从 `0.815809` 降至 `0.758653`。MEMORY cycles 从 `649046` 增至 `787465`（`+138419`, `+21.327%`），IPC 从 `0.926341` 降至 `0.763511`；其余八窗口聚合 cycles 从 `2145058` 增至 `2217141`（`+72083`, `+3.360%`），聚合 IPC 从 `0.782364` 降至 `0.756928`。其中非 MEMORY 增量几乎全部来自仍包含栈访存的 BRANCH_RETURN 窗口。该性能下降是计划规定的 LSU 时序代价，A6 将按类别逐步开放安全配对，不能通过缩短 LSU、提前 Store 副作用或扩大未经签核的白名单掩盖。
+
+签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv`；SHA256 全部与 A0/A4 记录一致，未重建软件、未修改 golden。
