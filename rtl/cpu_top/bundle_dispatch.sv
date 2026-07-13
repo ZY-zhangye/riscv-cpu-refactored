@@ -67,6 +67,8 @@ module bundle_dispatch (
     logic simple1;
     logic next_simple0;
     logic next_simple1;
+    logic control1;
+    logic next_control1;
 
     assign {lane1_valid, lane0_valid, uop1, uop0} = bundle;
     assign {epoch0, age0, inst0, pc0, pred_taken0, pred_target0,
@@ -91,7 +93,7 @@ module bundle_dispatch (
     );
     pair_predecode u_predecode1 (
         .instruction(inst1), .is_simple(simple1),
-        .is_control(), .is_lsu(), .is_muldiv(),
+        .is_control(control1), .is_lsu(), .is_muldiv(),
         .uses_rs1(), .uses_rs2(), .uses_rd()
     );
     pair_predecode u_next_predecode0 (
@@ -101,23 +103,23 @@ module bundle_dispatch (
     );
     pair_predecode u_next_predecode1 (
         .instruction(next_inst1), .is_simple(next_simple1),
-        .is_control(), .is_lsu(), .is_muldiv(),
+        .is_control(next_control1), .is_lsu(), .is_muldiv(),
         .uses_rs1(), .uses_rs2(), .uses_rd()
     );
 
     assign dual_candidate = lane0_valid && lane1_valid &&
-                            simple0 && simple1;
+                            simple0 && (simple1 || control1);
     assign next_dual_candidate = next_bundle_valid && next_lane0_valid &&
                                  next_lane1_valid &&
-                                 next_simple0 && next_simple1;
+                                 next_simple0 && (next_simple1 || next_control1);
     assign dual_bundle_valid = !redirect && bundle_valid && dual_candidate &&
                                legacy_idle && !prefer_legacy &&
-                               (dual_mode || next_dual_candidate);
+                               (control1 || dual_mode || next_dual_candidate);
     // The current dual ID/EX resident commits on this edge, so a younger
     // legacy uop may enter Decode on the same edge without overlapping commit.
     assign legacy_bundle_valid = !redirect && bundle_valid &&
                                  (!dual_candidate || prefer_legacy ||
-                                  (!dual_mode && next_bundle_valid &&
+                                  (!control1 && !dual_mode && next_bundle_valid &&
                                    !next_dual_candidate));
 
 endmodule

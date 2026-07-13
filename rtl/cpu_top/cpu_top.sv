@@ -116,6 +116,26 @@ module cpu_top (
     logic bp_update_taken;
     logic [31:0] bp_update_target;
     logic [`BP_TYPE_WIDTH-1:0] bp_update_type;
+    logic legacy_br_redirect;
+    logic [31:0] legacy_br_redirect_target;
+    logic legacy_bp_update_valid;
+    logic [31:0] legacy_bp_update_pc;
+    logic legacy_bp_update_taken;
+    logic [31:0] legacy_bp_update_target;
+    logic [`BP_TYPE_WIDTH-1:0] legacy_bp_update_type;
+    logic dual_br_redirect;
+    logic [31:0] dual_br_redirect_target;
+    logic dual_bp_update_valid;
+    logic [31:0] dual_bp_update_pc;
+    logic dual_bp_update_taken;
+    logic [31:0] dual_bp_update_target;
+    logic [`BP_TYPE_WIDTH-1:0] dual_bp_update_type;
+    logic dual_external_redirect;
+    logic dual_lane1_control_event;
+    logic dual_exception_valid;
+    logic [6:0] dual_exception_code;
+    logic [31:0] dual_exception_pc;
+    logic [31:0] dual_exception_mtval;
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
     logic exception_flag;
     logic [31:0] exception_addr;
@@ -166,6 +186,10 @@ module cpu_top (
     logic [`EXE_EXC_BUS - 1:0] exe_exc_bus;
     logic branch_event;
     logic branch_mispredict_event;
+    logic legacy_branch_event;
+    logic legacy_branch_mispredict_event;
+    logic dual_branch_event;
+    logic dual_branch_mispredict_event;
     logic execute_stall_event;
     logic ex_dmem_en;
     logic [31:0] ex_dmem_addr;
@@ -181,8 +205,13 @@ module cpu_top (
     logic csr_we;
     logic [11:0] csr_waddr;
     logic [31:0] csr_wdata;
+    logic legacy_csr_we;
+    logic [11:0] legacy_csr_waddr;
+    logic [31:0] legacy_csr_wdata;
     logic [6:0] exception_code;
     logic [31:0] exception_mtval;
+    logic [6:0] legacy_exception_code;
+    logic [31:0] legacy_exception_mtval;
     logic [1:0] legacy_retire_count;
     logic [1:0] retire_count;
     logic store_event;
@@ -300,7 +329,7 @@ module cpu_top (
     dual_alu_pipeline u_dual_alu_pipeline (
         .clk(clk),
         .rst_n(rst_n),
-        .redirect(frontend_redirect),
+        .redirect(dual_external_redirect),
         .launch_valid(dual_bundle_valid),
         .launch_bundle(bundle_head),
         .launch_ready(dual_launch_ready),
@@ -330,8 +359,43 @@ module cpu_top (
         .commit_age0(),
         .commit_age1(),
         .commit_epoch0(),
-        .commit_epoch1()
+        .commit_epoch1(),
+        .branch_event(dual_branch_event),
+        .branch_mispredict_event(dual_branch_mispredict_event),
+        .branch_redirect(dual_br_redirect),
+        .branch_redirect_target(dual_br_redirect_target),
+        .bp_update_valid(dual_bp_update_valid),
+        .bp_update_pc(dual_bp_update_pc),
+        .bp_update_taken(dual_bp_update_taken),
+        .bp_update_target(dual_bp_update_target),
+        .bp_update_type(dual_bp_update_type),
+        .lane1_control_event(dual_lane1_control_event),
+        .exception_valid(dual_exception_valid),
+        .exception_code(dual_exception_code),
+        .exception_pc(dual_exception_pc),
+        .exception_mtval(dual_exception_mtval)
     );
+
+    // A dual lane1 control redirect clears the frontend but must not kill the
+    // same pair: lane0 is older and both instructions commit at that boundary.
+    // Only redirects originating outside the dual resident are kill inputs.
+    assign dual_external_redirect = legacy_br_redirect ||
+                                    (exception_flag && !dual_exception_valid);
+    assign br_redirect = dual_br_redirect || legacy_br_redirect;
+    assign br_redirect_target = dual_br_redirect ? dual_br_redirect_target :
+                                legacy_br_redirect_target;
+    assign bp_update_valid = dual_bp_update_valid || legacy_bp_update_valid;
+    assign bp_update_pc = dual_bp_update_valid ? dual_bp_update_pc :
+                          legacy_bp_update_pc;
+    assign bp_update_taken = dual_bp_update_valid ? dual_bp_update_taken :
+                             legacy_bp_update_taken;
+    assign bp_update_target = dual_bp_update_valid ? dual_bp_update_target :
+                              legacy_bp_update_target;
+    assign bp_update_type = dual_bp_update_valid ? dual_bp_update_type :
+                            legacy_bp_update_type;
+    assign branch_event = dual_branch_event || legacy_branch_event;
+    assign branch_mispredict_event = dual_branch_mispredict_event ||
+                                     legacy_branch_mispredict_event;
 
     assign dual_bundle_pop = dual_bundle_valid && dual_launch_ready;
     assign bundle_pop = legacy_bundle_pop || dual_bundle_pop;
@@ -443,15 +507,15 @@ module cpu_top (
         .exception_flag(exception_flag),
         .br_taken(br_taken),
         .br_target(br_target),
-        .br_redirect(br_redirect),
-        .br_redirect_target(br_redirect_target),
-        .bp_update_valid(bp_update_valid),
-        .bp_update_pc(bp_update_pc),
-        .bp_update_taken(bp_update_taken),
-        .bp_update_target(bp_update_target),
-        .bp_update_type(bp_update_type),
-        .branch_event(branch_event),
-        .branch_mispredict_event(branch_mispredict_event),
+        .br_redirect(legacy_br_redirect),
+        .br_redirect_target(legacy_br_redirect_target),
+        .bp_update_valid(legacy_bp_update_valid),
+        .bp_update_pc(legacy_bp_update_pc),
+        .bp_update_taken(legacy_bp_update_taken),
+        .bp_update_target(legacy_bp_update_target),
+        .bp_update_type(legacy_bp_update_type),
+        .branch_event(legacy_branch_event),
+        .branch_mispredict_event(legacy_branch_mispredict_event),
         .execute_stall_event(execute_stall_event),
         .mem_result(mem_result),
         .reg_fpu_data3(reg_fpu_data3),
@@ -477,11 +541,11 @@ module cpu_top (
         .exe_exc_bus(exe_exc_bus),
         .plic_irq(plic_irq),
         .external_irq_enable(external_irq_enable),
-        .csr_we(csr_we),
-        .csr_waddr(csr_waddr),
-        .csr_wdata(csr_wdata),
-        .exception_code(exception_code),
-        .exception_mtval(exception_mtval),
+        .csr_we(legacy_csr_we),
+        .csr_waddr(legacy_csr_waddr),
+        .csr_wdata(legacy_csr_wdata),
+        .exception_code(legacy_exception_code),
+        .exception_mtval(legacy_exception_mtval),
         .retire_count(legacy_retire_count),
         .store_commit_valid(store_event),
         .store_commit_pc(store_pc),
@@ -489,6 +553,15 @@ module cpu_top (
         .store_commit_wen(store_wen),
         .store_commit_wdata(store_wdata)
     );
+
+    assign csr_we = legacy_csr_we;
+    assign csr_waddr = legacy_csr_waddr;
+    assign csr_wdata = dual_exception_valid ? dual_exception_pc :
+                       legacy_csr_wdata;
+    assign exception_code = dual_exception_valid ? dual_exception_code :
+                            legacy_exception_code;
+    assign exception_mtval = dual_exception_valid ? dual_exception_mtval :
+                             legacy_exception_mtval;
 
     // The data port is single-ported.  An older Store at MEM commit wins over
     // a younger EX LSU request; the resident remains unstarted and retries.
@@ -596,6 +669,7 @@ module cpu_top (
         .issue_raw_event(issue_reject_raw),
         .issue_waw_event(issue_reject_waw),
         .issue_struct_event(issue_reject_struct),
+        .lane1_control_event(dual_lane1_control_event),
         .issue_qfull_event(issue_queue_full_event),
         .result_dependency_event(dual_dependency_event),
         .exception_flag(exception_flag),
@@ -613,6 +687,15 @@ module cpu_top (
         if (rst_n && (legacy_retire_count != 0) &&
             (dual_retire_count != 0)) begin
             $fatal(1, "legacy and dual domains retired in the same cycle");
+        end
+        if (rst_n && dual_bp_update_valid && legacy_bp_update_valid) begin
+            $fatal(1, "legacy and dual branches resolved in the same cycle");
+        end
+        if (rst_n && dual_exception_valid && legacy_exception_code[5]) begin
+            $fatal(1, "legacy and dual domains raised simultaneous exceptions");
+        end
+        if (rst_n && dual_exception_valid && legacy_csr_we) begin
+            $fatal(1, "dual exception overlapped a legacy CSR commit");
         end
     end
 `endif

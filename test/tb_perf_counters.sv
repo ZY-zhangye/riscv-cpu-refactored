@@ -21,6 +21,7 @@ module tb_perf_counters;
     logic issue_raw_event;
     logic issue_waw_event;
     logic issue_struct_event;
+    logic lane1_control_event;
     logic issue_qfull_event;
     logic result_dependency_event;
     logic exception_flag;
@@ -47,6 +48,7 @@ module tb_perf_counters;
         .issue_raw_event(issue_raw_event),
         .issue_waw_event(issue_waw_event),
         .issue_struct_event(issue_struct_event),
+        .lane1_control_event(lane1_control_event),
         .issue_qfull_event(issue_qfull_event),
         .result_dependency_event(result_dependency_event),
         .exception_flag(exception_flag),
@@ -101,6 +103,7 @@ module tb_perf_counters;
         input logic raw_reject,
         input logic waw_reject,
         input logic struct_reject,
+        input logic lane1_control,
         input logic qfull,
         input logic result_dependency
     );
@@ -111,6 +114,7 @@ module tb_perf_counters;
             issue_raw_event = raw_reject;
             issue_waw_event = waw_reject;
             issue_struct_event = struct_reject;
+            lane1_control_event = lane1_control;
             issue_qfull_event = qfull;
             result_dependency_event = result_dependency;
             @(posedge clk);
@@ -120,6 +124,7 @@ module tb_perf_counters;
             issue_raw_event = 1'b0;
             issue_waw_event = 1'b0;
             issue_struct_event = 1'b0;
+            lane1_control_event = 1'b0;
             issue_qfull_event = 1'b0;
             result_dependency_event = 1'b0;
         end
@@ -158,6 +163,7 @@ module tb_perf_counters;
         issue_raw_event = 1'b0;
         issue_waw_event = 1'b0;
         issue_struct_event = 1'b0;
+        lane1_control_event = 1'b0;
         issue_qfull_event = 1'b0;
         result_dependency_event = 1'b0;
 
@@ -188,13 +194,14 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_EXCEPTION, 32'd1, "perf_exception");
         expect_csr(`CSR_INSTRET,        32'd2, "instret");
 
-        drive_issue_cycle(1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b1);
-        drive_issue_cycle(1'b0, 1'b1, 1'b0, 1'b1, 1'b1, 1'b1, 1'b0);
+        drive_issue_cycle(1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1);
+        drive_issue_cycle(1'b0, 1'b1, 1'b0, 1'b1, 1'b1, 1'b0, 1'b1, 1'b0);
         expect_csr(`CSR_PERF_DUAL_ISSUE,   32'd1, "perf_dual_issue");
         expect_csr(`CSR_PERF_SINGLE_ISSUE, 32'd1, "perf_single_issue");
         expect_csr(`CSR_PERF_ISSUE_RAW,    32'd1, "perf_issue_raw");
         expect_csr(`CSR_PERF_ISSUE_WAW,    32'd1, "perf_issue_waw");
         expect_csr(`CSR_PERF_ISSUE_STRUCT, 32'd1, "perf_issue_struct");
+        expect_csr(`CSR_PERF_LANE1_CONTROL, 32'd1, "perf_lane1_control");
         expect_csr(`CSR_PERF_ISSUE_QFULL,  32'd1, "perf_issue_qfull");
         expect_csr(`CSR_PERF_RESULT_DEP,    32'd1, "perf_result_dependency");
 
@@ -215,6 +222,7 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_BRANCH,    32'd0, "cleared_perf_branch");
         expect_csr(`CSR_PERF_EXCEPTION, 32'd0, "cleared_perf_exception");
         expect_csr(`CSR_PERF_DUAL_ISSUE, 32'd0, "cleared_perf_dual_issue");
+        expect_csr(`CSR_PERF_LANE1_CONTROL, 32'd0, "cleared_perf_lane1_control");
         expect_csr(`CSR_PERF_ISSUE_QFULL, 32'd0, "cleared_perf_issue_qfull");
         expect_csr(`CSR_PERF_RESULT_DEP, 32'd0, "cleared_perf_result_dependency");
 

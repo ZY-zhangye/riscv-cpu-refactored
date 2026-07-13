@@ -44,7 +44,10 @@ module pair_predecode (
         endcase
     end
 
-    assign is_branch = (opcode == 7'b1100011);
+    assign is_branch = (opcode == 7'b1100011) &&
+                       ((funct3 == 3'b000) || (funct3 == 3'b001) ||
+                        (funct3 == 3'b100) || (funct3 == 3'b101) ||
+                        (funct3 == 3'b110) || (funct3 == 3'b111));
     assign is_jal = (opcode == 7'b1101111);
     assign is_jalr = (opcode == 7'b1100111) && (funct3 == 3'b000);
     assign is_control = is_branch || is_jal || is_jalr;

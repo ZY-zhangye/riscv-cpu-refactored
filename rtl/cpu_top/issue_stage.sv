@@ -62,6 +62,7 @@ module issue_stage (
     logic waw_hazard;
     logic structural_hazard;
     logic can_pair;
+    logic [`PAIR_CLASS_WIDTH-1:0] candidate_class;
 
     assign {epoch0, age0, inst0, pc0, pred_taken0, pred_target0,
             pred_type0, btb_hit0, ras_valid0, ras_target0} = fetch_uop0;
@@ -101,7 +102,16 @@ module issue_stage (
                          (uses_rs2_1 && (rs2_1 == rd_0)));
     assign waw_hazard = uses_rd_0 && uses_rd_1 &&
                         (rd_0 != 0) && (rd_1 != 0) && (rd_0 == rd_1);
-    assign structural_hazard = !simple0 || !simple1;
+    always_comb begin
+        candidate_class = `PAIR_NONE;
+        if (simple0 && simple1) begin
+            candidate_class = `PAIR_SIMPLE_SIMPLE;
+        end else if (simple0 && control1) begin
+            candidate_class = `PAIR_SIMPLE_CONTROL;
+        end
+    end
+
+    assign structural_hazard = (candidate_class == `PAIR_NONE);
     assign can_pair = (fetch_count >= 2) && !structural_hazard &&
                       !raw_hazard && !waw_hazard;
 
@@ -121,7 +131,7 @@ module issue_stage (
                 fetch_pop_count = 2'd2;
                 bundle = {1'b1, 1'b1, fetch_uop1, fetch_uop0};
                 pair_accepted = 1'b1;
-                pair_class = `PAIR_SIMPLE_SIMPLE;
+                pair_class = candidate_class;
             end else begin
                 fetch_pop_count = 2'd1;
                 bundle = {1'b0, 1'b1, {`FETCH_UOP_WIDTH{1'b0}}, fetch_uop0};

@@ -196,10 +196,23 @@ module tb_issue_bundle_fifo;
                      `PAIR_SIMPLE_SIMPLE, 0, 0, 0);
         clear_pipeline();
 
-        // A6.1 keeps control, LSU, MULDIV and bitman outside the dual whitelist.
-        present_pair(32'h00100093, 32'h00000463, 1, 0,
+        // A6.2 opens only lane0 simple + lane1 control.
+        present_pair(32'h00100093, 32'h00000463, 2, 1,
+                     `PAIR_SIMPLE_CONTROL, 0, 0, 0);
+        clear_pipeline();
+        // A lane1 branch consuming lane0's result is still a forbidden RAW.
+        present_pair(32'h00100093, 32'h00008463, 1, 0,
+                     `PAIR_NONE, 1, 0, 0);
+        clear_pipeline();
+        // JAL writes rd; a same-rd lane0 produces WAW and remains single.
+        present_pair(32'h00100093, 32'h008000ef, 1, 0,
+                     `PAIR_NONE, 0, 1, 0);
+        clear_pipeline();
+        // Control in the older lane is not part of the A6.2 whitelist.
+        present_pair(32'h00000463, 32'h00200113, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
+        // LSU, MULDIV and bitman remain outside the dual whitelist.
         present_pair(32'h00100093, 32'h00012103, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
