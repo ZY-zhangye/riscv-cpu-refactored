@@ -788,11 +788,20 @@ module dual_alu_pipeline (
             $fatal(1, "dual ALU ID/EX age or epoch tag mismatch");
         end
         if (rst_n && launch_fire &&
-            !((launch_simple0 &&
-               (launch_simple1 || launch_control1 || launch_lsu1 ||
-                launch_muldiv1)) ||
-              ((launch_lsu0 || launch_muldiv0) && launch_simple1))) begin
-            $fatal(1, "unsupported pairing class entered the A6.4 dual resident");
+            !((launch_simple0 && !launch_lane1_valid) ||
+              (launch_lane1_valid &&
+               ((launch_simple0 &&
+                 (launch_simple1 || launch_control1 || launch_lsu1 ||
+                  launch_muldiv1)) ||
+                ((launch_lsu0 || launch_muldiv0) && launch_simple1))))) begin
+            $fatal(1, "unsupported bundle class entered the dual resident");
+        end
+        if (rst_n && launch_fire && !launch_lane1_valid &&
+            (lane1_control_event || lsu_pair_event || muldiv_pair_event)) begin
+            $fatal(1, "simple singleton emitted a pair-class event");
+        end
+        if (rst_n && idex_valid && !idex_lane1_valid && commit_valid[1]) begin
+            $fatal(1, "simple singleton retired an invalid lane1");
         end
         if (rst_n && branch_event &&
             (!idex_valid || !idex_lane1_valid || !idex_control1)) begin

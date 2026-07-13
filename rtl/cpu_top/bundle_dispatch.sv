@@ -78,6 +78,10 @@ module bundle_dispatch (
     logic muldiv1;
     logic next_muldiv0;
     logic next_muldiv1;
+    logic pair_candidate;
+    logic next_pair_candidate;
+    logic simple_singleton_candidate;
+    logic next_simple_singleton_candidate;
     logic complex_candidate;
     logic lsu_candidate;
     logic muldiv_candidate;
@@ -125,17 +129,26 @@ module bundle_dispatch (
         .uses_rs1(), .uses_rs2(), .uses_rd()
     );
 
-    assign dual_candidate = lane0_valid && lane1_valid &&
+    assign pair_candidate = lane0_valid && lane1_valid &&
                             ((simple0 && (simple1 || control1 || lsu1 ||
                                           muldiv1)) ||
                              ((lsu0 || muldiv0) && simple1));
-    assign next_dual_candidate = next_bundle_valid && next_lane0_valid &&
+    assign simple_singleton_candidate = lane0_valid && !lane1_valid &&
+                                        simple0;
+    assign dual_candidate = pair_candidate || simple_singleton_candidate;
+    assign next_pair_candidate = next_bundle_valid && next_lane0_valid &&
                                  next_lane1_valid &&
                                  ((next_simple0 && (next_simple1 ||
                                                    next_control1 || next_lsu1 ||
                                                    next_muldiv1)) ||
                                   ((next_lsu0 || next_muldiv0) &&
                                    next_simple1));
+    assign next_simple_singleton_candidate = next_bundle_valid &&
+                                             next_lane0_valid &&
+                                             !next_lane1_valid &&
+                                             next_simple0;
+    assign next_dual_candidate = next_pair_candidate ||
+                                 next_simple_singleton_candidate;
     assign lsu_candidate = lsu0 || lsu1;
     assign muldiv_candidate = muldiv0 || muldiv1;
     assign next_simple_pair = next_bundle_valid && next_lane0_valid &&
@@ -152,8 +165,9 @@ module bundle_dispatch (
     // while any older legacy pipeline state still owns the backend.
     assign muldiv_run_candidate = muldiv_candidate;
     // Control pairs resolve frontend state and may enter an idle dual domain
-    // directly.  An LSU pair uses the same run-establishment lookahead as a
-    // simple pair so an isolated memory operation does not pay a domain switch.
+    // directly.  Plain simple bundles, including lane0-only singletons, enter
+    // only inside an established run or when a compatible younger bundle can
+    // amortize the domain switch.  An LSU pair keeps its stricter run rule.
     assign complex_candidate = control1;
     assign dual_schedule = complex_candidate ||
                            (!lsu_candidate && !muldiv_candidate &&

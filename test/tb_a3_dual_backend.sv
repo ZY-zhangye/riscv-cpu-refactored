@@ -36,6 +36,9 @@ module tb_a3_dual_backend;
     logic [`FETCH_AGE_WIDTH-1:0] commit_age1;
     logic [`FETCH_EPOCH_WIDTH-1:0] commit_epoch0;
     logic [`FETCH_EPOCH_WIDTH-1:0] commit_epoch1;
+    logic lane1_control_event;
+    logic lsu_pair_event;
+    logic muldiv_pair_event;
     logic [4:0] legacy_raddr1;
     logic [4:0] legacy_raddr2;
     logic [31:0] legacy_rdata1;
@@ -177,9 +180,9 @@ module tb_a3_dual_backend;
         .bp_update_taken(),
         .bp_update_target(),
         .bp_update_type(),
-        .lane1_control_event(),
-        .lsu_pair_event(),
-        .muldiv_pair_event(),
+        .lane1_control_event(lane1_control_event),
+        .lsu_pair_event(lsu_pair_event),
+        .muldiv_pair_event(muldiv_pair_event),
         .exception_valid(),
         .exception_code(),
         .exception_pc(),
@@ -353,8 +356,73 @@ module tb_a3_dual_backend;
             $fatal(1, "killed dual pair changed architectural state");
         end
 
-        // Dispatch accepts only supported pair ALU bundles and waits for the
-        // opposite domain to drain before switching.
+        // A7.3 admits a lane0-only simple uop into the same resident without
+        // manufacturing a lane1 retirement or any pair-class event.
+        @(negedge clk);
+        launch_bundle = make_single(32'h00B0_0493,
+                                    32'h0000_0380, 32'd12);
+        launch_valid = 1'b1;
+        @(posedge clk);
+        #1;
+        if ((commit_valid !== 2'b01) || (commit_wen !== 2'b01) ||
+            (commit_waddr0 !== 5'd9) || (commit_wdata0 !== 32'd11) ||
+            (retire_count !== 2'd1) || lane1_control_event ||
+            lsu_pair_event || muldiv_pair_event) begin
+            $fatal(1, "simple singleton dual retirement mismatch");
+        end
+        @(negedge clk);
+        launch_bundle = make_single(32'h0014_8713,
+                                    32'h0000_0384, 32'd13);
+        #1;
+        if (!dependency_event || pending_stall_event || !launch_ready) begin
+            $fatal(1, "dependent singleton missed same-edge WB bypass");
+        end
+        @(posedge clk);
+        #1;
+        if ((commit_valid !== 2'b01) || (commit_wen !== 2'b01) ||
+            (commit_waddr0 !== 5'd14) || (commit_wdata0 !== 32'd12) ||
+            (retire_count !== 2'd1)) begin
+            $fatal(1, "dependent singleton result mismatch");
+        end
+        @(negedge clk);
+        launch_valid = 1'b0;
+        @(posedge clk);
+        @(negedge clk);
+        legacy_raddr1 = 5'd9;
+        legacy_raddr2 = 5'd14;
+        #1;
+        if ((legacy_rdata1 !== 32'd11) || (legacy_rdata2 !== 32'd12)) begin
+            $fatal(1, "simple singleton chain did not commit through lane0");
+        end
+
+        // Redirect before the architectural edge kills a singleton exactly as
+        // it kills a pair; lane1 remains invalid throughout the resident.
+        launch_bundle = make_single(32'h00D0_0693,
+                                    32'h0000_0388, 32'd14);
+        launch_valid = 1'b1;
+        @(posedge clk);
+        #1;
+        if ((commit_valid !== 2'b01) || (retire_count !== 2'd1)) begin
+            $fatal(1, "redirect singleton did not become resident");
+        end
+        @(negedge clk);
+        launch_valid = 1'b0;
+        redirect = 1'b1;
+        #1;
+        if ((commit_valid != 0) || (retire_count != 0)) begin
+            $fatal(1, "redirect did not suppress singleton commit");
+        end
+        @(posedge clk);
+        @(negedge clk);
+        redirect = 1'b0;
+        legacy_raddr1 = 5'd13;
+        #1;
+        if ((legacy_rdata1 != 0) || busy) begin
+            $fatal(1, "killed singleton changed architectural state");
+        end
+
+        // Dispatch accepts supported pair bundles and safe simple singletons,
+        // and waits for the opposite domain to drain before switching.
         dispatch_bundle_valid = 1'b1;
         dispatch_bundle = make_pair(32'h0010_0093, 32'h0020_0113,
                                     32'h0000_0400, 32'd12);
@@ -448,10 +516,101 @@ module tb_a3_dual_backend;
         end
         dispatch_bundle = make_single(32'h0010_0493,
                                       32'h0000_0428, 32'd22);
+        dispatch_next_bundle_valid = 1'b0;
         #1;
-        if (dispatch_dual_candidate || !dispatch_legacy_valid) begin
-            $fatal(1, "single simple uop escaped the legacy backend");
+        if (!dispatch_dual_candidate || dispatch_next_dual_candidate ||
+            dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "simple singleton did not wait for initial lookahead");
         end
+        dispatch_next_bundle_valid = 1'b1;
+        dispatch_next_bundle = make_single(32'h0080_00EF,
+                                           32'h0000_042C, 32'd23);
+        #1;
+        if (dispatch_next_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "isolated simple singleton did not fall back to legacy");
+        end
+        dispatch_next_bundle = make_single(32'h0020_0513,
+                                           32'h0000_042C, 32'd23);
+        #1;
+        if (!dispatch_next_dual_candidate || !dispatch_dual_valid ||
+            dispatch_legacy_valid) begin
+            $fatal(1, "compatible singleton lookahead did not establish dual run");
+        end
+        dispatch_legacy_idle = 1'b0;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "simple singleton crossed an active legacy domain");
+        end
+        dispatch_legacy_idle = 1'b1;
+        dispatch_prefer_legacy = 1'b1;
+        #1;
+        if (dispatch_dual_valid || !dispatch_legacy_valid) begin
+            $fatal(1, "simple singleton ignored the legacy cost gate");
+        end
+        dispatch_dual_block_legacy = 1'b1;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "active dual resident did not block singleton fallback");
+        end
+        dispatch_dual_block_legacy = 1'b0;
+        dispatch_prefer_legacy = 1'b0;
+        dispatch_dual_mode = 1'b1;
+        dispatch_next_bundle_valid = 1'b0;
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "dual mode did not retain a simple singleton");
+        end
+        dispatch_dual_mode = 1'b0;
+
+        // Every non-simple singleton remains on the legacy path.  A7.3 does
+        // not open control, LSU, MULDIV, bitman or CSR singleton classes.
+        dispatch_bundle = make_single(32'h0080_00EF,
+                                      32'h0000_0430, 32'd24);
+        #1;
+        if (dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "control singleton escaped the legacy backend");
+        end
+        dispatch_bundle = make_single(32'h0001_2083,
+                                      32'h0000_0434, 32'd25);
+        #1;
+        if (dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "LSU singleton escaped the legacy backend");
+        end
+        dispatch_bundle = make_single(32'h0220_81B3,
+                                      32'h0000_0438, 32'd26);
+        #1;
+        if (dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "MULDIV singleton escaped the legacy backend");
+        end
+        dispatch_bundle = make_single(32'h4031_70B3,
+                                      32'h0000_043C, 32'd27);
+        #1;
+        if (dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "bitman singleton escaped the legacy backend");
+        end
+        dispatch_bundle = make_single(32'hC000_2573,
+                                      32'h0000_0440, 32'd28);
+        #1;
+        if (dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "CSR singleton escaped the legacy backend");
+        end
+        dispatch_bundle = make_single(32'h0030_0593,
+                                      32'h0000_0444, 32'd29);
+        dispatch_next_bundle_valid = 1'b1;
+        dispatch_next_bundle = make_single(32'h0040_0613,
+                                           32'h0000_0448, 32'd30);
+        dispatch_redirect = 1'b1;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "redirect did not suppress singleton dispatch");
+        end
+        dispatch_redirect = 1'b0;
 
         // Standalone scoreboard checks pending, result forwarding, kill and
         // youngest-producer priority across the EX/MEM/WB slot model.
