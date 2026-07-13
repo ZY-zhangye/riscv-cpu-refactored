@@ -166,6 +166,19 @@ module tb_a6_simple_control;
         };
     endfunction
 
+    function automatic logic [`ISSUE_BUNDLE_WIDTH-1:0] make_control_single(
+        input logic [31:0] inst0,
+        input logic [31:0] pc0,
+        input logic [31:0] age0,
+        input logic pred_taken0,
+        input logic [31:0] pred_target0
+    );
+        make_control_single = {
+            1'b0, 1'b1, {`FETCH_UOP_WIDTH{1'b0}},
+            make_uop(inst0, pc0, age0, pred_taken0, pred_target0)
+        };
+    endfunction
+
     task automatic seed_reg(
         input logic [4:0] addr,
         input logic [31:0] data
@@ -226,6 +239,31 @@ module tb_a6_simple_control;
             if (!launch_ready || !rf_read_en ||
                 !control0_simple_event || lane1_control_event) begin
                 $fatal(1, "control0+simple1 pair was not accepted atomically");
+            end
+            @(posedge clk);
+            #0.1;
+            launch_valid = 1'b0;
+        end
+    endtask
+
+    task automatic launch_control_single(
+        input logic [31:0] inst0,
+        input logic [31:0] pc0,
+        input logic [31:0] age0,
+        input logic pred_taken0,
+        input logic [31:0] pred_target0
+    );
+        begin
+            if (busy) $fatal(1, "control singleton launched into a busy resident");
+            @(negedge clk);
+            launch_bundle = make_control_single(
+                inst0, pc0, age0, pred_taken0, pred_target0
+            );
+            launch_valid = 1'b1;
+            #0.1;
+            if (!launch_ready || !rf_read_en || lane1_control_event ||
+                control0_simple_event) begin
+                $fatal(1, "control singleton was not accepted as lane0 only");
             end
             @(posedge clk);
             #0.1;
@@ -484,6 +522,21 @@ module tb_a6_simple_control;
         #0.1;
         redirect = 1'b0;
         expect_reg(5'd17, 32'd0, "externally killed younger simple");
+
+        // A lane0-only JAL reuses the same precise control path without
+        // manufacturing a younger lane or a pair-class event.
+        launch_control_single(32'h0080_02ef, 32'h0000_e000, 32'd140,
+                              1'b1, 32'h0000_e008);
+        if ((commit_valid != 2'b01) || (retire_count != 1) ||
+            !commit_wen[0] || commit_wen[1] ||
+            (commit_waddr0 != 5'd5) ||
+            (commit_wdata0 != 32'h0000_e004) ||
+            !branch_event || branch_redirect || branch_mispredict_event ||
+            (bp_update_type != `BP_TYPE_CALL)) begin
+            $fatal(1, "control singleton JAL commit mismatch");
+        end
+        commit_and_drain();
+        expect_reg(5'd5, 32'h0000_e004, "control singleton JAL link");
 
         if (control_launch_count != 6) begin
             $fatal(1, "lane1 control launch counter expected 6 got %0d",

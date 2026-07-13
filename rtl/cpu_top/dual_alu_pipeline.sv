@@ -723,7 +723,7 @@ module dual_alu_pipeline (
     assign control0_simple_event = launch_fire && launch_control0 &&
                                    launch_simple1;
     assign lsu_pair_event = launch_fire && (launch_lsu0 || launch_lsu1);
-    assign muldiv_pair_event = launch_fire &&
+    assign muldiv_pair_event = launch_fire && launch_lane1_valid &&
                                (launch_muldiv0 || launch_muldiv1);
 
     assign branch_exception_valid = branch_iam;
@@ -825,22 +825,22 @@ module dual_alu_pipeline (
             $fatal(1, "dual ALU ID/EX age or epoch tag mismatch");
         end
         if (rst_n && launch_fire &&
-            !((launch_simple0 && !launch_lane1_valid) ||
-              (launch_lane1_valid &&
-               ((launch_simple0 &&
-                 (launch_simple1 || launch_control1 || launch_lsu1 ||
-                  launch_muldiv1)) ||
-                ((launch_control0 || launch_lsu0 || launch_muldiv0) &&
-                 launch_simple1))))) begin
+            (!launch_lane1_valid ?
+                !(launch_simple0 || launch_control0 || launch_muldiv0) :
+                !((launch_simple0 &&
+                   (launch_simple1 || launch_control1 || launch_lsu1 ||
+                    launch_muldiv1)) ||
+                  ((launch_control0 || launch_lsu0 || launch_muldiv0) &&
+                   launch_simple1)))) begin
             $fatal(1, "unsupported bundle class entered the dual resident");
         end
         if (rst_n && launch_fire && !launch_lane1_valid &&
             (lane1_control_event || control0_simple_event ||
              lsu_pair_event || muldiv_pair_event)) begin
-            $fatal(1, "simple singleton emitted a pair-class event");
+            $fatal(1, "singleton emitted a pair-class event");
         end
         if (rst_n && idex_valid && !idex_lane1_valid && commit_valid[1]) begin
-            $fatal(1, "simple singleton retired an invalid lane1");
+            $fatal(1, "singleton retired an invalid lane1");
         end
         if (rst_n && branch_event &&
             (!idex_valid || (idex_control0 == idex_control1) ||
@@ -863,8 +863,9 @@ module dual_alu_pipeline (
             $fatal(1, "lane0 control mispredict retired younger lane1");
         end
         if (rst_n && branch_event && idex_control0 && !branch_mispredict &&
-            !branch_exception_valid && (commit_valid != 2'b11)) begin
-            $fatal(1, "correct lane0 control pair did not retire both lanes");
+            !branch_exception_valid &&
+            (commit_valid != {idex_lane1_valid, 1'b1})) begin
+            $fatal(1, "correct lane0 control did not retire every valid lane");
         end
         if (rst_n && branch_redirect && branch_exception_valid) begin
             $fatal(1, "misaligned lane1 control emitted both redirect and exception");

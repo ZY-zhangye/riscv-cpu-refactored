@@ -140,6 +140,15 @@ module tb_a6_muldiv_pair;
                      make_uop(inst0, pc0, age0)};
     endfunction
 
+    function automatic logic [`ISSUE_BUNDLE_WIDTH-1:0] make_single(
+        input logic [31:0] inst0,
+        input logic [31:0] pc0,
+        input logic [31:0] age0
+    );
+        make_single = {1'b0, 1'b1, {`FETCH_UOP_WIDTH{1'b0}},
+                       make_uop(inst0, pc0, age0)};
+    endfunction
+
     task automatic seed_reg(
         input logic [4:0] addr,
         input logic [31:0] data
@@ -152,6 +161,59 @@ module tb_a6_muldiv_pair;
             @(posedge clk);
             #0.1;
             seed_wen = 1'b0;
+        end
+    endtask
+
+    task automatic run_single_mul(
+        input logic [31:0] inst0,
+        input logic [4:0] expected_rd0,
+        input logic [31:0] expected_data0,
+        input logic [31:0] pc0,
+        input logic [31:0] age0
+    );
+        integer starts_before;
+        integer dones_before;
+        integer events_before;
+        integer commits_before;
+        integer guard;
+        begin
+            starts_before = mul_start_count;
+            dones_before = mul_done_count;
+            events_before = pair_event_count;
+            commits_before = pair_commit_count;
+            if (busy) $fatal(1, "MUL singleton launched into a busy resident");
+            @(negedge clk);
+            launch_bundle = make_single(inst0, pc0, age0);
+            launch_valid = 1'b1;
+            #0.1;
+            if (!launch_ready || !rf_read_en || muldiv_pair_event) begin
+                $fatal(1, "MUL singleton launch or pair-event mismatch");
+            end
+            @(posedge clk);
+            #0.1;
+            launch_valid = 1'b0;
+            guard = 0;
+            while (commit_valid == 2'b00) begin
+                @(posedge clk);
+                #0.1;
+                guard = guard + 1;
+                if (guard > 12) $fatal(1, "MUL singleton timed out");
+            end
+            if ((commit_valid != 2'b01) || (retire_count != 1) ||
+                (commit_wen != 2'b01) ||
+                (commit_waddr0 != expected_rd0) ||
+                (commit_wdata0 != expected_data0)) begin
+                $fatal(1, "MUL singleton precise commit mismatch");
+            end
+            @(posedge clk);
+            #0.1;
+            expect_reg(expected_rd0, expected_data0, "MUL singleton");
+            if ((mul_start_count != (starts_before + 1)) ||
+                (mul_done_count != (dones_before + 1)) ||
+                (pair_event_count != events_before) ||
+                (pair_commit_count != commits_before)) begin
+                $fatal(1, "MUL singleton event ownership mismatch");
+            end
         end
     endtask
 
@@ -473,6 +535,13 @@ module tb_a6_muldiv_pair;
                  enc_r(7'b0000001, 5'd2, 5'd1, 3'b110, 5'd9),
                  5'd10, 32'd16, 5'd9, 32'b0,
                  32'h10b0, 32'd23);
+
+        // A lane0-only MUL reuses the same resident but must not increment the
+        // architectural MULDIV-pair event or manufacture a lane1 retirement.
+        seed_reg(5'd1, 32'd6);
+        seed_reg(5'd2, 32'd7);
+        run_single_mul(enc_r(7'b0000001, 5'd2, 5'd1, 3'b000, 5'd26),
+                       5'd26, 32'd42, 32'h10b8, 32'd24);
 
         // External redirects kill the resident and suppress both lane writes.
         seed_reg(5'd1, 32'd6);

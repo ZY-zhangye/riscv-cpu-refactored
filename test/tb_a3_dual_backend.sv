@@ -558,9 +558,9 @@ module tb_a3_dual_backend;
         dispatch_next_bundle = make_single(32'h0080_00EF,
                                            32'h0000_042C, 32'd23);
         #1;
-        if (dispatch_next_dual_candidate || dispatch_dual_valid ||
-            !dispatch_legacy_valid) begin
-            $fatal(1, "isolated simple singleton did not fall back to legacy");
+        if (!dispatch_next_dual_candidate || !dispatch_dual_valid ||
+            dispatch_legacy_valid) begin
+            $fatal(1, "control-singleton lookahead did not preserve dual run");
         end
         dispatch_next_bundle = make_single(32'h0020_0513,
                                            32'h0000_042C, 32'd23);
@@ -595,15 +595,29 @@ module tb_a3_dual_backend;
         end
         dispatch_dual_mode = 1'b0;
 
-        // Every non-simple singleton remains on the legacy path.  A7.3 does
-        // not open control, LSU, MULDIV, bitman or CSR singleton classes.
+        // A lane0 control singleton reuses the already-signed-off branch unit
+        // and may establish an idle dual run without waiting for lookahead.
         dispatch_bundle = make_single(32'h0080_00EF,
                                       32'h0000_0430, 32'd24);
         #1;
-        if (dispatch_dual_candidate || dispatch_dual_valid ||
-            !dispatch_legacy_valid) begin
-            $fatal(1, "control singleton escaped the legacy backend");
+        if (!dispatch_dual_candidate || !dispatch_dual_valid ||
+            dispatch_legacy_valid) begin
+            $fatal(1, "control singleton did not enter the dual backend");
         end
+        dispatch_prefer_legacy = 1'b1;
+        #1;
+        if (dispatch_dual_valid || !dispatch_legacy_valid) begin
+            $fatal(1, "control singleton ignored the legacy cost gate");
+        end
+        dispatch_prefer_legacy = 1'b0;
+        dispatch_legacy_idle = 1'b0;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "control singleton crossed an active legacy domain");
+        end
+        dispatch_legacy_idle = 1'b1;
+
+        // LSU, bitman and CSR singletons remain on the legacy path.
         dispatch_bundle = make_single(32'h0001_2083,
                                       32'h0000_0434, 32'd25);
         #1;
@@ -614,10 +628,16 @@ module tb_a3_dual_backend;
         dispatch_bundle = make_single(32'h0220_81B3,
                                       32'h0000_0438, 32'd26);
         #1;
-        if (dispatch_dual_candidate || dispatch_dual_valid ||
-            !dispatch_legacy_valid) begin
-            $fatal(1, "MULDIV singleton escaped the legacy backend");
+        if (!dispatch_dual_candidate || !dispatch_dual_valid ||
+            dispatch_legacy_valid) begin
+            $fatal(1, "MULDIV singleton did not enter the dual backend");
         end
+        dispatch_prefer_legacy = 1'b1;
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "legacy cooldown made MULDIV singleton unreachable");
+        end
+        dispatch_prefer_legacy = 1'b0;
         dispatch_bundle = make_single(32'h4031_70B3,
                                       32'h0000_043C, 32'd27);
         #1;
