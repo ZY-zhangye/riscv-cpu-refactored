@@ -373,12 +373,28 @@ wb     lane0/lane1: valid, dest, result_valid, kill
 
 不得为了 IPC 一次开放全部组合。
 
-### A7：200 MHz 时序收敛
+### A7：性能恢复与 200 MHz 时序收敛
 
-- 功能和九窗口通过后再做综合/实现。
-- 首先检查 RF output -> forwarding -> ALU/branch/AGU，以及 Fetch FIFO peek -> pairing -> bundle FIFO write。
-- 若 5.000 ns 未通过，只在报告指出的边界增加寄存，不进行平均切拍。
-- 每次时序改动都重新运行九窗口 IPC A/B。
+A7 在最终时序签核前先完成可观测性与两项已确认的性能恢复，按以下子阶段独立提交、回归和九窗口签核，不得跨阶段混入白名单扩展：
+
+1. **A7.1 性能可观测性与冻结基线**
+   - 使用冻结 `tb_uart_benchmark` 外的 measurement-only probe，记录前端 request/packet/uop、单 uop packet、Issue 可接收但 Fetch FIFO 为空、实际 dual launch、实际 simple pair、双退休、pair 回退 legacy、prefer-legacy 回退、等待 legacy 排空和等待 dual resident。
+   - probe 只观察既有层次信号，不修改 RTL、`test/tb_top.sv`、21-word 报告、软件、HEX 或 golden。
+   - 以 A6.4 九窗口为基线，要求 cycles/instret/IPC、sink、exceptions 和原报告 21 项逐窗口完全不变，并检查 `actual dual launch = simple + control + LSU + MULDIV` 与 `fetch uops = 2 * packets - single packets`。
+2. **A7.2 前端连续取指请求**
+   - 消除 `req_valid` 导致的隔拍请求，在同步 IROM 一拍响应条件下允许每拍接受一个新的 PC/PC+4 request。
+   - request/response 必须携带 PC、epoch、BTB/RAS 快照；redirect 同拍及迟到 response 不得进入 Fetch FIFO。
+   - 定向覆盖连续 request、backpressure、slot0 taken 单 uop packet、lane1 taken、redirect in-flight 和 FIFO full/release；九窗口必须报告供给率与 IPC A/B。
+3. **A7.3 降低 dual/legacy 域切换**
+   - 优先使 dual 数据通路接收可安全执行的 singleton simple uop，使 RAW/WAW 拆单或短片段不必仅因未配对而切回 legacy。
+   - 以实际 dual launch、legacy pair fallback、legacy drain wait 和双退休计数签核；不得绕过老指令排空、异常年龄、Store commit 或 shared-unit exclusion。
+4. **A7.4 数据驱动的选择性配对**
+   - 只根据 A7.1–A7.3 数据选择候选；优先评估纯 simple WAW younger-wins、单周期 simple RAW lane0->lane1 bypass、bitman+simple 和 control0+simple1 精确取消。
+   - 双 LSU、双 MULDIV 在没有新增物理端口/执行单元时继续禁止；当前原子 LSU resident 下不得仅为提高配对计数放宽门限。
+5. **A7.5 200 MHz 最终收敛**
+   - 功能和九窗口性能门槛通过后再做综合/实现。
+   - 首先检查 RF output -> forwarding -> ALU/branch/AGU，以及 Fetch FIFO peek -> pairing -> bundle FIFO write。
+   - 若 5.000 ns 未通过，只在报告指出的边界增加寄存，不进行平均切拍；每次时序改动都重新运行九窗口 IPC A/B。
 
 ## 11. RTL 回归计划
 
@@ -722,7 +738,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A4 | SIGNED_OFF | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | SIGNED_OFF | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | SIGNED_OFF | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
-| A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
+| A7 | IN_PROGRESS | A7.1 可观测性、A7.2 前端供给、A7.3 域切换、A7.4 选择性配对、A7.5 最终时序 | 每个子阶段独立提交、回归和九窗口 A/B；最终官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；以修正后有效退休口径报告 IPC，并同时记录相对 A0 的 cycles 与 `IPC x Fmax`；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果 |
 
 ### 17.1 每阶段统一签核流程
 
@@ -810,6 +826,12 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A6.4 SIGNED_OFF in c2924e6: one shared MUL/DIV, atomic hold/retire and completion-edge bypass; 78/78 and nine-window PASS
               - A6 final: cycles=2999204, instret=2279454, ipc_x1000=760, sink=0x9D3BF787, exceptions=0
               - next: A7 final functional/performance audit and 200 MHz timing convergence
+2026-07-13  A7 IN_PROGRESS
+              - A7.1 first adds a measurement-only probe; no RTL or frozen fixture changes
+              - A7.2 will remove the every-other-cycle IF request ceiling with tagged continuous requests
+              - A7.3 will reduce dual/legacy switching, beginning with safe singleton simple residency
+              - A7.4 will open only pair classes justified by the new counters
+              - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
 ```
 
 ### 17.3 A0 签核记录
