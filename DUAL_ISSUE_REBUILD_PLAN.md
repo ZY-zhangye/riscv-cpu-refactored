@@ -717,7 +717,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | 阶段 | 状态 | 实施范围 | 阶段签核门槛 |
 | --- | --- | --- | --- |
 | A0 | SIGNED_OFF | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
-| A1 | PENDING | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
+| A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | PENDING | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | PENDING | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
@@ -746,7 +746,16 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - run_all.bat all: 78/78 passed (1 perf-counter unit test + 77 ISA), 0 failed
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.824, PASS
               - protected rv32-p-riscv.hex remained at its pre-run SHA256
-              - next: begin A1 synchronous dual-lane IROM/BTB request stage
+2026-07-13  A1 SIGNED_OFF
+              - added synchronous PC/PC+4 IROM request and tagged IF0/IF1 response
+              - added 128-entry replicated synchronous BTB, 2-bit counters and write-through
+              - added branch/JAL/JALR/call/return types and an 8-entry resolved-update RAS
+              - serialized IF1 packets into the old Decode with one backpressure prefetch slot
+              - redirect epoch discards in-flight responses and resident/prefetched wrong-path packets
+              - predictor, RAS, redirect and branch event share one branch_resolve_fire pulse
+              - tb_if_sync_btb passed; run_all.bat all passed 78/78
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.832, PASS
+              - next: begin A2 Fetch FIFO, atomic Bundle FIFO and pairing-only Issue
 ```
 
 ### 17.3 A0 签核记录
@@ -799,3 +808,85 @@ run log:     F:\Tools\temp\riscv-dual-rebuild-a0\nine_window_benchmark_final.log
 `test/tb_top.sv` 的 A0 适配只移除 L0 不存在的 P5 第二 lane debug 端口，并把 P5 issue queue 层次观察放到默认关闭的 `P5_ISSUE_QUEUE_PROFILE` 宏下。软件、预生成 HEX、21-word 报告布局、九个窗口、邮箱、magic/version、timeout、expected sink、exceptions 检查和 overall IPC 算法均未修改。
 
 Questa 在仿真时刻 0 对 `rtl/cpu_top/divider.sv:43` 报告一次 `Infinity results from division operation` warning；它不属于编译 warning，未影响九窗口结果。后续 A4 模块化 Divider 时应消除该未初始化组合除法诊断。
+
+### 17.4 A1 签核记录
+
+实现提交：
+
+```text
+commit:  915e441e2de76932247ea3b9e4300e7b4fe99f6d
+subject: frontend: add synchronous dual-lane IROM/BTB request stage
+```
+
+实现边界：
+
+- `soc_inst_ram` 和 CPU IROM 接口增加 `PC+4` 同步读口；两路用同一个原子 request enable。
+- IF0 锁存 packet PC、epoch 和 RAS top；IF1 同拍接收两路 IROM 与两路同步 BTB 响应。
+- A1 仍向旧 Decode 每拍最多发送一条 uop，lane0/lane1 按年龄串行输出；一个最小预取 packet 槽只用于吸收 Decode backpressure，不执行 A2 的 FIFO、配对或双发功能。
+- BTB 为 128 项 direct-mapped、双读副本、2-bit 饱和 counter，保存 tag、target 和 branch/JAL/JALR/call/return type；update 同步广播到两个副本。
+- BTB 查询和 update 同索引时采用显式 write-through，新 tag 与新 counter/target/type 在该次同步响应中可见。
+- RAS 深度 8，A1 采用已解析控制流单脉冲更新；return 查询优先使用随 request 锁存的 RAS top。
+- redirect 翻转 epoch，并原子丢弃飞行中 IROM/BTB 响应、active packet 和 prefetch packet。
+- EX 中的 redirect、predictor update、RAS update 和 branch 性能事件统一由 `branch_resolve_fire` 驱动，避免下游阻塞时重复消费。
+
+定向测试：
+
+```text
+test:    tb_if_sync_btb
+result:  IF SYNC BTB TEST PASSED
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a1-if-directed-final.log
+```
+
+覆盖点：
+
+- 冷启动双路同步 IROM 的 PC/指令 tag 对齐和 lane0→lane1 年龄顺序；
+- lane0 taken 使 lane1 无效，lane1 taken 保留两条并选择 lane1 target；
+- BTB update/read 同址 write-through；
+- JAL 与通用 JALR target；
+- resolved call push 后 return 使用 RAS target；
+- redirect 发生在 request in-flight 时旧 epoch response 不得输出；
+- Decode stall 时 active uop 保持稳定、下一 packet 进入 prefetch，恢复后顺序不变。
+
+官方回归：
+
+```text
+command: cmd /c run_all.bat all
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a1-run_all_all-final.log
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Brmisp | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216022 | 216013 | 999 | 2 | 0 |
+| MEXT | 192031 | 54016 | 281 | 4 | 0 |
+| BRANCH_RANDOM | 293209 | 245975 | 838 | 9475 | 0 |
+| BRANCH_REGULAR | 105036 | 96017 | 914 | 1505 | 0 |
+| BRANCH_SHORT | 111036 | 93015 | 837 | 3005 | 0 |
+| BRANCH_CALL | 184262 | 144022 | 781 | 4061 | 0 |
+| BRANCH_CAPACITY | 138639 | 69133 | 498 | 1152 | 0 |
+| BRANCH_RETURN | 848082 | 760025 | 896 | 16 | 0 |
+| MEMORY | 648310 | 601238 | 927 | 185 | 0 |
+| **Overall** | **2736627** | **2279454** | **832** | **19405** | **0** |
+
+```text
+header:      version=5, cpu_freq_hz=125000000, sink=0x9D3BF787
+result:      PERF_BENCHMARK_PASSED
+A0 overall:  cycles=2999924, instret=2474274, ipc_x1000=824
+A1 overall:  cycles=2736627, instret=2279454, ipc_x1000=832
+IPC change:  +8 x1000 (+0.97%)
+compile log: F:\Tools\temp\riscv-dual-rebuild-a1-nine-window-compile-final.log
+run log:     F:\Tools\temp\riscv-dual-rebuild-a1-nine-window-final.log
+```
+
+A1 发现 A0 的每个窗口都满足：
+
+```text
+A0 instret - A1 instret = A0 branch_mispredict
+```
+
+九窗口合计差值为 `2474274 - 2279454 = 194820`，也等于 A0 九窗口 mispredict 合计。根因是旧 `if_stage` 在 redirect 时把 `NOP_INST` 作为有效 uop 送入后端并退休；A1 的 epoch/valid 丢弃不再把错误路径 bubble 计入 `instret`。软件镜像、sink 和 exceptions 均未变化。后续 IPC 比较以保留该修正的 A1/A2 计数语义为准，同时继续通过 commit trace 断言保证真实指令不丢失。
