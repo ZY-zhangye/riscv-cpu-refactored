@@ -92,6 +92,8 @@ module bundle_dispatch (
     logic lsu_candidate;
     logic muldiv_candidate;
     logic next_simple_pair;
+    logic next_control_pair;
+    logic next_fast_continuation;
     logic lsu_run_candidate;
     logic muldiv_run_candidate;
     logic effective_prefer_legacy;
@@ -178,11 +180,22 @@ module bundle_dispatch (
     assign next_simple_pair = next_bundle_valid && next_lane0_valid &&
                               next_lane1_valid && next_simple0 &&
                               next_simple1;
+    assign next_control_pair = next_bundle_valid && next_lane0_valid &&
+                               next_lane1_valid &&
+                               ((next_simple0 && next_control1) ||
+                                (next_control0 && next_simple1));
+    assign next_fast_continuation = next_simple_pair ||
+                                    next_simple_singleton_candidate ||
+                                    next_control_singleton_candidate ||
+                                    next_control_pair;
     // A long LSU resident is admitted only inside an already-established dual
-    // run and only when a younger simple pair can consume the same-edge MEM
-    // release.  Otherwise the legacy pipeline is cheaper because it can fill
-    // its younger stages behind the memory operation.
-    assign lsu_run_candidate = lsu_candidate && dual_mode && next_simple_pair;
+    // run and only when a younger one-cycle simple/control bundle can consume
+    // the same-edge MEM release.  This preserves the LSU's fixed four-beat
+    // cadence and excludes another LSU or long MULDIV continuation.  Otherwise
+    // the legacy pipeline is cheaper because it can fill younger stages behind
+    // the memory operation.
+    assign lsu_run_candidate = lsu_candidate && dual_mode &&
+                               next_fast_continuation;
     // A valid shared MUL/DIV bundle can establish a dual run directly.  A pair
     // overlaps its independent simple lane; a singleton avoids draining into
     // the legacy long-op path and reuses the same resident.  legacy_idle

@@ -249,6 +249,16 @@ module tb_a7_perf_profile;
             window_index = 0;
             clear_window_counters();
         end else begin
+            // Keep the testbench-only classification counters aligned with the
+            // architectural performance counters.  Software may clear and
+            // enable the first window after reset; launches before that clear
+            // must not survive only in the testbench side of the identity.
+            if (u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.csr_wen &&
+                (u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.csr_waddr ==
+                 `CSR_PERF_CTRL) &&
+                u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.csr_wdata[1]) begin
+                clear_window_counters();
+            end
             if (u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.perf_enable &&
                 !(u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.csr_wen &&
                   (u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.csr_waddr ==

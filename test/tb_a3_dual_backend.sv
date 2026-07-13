@@ -508,6 +508,43 @@ module tb_a3_dual_backend;
         if (!dispatch_dual_valid || dispatch_legacy_valid) begin
             $fatal(1, "LSU pair did not enter an established dual run");
         end
+
+        // A7.5.1 keeps the four-beat LSU resident unchanged, but permits any
+        // already-signed-off one-cycle simple/control continuation to consume
+        // its same-edge MEM release.  LSU and long MULDIV remain excluded
+        // followers.
+        dispatch_next_bundle = make_single(32'h0030_0193,
+                                           32'h0000_0418, 32'd18);
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "simple singleton did not continue an established LSU run");
+        end
+        dispatch_next_bundle = make_single(32'h0080_00EF,
+                                           32'h0000_0418, 32'd18);
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "control singleton did not continue an established LSU run");
+        end
+        dispatch_next_bundle = make_pair(32'h0030_0193, 32'h0000_0463,
+                                          32'h0000_0418, 32'd18);
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "control pair did not continue an established LSU run");
+        end
+        dispatch_next_bundle = make_pair(32'h0030_0193, 32'h0001_2083,
+                                          32'h0000_0418, 32'd18);
+        #1;
+        if (dispatch_dual_valid || !dispatch_legacy_valid) begin
+            $fatal(1, "LSU follower incorrectly admitted an LSU run");
+        end
+        dispatch_next_bundle = make_single(32'h0220_81B3,
+                                           32'h0000_0418, 32'd18);
+        #1;
+        if (dispatch_dual_valid || !dispatch_legacy_valid) begin
+            $fatal(1, "long MULDIV follower incorrectly admitted an LSU run");
+        end
+        dispatch_next_bundle = make_pair(32'h0030_0193, 32'h0040_0213,
+                                          32'h0000_0418, 32'd18);
         dispatch_prefer_legacy = 1'b1;
         dispatch_dual_block_legacy = 1'b1;
         #1;
