@@ -6,7 +6,17 @@
  * 2) 规模参数：按仿真时长预算修改 BENCH_SCALE / *_BASE。
  * 3) 负载结构：bench_alu / bench_branch / bench_memory 可独立扩展。
  */
-#define CLK_FREQ_HZ      50000000u
+#ifndef CPU_FREQ_HZ
+#define CPU_FREQ_HZ      130000000u
+#endif
+
+#ifndef UART_FREQ_HZ
+#define UART_FREQ_HZ     50000000u
+#endif
+
+#ifndef BENCH_UART_OUTPUT
+#define BENCH_UART_OUTPUT 0
+#endif
 
 /*
  * ===================== UART 地址映射与寄存器定义 =====================
@@ -88,7 +98,10 @@
  */
 #define BENCH_SCALE        1u
 #define ALU_ITERS_BASE     12000u
+#define MEXT_ITERS_BASE     2000u
 #define BRANCH_ITERS_BASE  12000u
+#define BTB_PASSES_BASE     512u
+#define RETURN_ITERS_BASE   8000u
 #define MEM_WORDS          256u
 #define MEM_PASSES_BASE    180u
 
@@ -99,6 +112,53 @@
 static volatile uint32_t g_sink;
 static uint32_t g_mem[MEM_WORDS];
 
+#define PERF_RESULT_MAGIC   0x4C334A30u /* "L3J0" */
+#define PERF_RESULT_VERSION 5u
+
+typedef struct {
+    uint32_t cycles;
+    uint32_t instret;
+    uint32_t branch;
+    uint32_t branch_mispredict;
+    uint32_t branch_hit;
+    uint32_t branch_miss;
+    uint32_t load_use;
+    uint32_t exe_stall;
+    uint32_t exception;
+    uint32_t dual_issue;
+    uint32_t single_issue;
+    uint32_t issue_raw;
+    uint32_t issue_waw;
+    uint32_t issue_struct;
+    uint32_t lsu_pair;
+    uint32_t lane1_control;
+    uint32_t lsu_conflict;
+    uint32_t bitman_pair;
+    uint32_t cross_packet;
+    uint32_t issue_qfull;
+    uint32_t result_dependency;
+} perf_report_t;
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t cpu_freq_hz;
+    uint32_t sink;
+    perf_report_t alu;
+    perf_report_t mext;
+    perf_report_t branch_random;
+    perf_report_t branch_regular;
+    perf_report_t branch_short_loop;
+    perf_report_t branch_call;
+    perf_report_t branch_capacity;
+    perf_report_t branch_return;
+    perf_report_t memory;
+} perf_results_t;
+
+/* 固定在数据RAM保留区的772-byte仿真邮箱；magic最后写入。 */
+volatile perf_results_t g_perf_results
+    __attribute__((section(".perf_results"), aligned(4)));
+
 static inline void mmio_write(uint32_t addr, uint32_t value) {
     *((volatile uint32_t *)addr) = value;
 }
@@ -107,18 +167,48 @@ static inline uint32_t mmio_read(uint32_t addr) {
     return *((volatile uint32_t *)addr);
 }
 
-static inline uint32_t read_cycle(void) {
-    /* 读取 cycle CSR（32位），用于统计执行周期数 */
-    uint32_t v;
-    __asm__ volatile ("csrr %0, cycle" : "=r"(v));
-    return v;
+#define READ_CSR_IMM(csr_num) ({                         \
+    uint32_t csr_value;                                  \
+    __asm__ volatile ("csrr %0, " #csr_num              \
+                      : "=r"(csr_value) :: "memory");   \
+    csr_value;                                           \
+})
+
+#define WRITE_CSR_IMM(csr_num, value)                    \
+    __asm__ volatile ("csrw " #csr_num ", %0"            \
+                      :: "r"((uint32_t)(value)) : "memory")
+
+static inline void perf_begin(void) {
+    WRITE_CSR_IMM(0x7C0, 2u);
+    WRITE_CSR_IMM(0x7C0, 1u);
 }
 
-static inline uint32_t read_instret(void) {
-    /* 读取 instret CSR（32位），用于统计退休指令数 */
-    uint32_t v;
-    __asm__ volatile ("csrr %0, instret" : "=r"(v));
-    return v;
+static inline void perf_end(void) {
+    WRITE_CSR_IMM(0x7C0, 0u);
+}
+
+static void capture_perf(volatile perf_report_t *report) {
+    report->cycles            = READ_CSR_IMM(0x7C1);
+    report->instret           = READ_CSR_IMM(0x7C2);
+    report->branch            = READ_CSR_IMM(0x7C3);
+    report->branch_mispredict = READ_CSR_IMM(0x7C4);
+    report->branch_hit        = READ_CSR_IMM(0x7C5);
+    report->branch_miss       = READ_CSR_IMM(0x7C6);
+    report->load_use          = READ_CSR_IMM(0x7C7);
+    report->exe_stall         = READ_CSR_IMM(0x7C8);
+    report->exception         = READ_CSR_IMM(0x7C9);
+    report->dual_issue        = READ_CSR_IMM(0x7CA);
+    report->single_issue      = READ_CSR_IMM(0x7CB);
+    report->issue_raw         = READ_CSR_IMM(0x7CC);
+    report->issue_waw         = READ_CSR_IMM(0x7CD);
+    report->issue_struct      = READ_CSR_IMM(0x7CE);
+    report->lsu_pair          = READ_CSR_IMM(0x7CF);
+    report->lane1_control     = READ_CSR_IMM(0x7D0);
+    report->lsu_conflict      = READ_CSR_IMM(0x7D1);
+    report->bitman_pair       = READ_CSR_IMM(0x7D2);
+    report->cross_packet      = READ_CSR_IMM(0x7D3);
+    report->issue_qfull       = READ_CSR_IMM(0x7D4);
+    report->result_dependency = READ_CSR_IMM(0x7D5);
 }
 
 static void uart_init(uint32_t baudrate) {
@@ -126,7 +216,7 @@ static void uart_init(uint32_t baudrate) {
     if (baudrate == 0u) {
         baudrate = 115200u;
     }
-    mmio_write(UART_BAUD_ADDR, CLK_FREQ_HZ / baudrate);
+    mmio_write(UART_BAUD_ADDR, UART_FREQ_HZ / baudrate);
     mmio_write(UART_CTRL_ADDR, UART_CTRL_ENABLE);
 }
 
@@ -190,7 +280,41 @@ static void bench_alu(uint32_t iters) {
     g_sink ^= x ^ y;
 }
 
-static void bench_branch(uint32_t iters) {
+static __attribute__((noinline, noclone))
+void bench_mext(uint32_t iters) {
+    uint32_t a = 0x7149F2D3u;
+    uint32_t b = 0x13579BDFu;
+    uint32_t acc = 0x89ABCDEFu;
+    uint32_t v;
+    uint32_t i;
+
+    /* 实际镜像包含全部RV32M乘除法变体；逐项保留，避免编译器合并。 */
+    for (i = 0; i < iters; ++i) {
+        __asm__ volatile ("mul %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc ^= v;
+        __asm__ volatile ("mulh %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc += v;
+        __asm__ volatile ("mulhu %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc ^= v;
+        __asm__ volatile ("mulhsu %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc += v;
+        __asm__ volatile ("div %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc ^= v;
+        __asm__ volatile ("divu %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc += v;
+        __asm__ volatile ("rem %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc ^= v;
+        __asm__ volatile ("remu %0, %1, %2" : "=r"(v) : "r"(a), "r"(b));
+        acc += v;
+
+        a = (a << 5) ^ (a >> 3) ^ acc;
+        b = ((b << 7) ^ (b >> 1) ^ i) | 1u;
+    }
+
+    g_sink ^= acc ^ a ^ b;
+}
+
+static void bench_branch_random(uint32_t iters) {
     /* 分支负载：含多分支路径，观察分支处理和流水线行为 */
     uint32_t s = 0x31415926u;
     uint32_t acc = 0;
@@ -213,6 +337,123 @@ static void bench_branch(uint32_t iters) {
         } else {
             acc += 3u;
         }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_regular(uint32_t iters) {
+    uint32_t acc = 0x2468ACE0u;
+    uint32_t i;
+
+    /* 7次走taken、1次走not-taken，观察方向状态稳定性。 */
+    for (i = 0; i < iters; ++i) {
+        if ((i & 7u) != 0u) {
+            acc += (i << 1) ^ 0x10203040u;
+        } else {
+            acc ^= i + 0x55667788u;
+        }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_short_loop(uint32_t outer_iters, uint32_t inner_limit) {
+    uint32_t acc = 0x13579BDFu;
+    uint32_t outer;
+    uint32_t inner;
+
+    /* 重复短循环用于观察TTTN类循环退出模式。 */
+    for (outer = 0; outer < outer_iters; ++outer) {
+        for (inner = 0; inner < inner_limit; ++inner) {
+            acc = (acc << 3) ^ (acc >> 2) ^ outer ^ inner;
+        }
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t branch_call_helper(uint32_t x) {
+    if (x & 1u) {
+        return (x << 5) ^ 0xA55AA55Au;
+    }
+    return (x >> 3) + 0x31415926u;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_call(uint32_t iters) {
+    uint32_t acc = 0x89ABCDEFu;
+    uint32_t i;
+
+    for (i = 0; i < iters; ++i) {
+        acc ^= branch_call_helper(acc + i);
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_capacity(uint32_t passes) {
+    uint32_t i;
+    uint32_t acc = 0x6D2B79F5u;
+
+    /*
+     * 连续放置128个静态taken分支，每个目标为下一条指令。分支仍会参与
+     * 方向/目标校验并在未命中时产生恢复气泡，但128个PC可覆盖BTB全部索引。
+     * 16项直接映射表会逐轮冲突替换，128项表则可在预热后稳定命中。
+     */
+    for (i = 0; i < passes; ++i) {
+        __asm__ volatile (
+            ".rept 128\n"
+            "beq zero, zero, 1f\n"
+            "1:\n"
+            ".endr\n"
+            ::: "memory");
+        acc ^= (i << 5) + (i >> 2) + 0x9E3779B9u;
+    }
+
+    g_sink ^= acc;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t shared_return_helper(uint32_t x) {
+    __asm__ volatile ("" : "+r"(x));
+    return (x << 7) ^ (x >> 3) ^ 0x7F4A7C15u;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level3(uint32_t x) {
+    uint32_t y = shared_return_helper(x ^ 0x13579BDFu);
+    return y + 0x10203040u;
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level2(uint32_t x) {
+    uint32_t y = nested_return_level3(x + 0x2468ACE0u);
+    return y ^ (x >> 5);
+}
+
+static __attribute__((noinline, noclone))
+uint32_t nested_return_level1(uint32_t x) {
+    uint32_t y = nested_return_level2(x ^ 0x89ABCDEFu);
+    return y + (x << 3);
+}
+
+static __attribute__((noinline, noclone))
+void bench_branch_return(uint32_t iters) {
+    uint32_t i;
+    uint32_t acc = 0xD1B54A35u;
+
+    /* 同一ret指令轮流返回四个静态调用点，专门暴露单目标JALR BTB抖动。 */
+    for (i = 0; i < iters; ++i) {
+        acc ^= shared_return_helper(acc + i + 0u);
+        acc ^= shared_return_helper(acc + i + 1u);
+        acc ^= shared_return_helper(acc + i + 2u);
+        acc ^= shared_return_helper(acc + i + 3u);
+        acc ^= nested_return_level1(acc + i);
     }
 
     g_sink ^= acc;
@@ -255,10 +496,10 @@ static void print_metric(const char *name, uint32_t cycles, uint32_t instret) {
         /* 计算 instret / cycles（放大1000倍避免精度丢失）*/
         uint32_t rate_x1000 = (instret * 1000u) / cycles;  /* instret/cycles * 1000 */
         /* IPS = rate_x1000 * CLK_FREQ / 1000000 */
-        ips_x1m = (rate_x1000 * (CLK_FREQ_HZ / 1000u)) / 1000u;
+        ips_x1m = (rate_x1000 * (CPU_FREQ_HZ / 1000u)) / 1000u;
         
         /* Per-frame time: 微秒/1000条指令 */
-        per_frame_us = (cycles * 1000000u) / (CLK_FREQ_HZ / 1000u) / instret;
+        per_frame_us = (cycles * 1000000u) / (CPU_FREQ_HZ / 1000u) / instret;
     }
 
     uart_puts(name);
@@ -277,68 +518,150 @@ static void print_metric(const char *name, uint32_t cycles, uint32_t instret) {
 
 int main(void) {
     /*
-     * 可改：这三个变量决定仿真总耗时。
+     * 可改：这些变量决定仿真总耗时。
      * 若仿真过慢：先减 BENCH_SCALE；若需更稳统计：增 BENCH_SCALE。
      */
-    uint32_t c0, c1, i0, i1;
     uint32_t alu_iters = ALU_ITERS_BASE * BENCH_SCALE;
+    uint32_t mext_iters = MEXT_ITERS_BASE * BENCH_SCALE;
     uint32_t branch_iters = BRANCH_ITERS_BASE * BENCH_SCALE;
+    uint32_t btb_passes = BTB_PASSES_BASE * BENCH_SCALE;
+    uint32_t return_iters = RETURN_ITERS_BASE * BENCH_SCALE;
     uint32_t mem_passes = MEM_PASSES_BASE * BENCH_SCALE;
     
     /* 性能评分相关 */
     uint32_t total_cycles = 0;
     uint32_t total_instret = 0;
     uint32_t alu_cycles = 0, alu_instret = 0;
-    uint32_t branch_cycles = 0, branch_instret = 0;
+    uint32_t mext_cycles = 0, mext_instret = 0;
+    uint32_t random_cycles = 0, random_instret = 0;
+    uint32_t regular_cycles = 0, regular_instret = 0;
+    uint32_t short_cycles = 0, short_instret = 0;
+    uint32_t call_cycles = 0, call_instret = 0;
+    uint32_t capacity_cycles = 0, capacity_instret = 0;
+    uint32_t return_cycles = 0, return_instret = 0;
     uint32_t memory_cycles = 0, memory_instret = 0;
 
-    uart_init(115200u);
-    uart_puts("\n=== RISC-V Simulation Performance Benchmark (Independent) ===\n");
-    uart_puts("Clock(Hz): ");
-    uart_put_u32(CLK_FREQ_HZ);
-    uart_puts("\nScale: ");
-    uart_put_u32(BENCH_SCALE);
-    uart_puts("\n\n");
+    g_perf_results.magic = 0u;
+    g_perf_results.version = PERF_RESULT_VERSION;
+    g_perf_results.cpu_freq_hz = CPU_FREQ_HZ;
 
-    c0 = read_cycle();
-    i0 = read_instret();
+    if (BENCH_UART_OUTPUT) {
+        uart_init(115200u);
+        uart_puts("\n=== RISC-V Simulation Performance Benchmark (Independent) ===\n");
+        uart_puts("CPU Clock(Hz): ");
+        uart_put_u32(CPU_FREQ_HZ);
+        uart_puts("\nScale: ");
+        uart_put_u32(BENCH_SCALE);
+        uart_puts("\n\n");
+    }
+
+    perf_begin();
     bench_alu(alu_iters);
-    c1 = read_cycle();
-    i1 = read_instret();
-    alu_cycles = c1 - c0;
-    alu_instret = i1 - i0;
-    print_metric("ALU", alu_cycles, alu_instret);
+    perf_end();
+    capture_perf(&g_perf_results.alu);
+    alu_cycles = g_perf_results.alu.cycles;
+    alu_instret = g_perf_results.alu.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("ALU", alu_cycles, alu_instret);
+    }
 
-    c0 = read_cycle();
-    i0 = read_instret();
-    bench_branch(branch_iters);
-    c1 = read_cycle();
-    i1 = read_instret();
-    branch_cycles = c1 - c0;
-    branch_instret = i1 - i0;
-    print_metric("BRANCH", branch_cycles, branch_instret);
+    perf_begin();
+    bench_mext(mext_iters);
+    perf_end();
+    capture_perf(&g_perf_results.mext);
+    mext_cycles = g_perf_results.mext.cycles;
+    mext_instret = g_perf_results.mext.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("MEXT", mext_cycles, mext_instret);
+    }
 
-    c0 = read_cycle();
-    i0 = read_instret();
+    perf_begin();
+    bench_branch_random(branch_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_random);
+    random_cycles = g_perf_results.branch_random.cycles;
+    random_instret = g_perf_results.branch_random.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_RANDOM", random_cycles, random_instret);
+    }
+
+    perf_begin();
+    bench_branch_regular(branch_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_regular);
+    regular_cycles = g_perf_results.branch_regular.cycles;
+    regular_instret = g_perf_results.branch_regular.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_REGULAR", regular_cycles, regular_instret);
+    }
+
+    perf_begin();
+    bench_branch_short_loop(branch_iters / 4u, 4u);
+    perf_end();
+    capture_perf(&g_perf_results.branch_short_loop);
+    short_cycles = g_perf_results.branch_short_loop.cycles;
+    short_instret = g_perf_results.branch_short_loop.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_SHORT", short_cycles, short_instret);
+    }
+
+    perf_begin();
+    bench_branch_call(branch_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_call);
+    call_cycles = g_perf_results.branch_call.cycles;
+    call_instret = g_perf_results.branch_call.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_CALL", call_cycles, call_instret);
+    }
+
+    perf_begin();
+    bench_branch_capacity(btb_passes);
+    perf_end();
+    capture_perf(&g_perf_results.branch_capacity);
+    capacity_cycles = g_perf_results.branch_capacity.cycles;
+    capacity_instret = g_perf_results.branch_capacity.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_CAPACITY", capacity_cycles, capacity_instret);
+    }
+
+    perf_begin();
+    bench_branch_return(return_iters);
+    perf_end();
+    capture_perf(&g_perf_results.branch_return);
+    return_cycles = g_perf_results.branch_return.cycles;
+    return_instret = g_perf_results.branch_return.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH_RETURN", return_cycles, return_instret);
+    }
+
+    perf_begin();
     bench_memory(mem_passes);
-    c1 = read_cycle();
-    i1 = read_instret();
-    memory_cycles = c1 - c0;
-    memory_instret = i1 - i0;
-    print_metric("MEMORY", memory_cycles, memory_instret);
+    perf_end();
+    capture_perf(&g_perf_results.memory);
+    memory_cycles = g_perf_results.memory.cycles;
+    memory_instret = g_perf_results.memory.instret;
+    if (BENCH_UART_OUTPUT) {
+        print_metric("MEMORY", memory_cycles, memory_instret);
+    }
     
     /* 累加总体指标 */
-    total_cycles = alu_cycles + branch_cycles + memory_cycles;
-    total_instret = alu_instret + branch_instret + memory_instret;
+    total_cycles = alu_cycles + mext_cycles + random_cycles + regular_cycles +
+                   short_cycles + call_cycles + capacity_cycles + return_cycles +
+                   memory_cycles;
+    total_instret = alu_instret + mext_instret + random_instret + regular_instret +
+                    short_instret + call_instret + capacity_instret + return_instret +
+                    memory_instret;
 
-    /* 计算总体性能指标和评分 */
-    uart_puts("\n==== Overall Performance Summary ====\n");
-    uart_puts("Total cycles: ");
-    uart_put_u32(total_cycles);
-    uart_puts(", Total instret: ");
-    uart_put_u32(total_instret);
-    uart_puts("\n");
-    print_metric("OVERALL", total_cycles, total_instret);
+    if (BENCH_UART_OUTPUT) {
+        uart_puts("\n==== Overall Performance Summary ====\n");
+        uart_puts("Total cycles: ");
+        uart_put_u32(total_cycles);
+        uart_puts(", Total instret: ");
+        uart_put_u32(total_instret);
+        uart_puts("\n");
+        print_metric("OVERALL", total_cycles, total_instret);
+    }
     
     /* CoreMark-style 评分计算 */
     /* Score = (instret / cycles) * clock_freq * 100 */
@@ -353,13 +676,18 @@ int main(void) {
         /* Score = 100000 / overall_cpi_x1000 */
         coremark_like_score = 100000u / overall_cpi_x1000;
     }
-    uart_puts("\nPerformance Score (CoreMark-like): ");
-    uart_put_u32(coremark_like_score);
-    uart_puts("\n");
-    
-    uart_puts("sink=");
-    uart_put_hex32(g_sink);
-    uart_puts("\nDone.\n");
+    g_perf_results.sink = g_sink;
+    __asm__ volatile ("fence rw, rw" ::: "memory");
+    g_perf_results.magic = PERF_RESULT_MAGIC;
+
+    if (BENCH_UART_OUTPUT) {
+        uart_puts("\nPerformance Score (CoreMark-like): ");
+        uart_put_u32(coremark_like_score);
+        uart_puts("\n");
+        uart_puts("sink=");
+        uart_put_hex32(g_sink);
+        uart_puts("\nDone.\n");
+    }
 
     /* 测试结束后停机等待，避免程序跑飞影响仿真观察 */
     while (1) {

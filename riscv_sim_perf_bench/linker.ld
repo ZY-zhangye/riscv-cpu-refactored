@@ -8,8 +8,9 @@ ENTRY(_start)
  */
 MEMORY
 {
-  INSTR (rx) : ORIGIN = 0x00000000, LENGTH = 0x800
-  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0x800
+  /* PERF_BENCH selects PC_START=0 in RTL; keep the generated image aligned. */
+  INSTR (rx) : ORIGIN = 0x00000000, LENGTH = 0x1000
+  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0xC00
 }
 
 SECTIONS
@@ -58,5 +59,11 @@ SECTIONS
     . = ALIGN(16);
     . = . + 0x100;
     __stack_top = .;
+  } > DATA
+
+  /* 九组L3J性能计数结果，共772字节，供testbench直接读取。 */
+  .perf_results 0x60000800 (NOLOAD) :
+  {
+    KEEP(*(.perf_results))
   } > DATA
 }

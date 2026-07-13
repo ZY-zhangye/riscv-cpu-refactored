@@ -2,6 +2,9 @@ RISCV_GCC ?= riscv64-unknown-elf-gcc
 RISCV_OBJCOPY ?= riscv64-unknown-elf-objcopy
 RISCV_OBJDUMP ?= riscv64-unknown-elf-objdump
 DEPTH ?= 1024
+CPU_FREQ_HZ ?= 130000000
+UART_FREQ_HZ ?= 50000000
+BENCH_UART_OUTPUT ?= 0
 
 TARGET := sim_perf_bench
 BUILD_DIR := build
@@ -19,7 +22,9 @@ INST_COE := $(OUT_DIR)/inst.coe
 DATA_COE := $(OUT_DIR)/data.coe
 
 CFLAGS := -O2 -Wall -Wextra -ffunction-sections -fdata-sections \
-		  -march=rv32i_zicsr -mabi=ilp32 -nostartfiles
+		  -march=rv32im_zicsr -mabi=ilp32 -nostartfiles \
+		  -DCPU_FREQ_HZ=$(CPU_FREQ_HZ) -DUART_FREQ_HZ=$(UART_FREQ_HZ) \
+		  -DBENCH_UART_OUTPUT=$(BENCH_UART_OUTPUT)
 LDFLAGS := -Wl,-Tlinker.ld,--gc-sections
 
 .PHONY: all clean
