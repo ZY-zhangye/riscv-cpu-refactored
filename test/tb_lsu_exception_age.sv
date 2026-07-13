@@ -114,6 +114,10 @@ module tb_lsu_exception_age;
             es_flush = 1'b0;
             @(posedge clk);
             #0.1;
+            if (ms_valid || (exception_code != `EXC_NONE) ||
+                (exception_mtval != 32'b0)) begin
+                $fatal(1, "empty MEM repeated stale exception metadata");
+            end
         end
     endtask
 

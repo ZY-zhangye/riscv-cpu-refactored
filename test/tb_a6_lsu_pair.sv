@@ -107,7 +107,8 @@ module tb_a6_lsu_pair;
         .branch_event(), .branch_mispredict_event(), .branch_redirect(),
         .branch_redirect_target(), .bp_update_valid(), .bp_update_pc(),
         .bp_update_taken(), .bp_update_target(), .bp_update_type(),
-        .lane1_control_event(), .lsu_pair_event(lsu_pair_event),
+        .lane1_control_event(), .control0_simple_event(),
+        .lsu_pair_event(lsu_pair_event),
         .muldiv_pair_event(),
         .exception_valid(exception_valid), .exception_code(exception_code),
         .exception_pc(exception_pc), .exception_mtval(exception_mtval)

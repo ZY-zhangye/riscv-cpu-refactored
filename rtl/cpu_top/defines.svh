@@ -28,6 +28,7 @@
 `define PAIR_LSU_SIMPLE     3'd4
 `define PAIR_SIMPLE_MULDIV  3'd5
 `define PAIR_MULDIV_SIMPLE  3'd6
+`define PAIR_CONTROL_SIMPLE 3'd7
 `define FS_DS_WIDTH (32+32+`BP_PACKET_WIDTH)
 `define EXC_WIDTH (7+32)
 

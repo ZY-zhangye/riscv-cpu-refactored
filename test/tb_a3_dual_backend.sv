@@ -37,6 +37,7 @@ module tb_a3_dual_backend;
     logic [`FETCH_EPOCH_WIDTH-1:0] commit_epoch0;
     logic [`FETCH_EPOCH_WIDTH-1:0] commit_epoch1;
     logic lane1_control_event;
+    logic control0_simple_event;
     logic lsu_pair_event;
     logic muldiv_pair_event;
     logic [4:0] legacy_raddr1;
@@ -181,6 +182,7 @@ module tb_a3_dual_backend;
         .bp_update_target(),
         .bp_update_type(),
         .lane1_control_event(lane1_control_event),
+        .control0_simple_event(control0_simple_event),
         .lsu_pair_event(lsu_pair_event),
         .muldiv_pair_event(muldiv_pair_event),
         .exception_valid(),
@@ -367,6 +369,7 @@ module tb_a3_dual_backend;
         if ((commit_valid !== 2'b01) || (commit_wen !== 2'b01) ||
             (commit_waddr0 !== 5'd9) || (commit_wdata0 !== 32'd11) ||
             (retire_count !== 2'd1) || lane1_control_event ||
+            control0_simple_event ||
             lsu_pair_event || muldiv_pair_event) begin
             $fatal(1, "simple singleton dual retirement mismatch");
         end
@@ -440,6 +443,35 @@ module tb_a3_dual_backend;
             $fatal(1, "dual bundle crossed an active legacy domain");
         end
         dispatch_legacy_idle = 1'b1;
+
+        // A7.4.1 control0+simple1 is a direct complex candidate.  It obeys
+        // the same legacy-domain, cost-preference and redirect boundaries.
+        dispatch_bundle = make_pair(32'h0000_0463, 32'h0020_0113,
+                                    32'h0000_0400, 32'd12);
+        dispatch_next_bundle_valid = 1'b0;
+        #1;
+        if (!dispatch_dual_candidate || !dispatch_dual_valid ||
+            dispatch_legacy_valid) begin
+            $fatal(1, "control0+simple1 did not enter an idle dual domain");
+        end
+        dispatch_prefer_legacy = 1'b1;
+        #1;
+        if (dispatch_dual_valid || !dispatch_legacy_valid) begin
+            $fatal(1, "control0+simple1 ignored the legacy cost gate");
+        end
+        dispatch_prefer_legacy = 1'b0;
+        dispatch_legacy_idle = 1'b0;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "control0+simple1 crossed an active legacy domain");
+        end
+        dispatch_legacy_idle = 1'b1;
+        dispatch_redirect = 1'b1;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "redirect did not suppress control0+simple1 dispatch");
+        end
+        dispatch_redirect = 1'b0;
 
         // Once dual mode is established, FIFO starvation does not force a
         // new lookahead warmup.  A long-latency cooldown can still hand the

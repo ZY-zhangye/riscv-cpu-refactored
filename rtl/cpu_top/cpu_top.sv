@@ -105,6 +105,7 @@ module cpu_top (
     logic dual_pending_stall_event;
     logic dual_lsu_pair_event;
     logic dual_muldiv_pair_event;
+    logic dual_control0_simple_event;
     logic dual_dmem_load_en;
     logic [31:0] dual_dmem_load_addr;
     logic dual_lsu_port_ready;
@@ -400,6 +401,7 @@ module cpu_top (
         .bp_update_target(dual_bp_update_target),
         .bp_update_type(dual_bp_update_type),
         .lane1_control_event(dual_lane1_control_event),
+        .control0_simple_event(dual_control0_simple_event),
         .lsu_pair_event(dual_lsu_pair_event),
         .muldiv_pair_event(dual_muldiv_pair_event),
         .exception_valid(dual_exception_valid),
@@ -408,8 +410,9 @@ module cpu_top (
         .exception_mtval(dual_exception_mtval)
     );
 
-    // A dual lane1 control redirect clears the frontend but must not kill the
-    // same pair: lane0 is older and both instructions commit at that boundary.
+    // A dual control redirect clears the frontend but must not kill the
+    // same-edge architectural subset: lane1 control retires both lanes, while
+    // a mispredicted lane0 control retires only the older lane0 instruction.
     // Only redirects originating outside the dual resident are kill inputs.
     assign dual_external_redirect = legacy_br_redirect ||
                                     (exception_flag && !dual_exception_valid);

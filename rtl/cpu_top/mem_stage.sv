@@ -259,13 +259,16 @@ end
                         ((load_inst == `SH) && data_offest[0]));
     assign sync_exception = exception_iam || exception_lam || exception_sam || exc_code[5];
     assign take_irq = ms_valid && !ms_flush && !sync_exception && plic_irq && external_irq_enable;
-    assign exception_code = ms_flush ? `EXC_NONE :
+    // Exception metadata belongs to the resident, not the holding register.
+    // Once MEM becomes empty, stale exc_code bits must not retrigger the
+    // frontend redirect while the trap handler is being fetched.
+    assign exception_code = (!ms_valid || ms_flush) ? `EXC_NONE :
                             exception_iam ? `EXC_IAM :
                             exception_lam ? `EXC_LAM :
                             exception_sam ? `EXC_SAM :
                             take_irq ? `PLIC_IRQ_BIT :
                             exc_code;
-    assign exception_mtval = ms_flush ? 32'b0 :
+    assign exception_mtval = (!ms_valid || ms_flush) ? 32'b0 :
                             exception_iam ? br_target :
                             (exception_lam || exception_sam) ? exe_result :
                             take_irq ? 32'b0 :

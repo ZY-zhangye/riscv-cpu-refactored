@@ -68,7 +68,9 @@ module bundle_dispatch (
     logic simple1;
     logic next_simple0;
     logic next_simple1;
+    logic control0;
     logic control1;
+    logic next_control0;
     logic next_control1;
     logic lsu0;
     logic lsu1;
@@ -109,7 +111,7 @@ module bundle_dispatch (
 
     pair_predecode u_predecode0 (
         .instruction(inst0), .is_simple(simple0),
-        .is_control(), .is_lsu(lsu0), .is_muldiv(muldiv0),
+        .is_control(control0), .is_lsu(lsu0), .is_muldiv(muldiv0),
         .uses_rs1(), .uses_rs2(), .uses_rd()
     );
     pair_predecode u_predecode1 (
@@ -119,7 +121,8 @@ module bundle_dispatch (
     );
     pair_predecode u_next_predecode0 (
         .instruction(next_inst0), .is_simple(next_simple0),
-        .is_control(), .is_lsu(next_lsu0), .is_muldiv(next_muldiv0),
+        .is_control(next_control0), .is_lsu(next_lsu0),
+        .is_muldiv(next_muldiv0),
         .uses_rs1(), .uses_rs2(), .uses_rd()
     );
     pair_predecode u_next_predecode1 (
@@ -132,7 +135,7 @@ module bundle_dispatch (
     assign pair_candidate = lane0_valid && lane1_valid &&
                             ((simple0 && (simple1 || control1 || lsu1 ||
                                           muldiv1)) ||
-                             ((lsu0 || muldiv0) && simple1));
+                             ((control0 || lsu0 || muldiv0) && simple1));
     assign simple_singleton_candidate = lane0_valid && !lane1_valid &&
                                         simple0;
     assign dual_candidate = pair_candidate || simple_singleton_candidate;
@@ -141,7 +144,8 @@ module bundle_dispatch (
                                  ((next_simple0 && (next_simple1 ||
                                                    next_control1 || next_lsu1 ||
                                                    next_muldiv1)) ||
-                                  ((next_lsu0 || next_muldiv0) &&
+                                  ((next_control0 || next_lsu0 ||
+                                    next_muldiv0) &&
                                    next_simple1));
     assign next_simple_singleton_candidate = next_bundle_valid &&
                                              next_lane0_valid &&
@@ -168,7 +172,7 @@ module bundle_dispatch (
     // directly.  Plain simple bundles, including lane0-only singletons, enter
     // only inside an established run or when a compatible younger bundle can
     // amortize the domain switch.  An LSU pair keeps its stricter run rule.
-    assign complex_candidate = control1;
+    assign complex_candidate = control0 || control1;
     assign dual_schedule = complex_candidate ||
                            (!lsu_candidate && !muldiv_candidate &&
                             (dual_mode || next_dual_candidate)) ||

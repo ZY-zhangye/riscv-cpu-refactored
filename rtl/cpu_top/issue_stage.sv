@@ -110,6 +110,8 @@ module issue_stage (
             candidate_class = `PAIR_SIMPLE_SIMPLE;
         end else if (simple0 && control1) begin
             candidate_class = `PAIR_SIMPLE_CONTROL;
+        end else if (control0 && simple1) begin
+            candidate_class = `PAIR_CONTROL_SIMPLE;
         end else if (simple0 && lsu1) begin
             candidate_class = `PAIR_SIMPLE_LSU;
         end else if (lsu0 && simple1) begin

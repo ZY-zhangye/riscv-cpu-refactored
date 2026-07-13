@@ -55,6 +55,7 @@ module dual_alu_pipeline (
     output logic [31:0]                    bp_update_target,
     output logic [`BP_TYPE_WIDTH-1:0]      bp_update_type,
     output logic                           lane1_control_event,
+    output logic                           control0_simple_event,
     output logic                           lsu_pair_event,
     output logic                           muldiv_pair_event,
     output logic                           exception_valid,
@@ -101,6 +102,8 @@ module dual_alu_pipeline (
     logic [31:0] idex_pc1;
     logic [4:0] idex_rd0;
     logic [4:0] idex_rd1;
+    logic idex_pred_taken0;
+    logic [31:0] idex_pred_target0;
     logic idex_pred_taken1;
     logic [31:0] idex_pred_target1;
 
@@ -157,11 +160,19 @@ module dual_alu_pipeline (
     logic [31:0] branch_immediate;
     logic [31:0] branch_direct_target;
     logic [5:0] branch_opcode;
+    logic branch_control_lane0;
+    logic [31:0] branch_inst;
+    logic [31:0] branch_pc;
+    logic [31:0] branch_src1;
+    logic [31:0] branch_src2;
+    logic branch_pred_taken;
+    logic [31:0] branch_pred_target;
     logic idex_is_jal;
     logic idex_is_jalr;
     logic branch_iam;
     logic bp_update_is_call;
     logic bp_update_is_return;
+    logic lane0_done;
     logic lane1_done;
     logic resident_block;
 
@@ -370,6 +381,8 @@ module dual_alu_pipeline (
             idex_pc1 <= '0;
             idex_rd0 <= '0;
             idex_rd1 <= '0;
+            idex_pred_taken0 <= 1'b0;
+            idex_pred_target0 <= 32'b0;
             idex_pred_taken1 <= 1'b0;
             idex_pred_target1 <= 32'b0;
             idex_lsu_started <= 1'b0;
@@ -404,6 +417,8 @@ module dual_alu_pipeline (
                 idex_pc1 <= launch_pc1;
                 idex_rd0 <= launch_inst0[11:7];
                 idex_rd1 <= launch_inst1[11:7];
+                idex_pred_taken0 <= launch_pred_taken0;
+                idex_pred_target0 <= launch_pred_target0;
                 idex_pred_taken1 <= launch_pred_taken1;
                 idex_pred_target1 <= launch_pred_target1;
             end
@@ -612,21 +627,32 @@ module dual_alu_pipeline (
         end
     end
 
-    assign idex_is_jal = idex_control1 && (idex_inst1[6:0] == 7'b1101111);
-    assign idex_is_jalr = idex_control1 &&
-                          (idex_inst1[6:0] == 7'b1100111);
+    assign branch_control_lane0 = idex_control0;
+    assign branch_inst = branch_control_lane0 ? idex_inst0 : idex_inst1;
+    assign branch_pc = branch_control_lane0 ? idex_pc0 : idex_pc1;
+    assign branch_src1 = branch_control_lane0 ? rf_rdata0 : rf_rdata2;
+    assign branch_src2 = branch_control_lane0 ? rf_rdata1 : rf_rdata3;
+    assign branch_pred_taken = branch_control_lane0 ?
+                               idex_pred_taken0 : idex_pred_taken1;
+    assign branch_pred_target = branch_control_lane0 ?
+                                idex_pred_target0 : idex_pred_target1;
+    assign idex_is_jal = (idex_control0 || idex_control1) &&
+                         (branch_inst[6:0] == 7'b1101111);
+    assign idex_is_jalr = (idex_control0 || idex_control1) &&
+                          (branch_inst[6:0] == 7'b1100111);
     assign branch_immediate = idex_is_jal ?
-        {{11{idex_inst1[31]}}, idex_inst1[31], idex_inst1[19:12],
-         idex_inst1[20], idex_inst1[30:21], 1'b0} :
-        idex_is_jalr ? {{20{idex_inst1[31]}}, idex_inst1[31:20]} :
-        {{19{idex_inst1[31]}}, idex_inst1[31], idex_inst1[7],
-         idex_inst1[30:25], idex_inst1[11:8], 1'b0};
-    assign branch_direct_target = idex_pc1 + branch_immediate;
+        {{11{branch_inst[31]}}, branch_inst[31], branch_inst[19:12],
+         branch_inst[20], branch_inst[30:21], 1'b0} :
+        idex_is_jalr ? {{20{branch_inst[31]}}, branch_inst[31:20]} :
+        {{19{branch_inst[31]}}, branch_inst[31], branch_inst[7],
+         branch_inst[30:25], branch_inst[11:8], 1'b0};
+    assign branch_direct_target = branch_pc + branch_immediate;
 
     always_comb begin
         branch_opcode = 6'b0;
-        if (idex_control1 && (idex_inst1[6:0] == 7'b1100011)) begin
-            unique case (idex_inst1[14:12])
+        if ((idex_control0 || idex_control1) &&
+            (branch_inst[6:0] == 7'b1100011)) begin
+            unique case (branch_inst[14:12])
                 3'b000: branch_opcode[5] = 1'b1;
                 3'b001: branch_opcode[4] = 1'b1;
                 3'b100: branch_opcode[3] = 1'b1;
@@ -638,19 +664,21 @@ module dual_alu_pipeline (
         end
     end
 
-    branch_exec_unit u_lane1_branch (
-        .start(idex_valid && idex_lane1_valid && idex_control1),
+    branch_exec_unit u_branch (
+        .start(idex_valid &&
+               ((idex_lane0_valid && idex_control0) ||
+                (idex_lane1_valid && idex_control1))),
         .kill(redirect),
-        .pc(idex_pc1),
-        .src1(rf_rdata2),
-        .src2(rf_rdata3),
+        .pc(branch_pc),
+        .src1(branch_src1),
+        .src2(branch_src2),
         .immediate(branch_immediate),
         .direct_target(branch_direct_target),
         .branch_opcode(branch_opcode),
         .is_jal(idex_is_jal),
         .is_jalr(idex_is_jalr),
-        .predicted_taken(idex_pred_taken1),
-        .predicted_target(idex_pred_target1),
+        .predicted_taken(branch_pred_taken),
+        .predicted_target(branch_pred_target),
         .busy(branch_busy),
         .done(branch_done),
         .taken(branch_taken),
@@ -666,17 +694,17 @@ module dual_alu_pipeline (
     assign branch_redirect_target = branch_unit_redirect_target;
     assign branch_mispredict_event = branch_event && branch_mispredict;
     assign bp_update_valid = branch_event;
-    assign bp_update_pc = idex_pc1;
+    assign bp_update_pc = branch_pc;
     assign bp_update_taken = branch_taken;
     assign bp_update_target = branch_target;
     assign bp_update_is_call = (idex_is_jal || idex_is_jalr) &&
-                               ((idex_inst1[11:7] == 5'd1) ||
-                                (idex_inst1[11:7] == 5'd5));
+                               ((branch_inst[11:7] == 5'd1) ||
+                                (branch_inst[11:7] == 5'd5));
     assign bp_update_is_return = idex_is_jalr &&
-                                 (idex_inst1[11:7] == 5'd0) &&
-                                 ((idex_inst1[19:15] == 5'd1) ||
-                                  (idex_inst1[19:15] == 5'd5)) &&
-                                 (idex_inst1[31:20] == 12'd0);
+                                 (branch_inst[11:7] == 5'd0) &&
+                                 ((branch_inst[19:15] == 5'd1) ||
+                                  (branch_inst[19:15] == 5'd5)) &&
+                                 (branch_inst[31:20] == 12'd0);
     always_comb begin
         if (bp_update_is_return) begin
             bp_update_type = `BP_TYPE_RETURN;
@@ -692,6 +720,8 @@ module dual_alu_pipeline (
     end
 
     assign lane1_control_event = launch_fire && launch_control1;
+    assign control0_simple_event = launch_fire && launch_control0 &&
+                                   launch_simple1;
     assign lsu_pair_event = launch_fire && (launch_lsu0 || launch_lsu1);
     assign muldiv_pair_event = launch_fire &&
                                (launch_muldiv0 || launch_muldiv1);
@@ -703,22 +733,28 @@ module dual_alu_pipeline (
                             lsu_exception_valid ?
                                 (mem_lsu_is_store ? `EXC_SAM : `EXC_LAM) :
                             `EXC_NONE;
-    assign exception_pc = branch_exception_valid ? idex_pc1 :
+    assign exception_pc = branch_exception_valid ? branch_pc :
                           mem_lsu_lane1 ? mem_pc1 : mem_pc0;
     assign exception_mtval = branch_exception_valid ? branch_target :
                              mem_lsu_address;
 
+    assign lane0_done = (idex_simple0 && alu_done0) ||
+                        (idex_control0 && branch_done);
     assign lane1_done = (idex_simple1 && alu_done1) ||
                          (idex_control1 && branch_done);
     assign fast_commit_valid[0] = idex_has_muldiv ?
                                   (idex_valid && idex_lane0_valid &&
                                    muldiv_done && !redirect) :
-                                  (!idex_has_lsu && alu_done0);
+                                  (!idex_has_lsu && lane0_done &&
+                                   !(branch_exception_valid &&
+                                     idex_control0));
     assign fast_commit_valid[1] = idex_has_muldiv ?
                                   (idex_valid && idex_lane1_valid &&
                                    muldiv_done && !redirect) :
                                   (!idex_has_lsu && lane1_done &&
-                                   !branch_exception_valid);
+                                   !branch_exception_valid &&
+                                   !(idex_control0 &&
+                                     branch_mispredict));
 
     assign mem_normal_commit = mem_valid && !mem_lsu_misaligned && !redirect;
     assign mem_commit_valid = mem_normal_commit ?
@@ -761,7 +797,8 @@ module dual_alu_pipeline (
     assign commit_waddr1 = mem_valid ? mem_rd1 : idex_rd1;
     assign commit_wdata0 = mem_valid ?
                            (mem_lsu_lane1 ? mem_alu_result0 : mem_load_result) :
-                           (idex_muldiv0 ? muldiv_result : alu_result0);
+                           (idex_muldiv0 ? muldiv_result :
+                            idex_control0 ? (idex_pc0 + 32'd4) : alu_result0);
     assign commit_wdata1 = mem_valid ?
                            (mem_lsu_lane1 ? mem_load_result : mem_alu_result1) :
                            (idex_muldiv1 ? muldiv_result :
@@ -793,23 +830,41 @@ module dual_alu_pipeline (
                ((launch_simple0 &&
                  (launch_simple1 || launch_control1 || launch_lsu1 ||
                   launch_muldiv1)) ||
-                ((launch_lsu0 || launch_muldiv0) && launch_simple1))))) begin
+                ((launch_control0 || launch_lsu0 || launch_muldiv0) &&
+                 launch_simple1))))) begin
             $fatal(1, "unsupported bundle class entered the dual resident");
         end
         if (rst_n && launch_fire && !launch_lane1_valid &&
-            (lane1_control_event || lsu_pair_event || muldiv_pair_event)) begin
+            (lane1_control_event || control0_simple_event ||
+             lsu_pair_event || muldiv_pair_event)) begin
             $fatal(1, "simple singleton emitted a pair-class event");
         end
         if (rst_n && idex_valid && !idex_lane1_valid && commit_valid[1]) begin
             $fatal(1, "simple singleton retired an invalid lane1");
         end
         if (rst_n && branch_event &&
-            (!idex_valid || !idex_lane1_valid || !idex_control1)) begin
-            $fatal(1, "lane1 branch resolved without a control resident");
+            (!idex_valid || (idex_control0 == idex_control1) ||
+             (idex_control0 && !idex_lane0_valid) ||
+             (idex_control1 && !idex_lane1_valid))) begin
+            $fatal(1, "branch resolved without exactly one control resident");
         end
-        if (rst_n && branch_exception_valid &&
+        if (rst_n && branch_exception_valid && idex_control1 &&
             ((commit_valid != 2'b01) || branch_redirect || commit_wen[1])) begin
             $fatal(1, "lane1 control exception violated precise age commit");
+        end
+        if (rst_n && branch_exception_valid && idex_control0 &&
+            ((commit_valid != 2'b00) || branch_redirect ||
+             (commit_wen != 2'b00))) begin
+            $fatal(1, "lane0 control exception violated precise age commit");
+        end
+        if (rst_n && branch_event && idex_control0 && branch_mispredict &&
+            !branch_exception_valid &&
+            ((commit_valid != 2'b01) || commit_wen[1])) begin
+            $fatal(1, "lane0 control mispredict retired younger lane1");
+        end
+        if (rst_n && branch_event && idex_control0 && !branch_mispredict &&
+            !branch_exception_valid && (commit_valid != 2'b11)) begin
+            $fatal(1, "correct lane0 control pair did not retire both lanes");
         end
         if (rst_n && branch_redirect && branch_exception_valid) begin
             $fatal(1, "misaligned lane1 control emitted both redirect and exception");

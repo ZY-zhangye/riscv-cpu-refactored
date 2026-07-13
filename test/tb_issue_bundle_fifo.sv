@@ -201,7 +201,7 @@ module tb_issue_bundle_fifo;
                      `PAIR_SIMPLE_SIMPLE, 0, 0, 0);
         clear_pipeline();
 
-        // A6.2 opens only lane0 simple + lane1 control.
+        // A6.2 opens lane0 simple + lane1 control.
         present_pair(32'h00100093, 32'h00000463, 2, 1,
                      `PAIR_SIMPLE_CONTROL, 0, 0, 0);
         clear_pipeline();
@@ -213,8 +213,26 @@ module tb_issue_bundle_fifo;
         present_pair(32'h00100093, 32'h008000ef, 1, 0,
                      `PAIR_NONE, 0, 1, 0);
         clear_pipeline();
-        // Control in the older lane is not part of the A6.2 whitelist.
-        present_pair(32'h00000463, 32'h00200113, 1, 0,
+        // A7.4.1 also opens older control + independent younger simple.
+        present_pair(32'h00000463, 32'h00200113, 2, 1,
+                     `PAIR_CONTROL_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+        present_pair(32'h008000ef, 32'h00200113, 2, 1,
+                     `PAIR_CONTROL_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+        present_pair(32'h000180e7, 32'h00200113, 2, 1,
+                     `PAIR_CONTROL_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+        // JAL writes x1; a younger x1 consumer remains a forbidden RAW.
+        present_pair(32'h008000ef, 32'h00008113, 1, 0,
+                     `PAIR_NONE, 1, 0, 0);
+        clear_pipeline();
+        // JAL and the younger simple both writing x1 remain a forbidden WAW.
+        present_pair(32'h008000ef, 32'h00200093, 1, 0,
+                     `PAIR_NONE, 0, 1, 0);
+        clear_pipeline();
+        // Two controls still contend for the single branch execution unit.
+        present_pair(32'h00000463, 32'h00000463, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
         // A6.3 opens one LSU in either lane.
