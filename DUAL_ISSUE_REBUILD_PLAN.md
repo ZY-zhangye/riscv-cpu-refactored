@@ -718,7 +718,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | --- | --- | --- | --- |
 | A0 | SIGNED_OFF | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
 | A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
-| A2 | PENDING | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
+| A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | PENDING | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
@@ -756,6 +756,16 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - tb_if_sync_btb passed; run_all.bat all passed 78/78
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.832, PASS
               - next: begin A2 Fetch FIFO, atomic Bundle FIFO and pairing-only Issue
+2026-07-13  A2 SIGNED_OFF
+              - added an 8-uop Fetch FIFO with atomic 2-push and 0/1/2-pop
+              - added pairing-only Issue and a 4-entry atomic Issue Bundle FIFO
+              - first whitelist is independent simple+simple; RAW/WAW/structure rejects pop lane0 only
+              - serialized each atomic bundle into the old single-uop Decode without an inter-lane bubble
+              - added committed/speculative RAS recovery and same-edge call/return request bypass
+              - four directed tests passed; run_all.bat all passed 78/78
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.821, PASS
+              - A2 IPC is an expected interim regression while the old Decode remains single-lane
+              - next: A3 synchronous 4R2W GPR, dual-lane datapath and scoreboard
 ```
 
 ### 17.3 A0 签核记录
@@ -890,3 +900,87 @@ A0 instret - A1 instret = A0 branch_mispredict
 ```
 
 九窗口合计差值为 `2474274 - 2279454 = 194820`，也等于 A0 九窗口 mispredict 合计。根因是旧 `if_stage` 在 redirect 时把 `NOP_INST` 作为有效 uop 送入后端并退休；A1 的 epoch/valid 丢弃不再把错误路径 bubble 计入 `instret`。软件镜像、sink 和 exceptions 均未变化。后续 IPC 比较以保留该修正的 A1/A2 计数语义为准，同时继续通过 commit trace 断言保证真实指令不丢失。
+
+### 17.5 A2 签核记录
+
+实现提交：
+
+```text
+commit:  9ce9bd467e1d30b460b1b642f33bd4c5dd6876de
+subject: frontend: add fetch and atomic issue bundle FIFOs
+```
+
+实现边界：
+
+- IF1 以原子 packet 向深度 8 的 Fetch FIFO 推送 1/2 条 uop；每条 uop 保存 epoch、32-bit age、PC、指令及 BTB/RAS 预测 metadata。
+- Fetch FIFO 支持 2 push、0/1/2 pop、回绕、同拍 push/pop 和 redirect clear；IF 只有在整包空间足够时才发送，不拆分双路响应。
+- pairing-only Issue 首版只允许 independent `simple+simple`：LUI、AUIPC、OP-IMM 和非 M 的 OP；检测 lane0→lane1 RAW、WAW 及非白名单结构冲突，`x0` 不形成依赖。
+- 深度 4 的 Issue Bundle FIFO 以 `{lane-valid, uop1, uop0}` 原子保存 bundle；不能配对时只弹出 lane0，lane1 保留为下一次最老 uop。
+- A2 尚未改造 Decode/后端为双 lane；`bundle_decode_adapter` 连续两拍发送 lane0/lane1，并在 redirect 时清除 resident lane1。这是 A3 前的兼容边界，不代表已经实现双退休。
+- RAS 分为 committed 与 speculative 两份：控制流解析更新 committed，packet 进入 Fetch FIFO 更新 speculative，redirect 用包含当前 resolving op 的 committed image 恢复；同拍 packet fire/request fire 对 call push 和 return pop 显式旁路。
+- 新增 `dual_issue`、`single_issue`、`issue_raw`、`issue_waw`、`issue_struct`、`issue_qfull` 性能 CSR，并扩展清零/读回测试。
+
+定向测试：
+
+```text
+test:    tb_perf_counters
+result:  PERF COUNTER TEST PASSED
+test:    tb_if_sync_btb
+result:  IF SYNC BTB TEST PASSED
+test:    tb_fetch_fifo_2wide
+result:  FETCH FIFO 2WIDE TEST PASSED
+test:    tb_issue_bundle_fifo
+result:  ISSUE BUNDLE FIFO TEST PASSED
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a2-directed-final.log
+```
+
+覆盖点：
+
+- Fetch FIFO empty/full、指针回绕、1/2 push、1/2 pop、同拍 push/pop、redirect clear、overflow/underflow assertion；
+- 同一 IF packet 在空间不足时保持完整稳定，空间恢复后一次性推入，PC/指令、age/epoch 和预测 tag 对齐；
+- independent simple+simple 原子成 bundle，Decode adapter 保持 lane0→lane1 顺序且中间无气泡；
+- RAW、WAW、结构冲突均拒绝配对并只 pop lane0，`x0` 读写不制造假依赖；
+- Bundle FIFO 不拆分，full/empty 与 redirect clear 正确；
+- speculative RAS call push 后的下一 request 使用 post-push top，redirect 后恢复到 committed 深度；return mispredict 保持 A1 的 16 次。
+
+官方回归：
+
+```text
+command: cmd /c "run_all.bat all < nul"
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a2-run_all_all-post-ras.log
+protected HEX after restore:
+         C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Brmisp | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216026 | 216013 | 999 | 2 | 0 |
+| MEXT | 190041 | 54016 | 284 | 4 | 0 |
+| BRANCH_RANDOM | 312159 | 245975 | 787 | 9475 | 0 |
+| BRANCH_REGULAR | 108046 | 96017 | 888 | 1505 | 0 |
+| BRANCH_SHORT | 117046 | 93015 | 794 | 3005 | 0 |
+| BRANCH_CALL | 192384 | 144022 | 748 | 4061 | 0 |
+| BRANCH_CAPACITY | 140943 | 69133 | 490 | 1152 | 0 |
+| BRANCH_RETURN | 848114 | 760025 | 896 | 16 | 0 |
+| MEMORY | 648680 | 601238 | 926 | 185 | 0 |
+| **Overall** | **2773439** | **2279454** | **821** | **19405** | **0** |
+
+```text
+header:      version=5, cpu_freq_hz=125000000, sink=0x9D3BF787
+result:      PERF_BENCHMARK_PASSED
+A1 overall:  cycles=2736627, instret=2279454, ipc_x1000=832
+A2 overall:  cycles=2773439, instret=2279454, ipc_x1000=821
+IPC change:  -11 x1000 (-1.32%)
+compile log: F:\Tools\temp\riscv-dual-rebuild-a2-nine-window-compile-final.log
+run log:     F:\Tools\temp\riscv-dual-rebuild-a2-nine-window-final.log
+```
+
+A2 的真实退休数、sink、exceptions 和 branch mispredict 总数均与 A1 一致，新增 issue 计数器也在九窗口报告中产生非零值。IPC 从 `0.832` 降到 `0.821`，主要是 Fetch/Bundle 阶段边界和单 lane Decode adapter 仍需串行消费 bundle；该回退被如实保留，A3 完成真实双 lane Decode/执行后再判断前端 FIFO 的性能收益，不能把 A2 的 pairing 计数误称为双退休性能。
+
+签核时重新核对冻结夹具：`benchmark.c`、`startup.S`、`linker.ld`、`Makefile`、`out/inst.hex`、`out/data.hex` 六项 SHA256 均与 12.2 相同；A0 适配后的 `test/tb_top.sv` 保持 `77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701`。
