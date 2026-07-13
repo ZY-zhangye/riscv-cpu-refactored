@@ -1,5 +1,8 @@
 module divider #(
-    parameter integer LATENCY = 12
+    // divide_result is captured in pending_result on the start edge.  LATENCY
+    // controls only resident busy/done delay; it does not pipeline or shorten
+    // the combinational divide path.
+    parameter integer LATENCY = 1
 ) (
     input  logic        clk,
     input  logic        rst_n,
