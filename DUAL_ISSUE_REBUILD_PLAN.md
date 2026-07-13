@@ -867,7 +867,11 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.5.4 run_all.bat all passed 78/78; direct/profile match; all DIV/REM ISA tests pass
               - A7.5.4 cycles=2077216, exact IPC=1.097360; MEXT cycles fell from 166041 to 78041
               - divider datapath and result-capture edge are unchanged; LSU remains fixed four-beat and single-outstanding
-              - next: user decision between timing-sensitive RAW bypass and A7.6 timing convergence
+              - A7.5.5 SIGNED_OFF in b2ebee5: measurement-only fixed-four-beat LSU latency-hiding audit
+              - A7.5.5 run_all.bat all passed 78/78; direct/profile match; no RTL or fixture changes
+              - no complete younger simple bundle is strictly independent during 86076 Load residents
+              - only 8000 registered-companion RAW uops and 15998 speculative post-LSU uops remain; optimistic combined IPC ceiling is 1.110186
+              - next: do not implement either LSU candidate without explicit user approval; audit M blocking or predictor before A7.6
 ```
 
 ### 17.3 A0 签核记录
@@ -2566,3 +2570,82 @@ frozen hashes:test/tb_top.sv, benchmark source/build files, inst/data HEX and pr
 A7.5.3→A7.5.4 的 overall cycles 减少 `88000`（`-4.064%`），精确 IPC 提升 `4.236%`。MEXT cycles 减少 `52.999%`，精确 IPC 从 `0.325317` 提升到 `0.692149`；其余八个窗口逐周期不变。DIV/REM 的 resident wait 从 `104000` 降到 `16000`，即从 13 降到 2 cycles/launch，差值恰好是 8000 次 launch 各减少 11 cycles；MUL 仍保持 `MUL_CYCLE=4` 和 `32000` wait。
 
 profile 守恒继续成立：dual launch/retire class、RAW/WAW 分类和架构 counters 均未改变；`wait_dual` 仅从 `652464` 降到 `564464`，zero-retire 从 `748490` 降到 `660490`，两者都精确减少 `88000`。A7.5.4 签核后，剩余有规模的 IPC 选择是主频敏感的 RAW 路径，或进入 A7.6 先取得真实时序余量。
+
+#### 17.10.10 A7.5.5 固定四拍 LSU 延迟隐藏机会审计
+
+```text
+baseline:              7a88e21 (A7.5.3/A7.5.4 documentation signed off)
+measurement commit:    b2ebee5
+status:                SIGNED_OFF (measurement only)
+RTL changes:           none
+fixture/report changes:none
+scope:                 one sample per four-beat Load resident; classify the
+                       current younger bundle, one-bundle lookahead and each
+                       simple uop against resident LSU/simple destinations
+hard invariants:       fixed E0-E3 Load, single outstanding, precise retirement,
+                       no same-cycle RAW bypass and no speculative execution
+next:                  audit M blocking or predictor; explicit user approval
+                       required before either non-zero LSU candidate
+```
+
+本阶段回答“保持四拍和 single-outstanding 时，能否用后续独立 simple 隐藏 Load 等待”。probe 只在 Load 已进入 `busy`、Bundle FIFO 已稳定暴露年轻队首后采样一次，因此不会把同一个队首在 E1/E2 重复统计为两次机会。另计 `172152` 个 busy wait cycles，恰好对应 `86076` 个 sampled Load 各两拍可执行窗口；E0 request/start 与 E3 response/release 不计为可额外 launch 的窗口。
+
+严格 bundle 级分类：
+
+```text
+sampled four-beat Loads:       86076
+younger head absent:               0
+younger head non-simple:       31996
+  contains LSU:                15998
+  contains control:            15998
+  contains MULDIV/other:           0
+younger all-simple head RAW:   54080
+younger all-simple head WAW:       0
+strictly independent head:         0
+safe one-bundle lookahead:         0 (unreachable because safe head is zero)
+```
+
+因此，在“不拆 bundle、不越过更老复杂指令、不增加旁路”的严格顺序边界内，固定四拍 Load 后面没有任何完整 simple bundle 可以提前执行。单纯增加一个普通 pending-result slot 不会得到收益。
+
+逐 uop 分类用于避免把较低风险的 registered companion 结果与真正的 Load RAW 混在一起：
+
+```text
+simple uops visible at younger head: 124157
+RAW:                               108159
+  Load-result only:                100159
+  resident-simple companion only:    8000
+  both:                                 0
+WAW-only:                               0
+independent:                        15998
+  ahead of a complex uop:               0
+  behind an older LSU:               15998
+  behind control/MULDIV/other:           0
+```
+
+分窗口上，MEMORY 的 `92160` 个 visible simple uop 全部是 Load-result RAW；BRANCH_RETURN 含 `7999` 个 Load-only RAW、`8000` 个 companion-only RAW，以及 `15998` 个位于更老下一条 LSU 之后的独立 simple。其余七窗口没有四拍 Load resident 样本。
+
+两个非零候选的边界不同：
+
+1. **registered companion partial issue，8000 uops**：producer 是当前 LSU bundle 中已经在 E0 计算出的 simple 结果，不需要 ALU0→ALU1 同拍级联；但年轻 all-simple bundle 的另一条 uop 仍依赖 Load，因此必须拆分 bundle、保存部分完成状态并按原年龄退休。数据路径风险低于同拍 RAW，控制与精确退休风险为 Medium。
+2. **speculative post-LSU simple，15998 uops**：候选位于下一 bundle 的 lane1，而 lane0 是一条更老 LSU。保持 single-outstanding 时只能先执行年轻 simple、暂存结果，等更老的下一次四拍访存完成后再顺序退休；必须处理 older LSU exception、redirect/kill、WAW/scoreboard 和跨 resident 生命周期。该项虽不缩短四拍，却属于明确的乱序执行特例，架构风险 High。
+
+即使把两类 `23998` 个 uop 全部理想化为各节省一拍，且假设没有 overlap、buffer backpressure 或退休等待，overall 也只能从 `2077216` 降到 `2053218` cycles，精确 IPC 从 `1.0973601205` 提升到 `1.1101860592`（`+1.169%`）。这是不可实现的乐观上限，不是预期收益；它也不足以解释旧 `1.273` 路线。旧路线的主要差异仍是没有当前每次 Load 的固定四拍阻塞，以及不同的后端弹性，而不是默认开启同拍跨 ALU RAW bypass。
+
+验证与冻结结果：
+
+```text
+profile compile: 0 errors / 0 warnings
+profile result:  PERF_BENCHMARK_PASSED; all LSU-hide identities passed
+overall:         cycles=2077216, instret=2279454, ipc_x1000=1097
+exact IPC:       1.0973601204689354
+sink:            0x9D3BF787
+exceptions:      0
+direct/profile:  header, all nine reports, overall and PASS have zero differences
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+profile log:     F:\Tools\Temp\a755_lsu_hide_profile_signed.log
+run_all log:     F:\Tools\Temp\a755_lsu_hide_run_all_signed.log
+inst.hex SHA256: 459D81149CDD2A8886AE58F32AD27F58976AEECB82844B9BF4B1174FE96F9C7C
+data.hex SHA256: DDB214EE5E790F797FD84456E23DB9CBFF3DCA8E37DF59DC7AD8EB3EB409364B
+```
+
+A7.5.5 不支持直接实施一个“简单 LSU latency-hiding slot”：严格候选为零。若要继续 IPC 优先探索，应先审计不涉及四拍访存的有限 M blocking 或 predictor miss 类别；若仍选择上述两个 LSU 特例，必须先由用户决定是否接受 partial bundle/精确退休状态或推测跨 LSU 执行，且不得改变 E0-E3、single-outstanding 和 SoC response-valid 边界。
