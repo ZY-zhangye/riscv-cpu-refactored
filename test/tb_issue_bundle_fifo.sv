@@ -12,6 +12,7 @@ module tb_issue_bundle_fifo;
     logic issue_bundle_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] issue_bundle;
     logic pair_accepted;
+    logic [`PAIR_CLASS_WIDTH-1:0] pair_class;
     logic reject_raw;
     logic reject_waw;
     logic reject_struct;
@@ -49,6 +50,7 @@ module tb_issue_bundle_fifo;
         .bundle_valid(issue_bundle_valid),
         .bundle(issue_bundle),
         .pair_accepted(pair_accepted),
+        .pair_class(pair_class),
         .reject_raw(reject_raw),
         .reject_waw(reject_waw),
         .reject_struct(reject_struct)
@@ -109,6 +111,7 @@ module tb_issue_bundle_fifo;
         input logic [31:0] inst1,
         input logic [1:0] expected_pop,
         input logic expected_pair,
+        input logic [`PAIR_CLASS_WIDTH-1:0] expected_class,
         input logic expected_raw,
         input logic expected_waw,
         input logic expected_struct
@@ -121,11 +124,12 @@ module tb_issue_bundle_fifo;
             #1;
             if ((fetch_pop_count !== expected_pop) ||
                 (pair_accepted !== expected_pair) ||
+                (pair_class !== expected_class) ||
                 (reject_raw !== expected_raw) ||
                 (reject_waw !== expected_waw) ||
                 (reject_struct !== expected_struct)) begin
-                $fatal(1, "issue decision mismatch pop=%0d pair=%0d raw=%0d waw=%0d struct=%0d",
-                       fetch_pop_count, pair_accepted, reject_raw,
+                $fatal(1, "issue decision mismatch pop=%0d pair=%0d class=%0d raw=%0d waw=%0d struct=%0d",
+                       fetch_pop_count, pair_accepted, pair_class, reject_raw,
                        reject_waw, reject_struct);
             end
             @(posedge clk);
@@ -147,7 +151,8 @@ module tb_issue_bundle_fifo;
         rst_n = 1;
 
         // Independent simple+simple is stored atomically and serialized in age order.
-        present_pair(32'h00100093, 32'h00200113, 2, 1, 0, 0, 0);
+        present_pair(32'h00100093, 32'h00200113, 2, 1,
+                     `PAIR_SIMPLE_SIMPLE, 0, 0, 0);
         if ((bundle_count != 1) || !head_lane0_valid || !head_lane1_valid) begin
             $fatal(1, "paired bundle was not stored atomically");
         end
@@ -168,14 +173,41 @@ module tb_issue_bundle_fifo;
         end
 
         // RAW, WAW and structural conflicts each force an atomic lane0-only bundle.
-        present_pair(32'h00100193, 32'h00018233, 1, 0, 1, 0, 0);
+        present_pair(32'h00100193, 32'h00018233, 1, 0,
+                     `PAIR_NONE, 1, 0, 0);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "RAW bundle not lane0-only");
         clear_pipeline();
-        present_pair(32'h00100293, 32'h00200293, 1, 0, 0, 1, 0);
+        present_pair(32'h00100293, 32'h00200293, 1, 0,
+                     `PAIR_NONE, 0, 1, 0);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "WAW bundle not lane0-only");
         clear_pipeline();
-        present_pair(32'h00002083, 32'h00200113, 1, 0, 0, 0, 1);
+        present_pair(32'h00002083, 32'h00200113, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "structural bundle not lane0-only");
+
+        // WAR is legal: lane0 reads x5 before younger lane1 writes x5.
+        clear_pipeline();
+        present_pair(32'h006280b3, 32'h00700293, 2, 1,
+                     `PAIR_SIMPLE_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+
+        // x0 never creates a dependency.
+        present_pair(32'h00100013, 32'h00200113, 2, 1,
+                     `PAIR_SIMPLE_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+
+        // A6.1 keeps control, LSU, MULDIV and bitman outside the dual whitelist.
+        present_pair(32'h00100093, 32'h00000463, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
+        clear_pipeline();
+        present_pair(32'h00100093, 32'h00012103, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
+        clear_pipeline();
+        present_pair(32'h00100093, 32'h02310133, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
+        clear_pipeline();
+        present_pair(32'h403170b3, 32'h00200113, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
 
         // Redirect atomically clears the resident bundle and adapter state.
         clear_pipeline();

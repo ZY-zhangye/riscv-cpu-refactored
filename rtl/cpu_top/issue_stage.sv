@@ -10,6 +10,7 @@ module issue_stage (
     output logic                         bundle_valid,
     output logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle,
     output logic                         pair_accepted,
+    output logic [`PAIR_CLASS_WIDTH-1:0] pair_class,
     output logic                         reject_raw,
     output logic                         reject_waw,
     output logic                         reject_struct
@@ -39,6 +40,12 @@ module issue_stage (
 
     logic simple0;
     logic simple1;
+    logic control0;
+    logic control1;
+    logic lsu0;
+    logic lsu1;
+    logic muldiv0;
+    logic muldiv1;
     logic uses_rs1_0;
     logic uses_rs2_0;
     logic uses_rd_0;
@@ -61,47 +68,27 @@ module issue_stage (
     assign {epoch1, age1, inst1, pc1, pred_taken1, pred_target1,
             pred_type1, btb_hit1, ras_valid1, ras_target1} = fetch_uop1;
 
-    function automatic logic is_simple(input logic [31:0] inst);
-        logic [6:0] opcode;
-        begin
-            opcode = inst[6:0];
-            is_simple = (opcode == 7'b0110111) || // LUI
-                        (opcode == 7'b0010111) || // AUIPC
-                        (opcode == 7'b0010011) || // OP-IMM / bitman immediate
-                        ((opcode == 7'b0110011) &&
-                         (inst[31:25] != 7'b0000001)); // OP, excluding M
-        end
-    endfunction
+    pair_predecode u_predecode0 (
+        .instruction(inst0),
+        .is_simple(simple0),
+        .is_control(control0),
+        .is_lsu(lsu0),
+        .is_muldiv(muldiv0),
+        .uses_rs1(uses_rs1_0),
+        .uses_rs2(uses_rs2_0),
+        .uses_rd(uses_rd_0)
+    );
 
-    function automatic logic uses_rs1(input logic [31:0] inst);
-        logic [6:0] opcode;
-        begin
-            opcode = inst[6:0];
-            uses_rs1 = (opcode == 7'b0010011) || (opcode == 7'b0110011);
-        end
-    endfunction
-
-    function automatic logic uses_rs2(input logic [31:0] inst);
-        uses_rs2 = (inst[6:0] == 7'b0110011);
-    endfunction
-
-    function automatic logic uses_rd(input logic [31:0] inst);
-        logic [6:0] opcode;
-        begin
-            opcode = inst[6:0];
-            uses_rd = (opcode == 7'b0110111) || (opcode == 7'b0010111) ||
-                      (opcode == 7'b0010011) || (opcode == 7'b0110011);
-        end
-    endfunction
-
-    assign simple0 = is_simple(inst0);
-    assign simple1 = is_simple(inst1);
-    assign uses_rs1_0 = uses_rs1(inst0);
-    assign uses_rs2_0 = uses_rs2(inst0);
-    assign uses_rd_0 = uses_rd(inst0);
-    assign uses_rs1_1 = uses_rs1(inst1);
-    assign uses_rs2_1 = uses_rs2(inst1);
-    assign uses_rd_1 = uses_rd(inst1);
+    pair_predecode u_predecode1 (
+        .instruction(inst1),
+        .is_simple(simple1),
+        .is_control(control1),
+        .is_lsu(lsu1),
+        .is_muldiv(muldiv1),
+        .uses_rs1(uses_rs1_1),
+        .uses_rs2(uses_rs2_1),
+        .uses_rd(uses_rd_1)
+    );
     assign rs1_0 = inst0[19:15];
     assign rs2_0 = inst0[24:20];
     assign rd_0 = inst0[11:7];
@@ -123,6 +110,7 @@ module issue_stage (
         bundle_valid = 1'b0;
         bundle = '0;
         pair_accepted = 1'b0;
+        pair_class = `PAIR_NONE;
         reject_raw = 1'b0;
         reject_waw = 1'b0;
         reject_struct = 1'b0;
@@ -133,6 +121,7 @@ module issue_stage (
                 fetch_pop_count = 2'd2;
                 bundle = {1'b1, 1'b1, fetch_uop1, fetch_uop0};
                 pair_accepted = 1'b1;
+                pair_class = `PAIR_SIMPLE_SIMPLE;
             end else begin
                 fetch_pop_count = 2'd1;
                 bundle = {1'b0, 1'b1, {`FETCH_UOP_WIDTH{1'b0}}, fetch_uop0};

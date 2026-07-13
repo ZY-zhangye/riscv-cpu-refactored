@@ -57,6 +57,7 @@ module cpu_top (
     logic issue_bundle_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] issue_bundle;
     logic issue_pair_accepted;
+    logic [`PAIR_CLASS_WIDTH-1:0] issue_pair_class;
     logic issue_reject_raw;
     logic issue_reject_waw;
     logic issue_reject_struct;
@@ -242,6 +243,7 @@ module cpu_top (
         .bundle_valid(issue_bundle_valid),
         .bundle(issue_bundle),
         .pair_accepted(issue_pair_accepted),
+        .pair_class(issue_pair_class),
         .reject_raw(issue_reject_raw),
         .reject_waw(issue_reject_waw),
         .reject_struct(issue_reject_struct)

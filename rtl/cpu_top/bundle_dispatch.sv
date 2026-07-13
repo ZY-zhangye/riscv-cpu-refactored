@@ -63,6 +63,10 @@ module bundle_dispatch (
     logic next_btb_hit1;
     logic next_ras_valid1;
     logic [31:0] next_ras_target1;
+    logic simple0;
+    logic simple1;
+    logic next_simple0;
+    logic next_simple1;
 
     assign {lane1_valid, lane0_valid, uop1, uop0} = bundle;
     assign {epoch0, age0, inst0, pc0, pred_taken0, pred_target0,
@@ -80,44 +84,32 @@ module bundle_dispatch (
             next_btb_hit1, next_ras_valid1,
             next_ras_target1} = next_uop1;
 
-    function automatic logic dual_alu_supported(input logic [31:0] inst);
-        logic [6:0] opcode;
-        logic [2:0] funct3;
-        logic [6:0] funct7;
-        begin
-            opcode = inst[6:0];
-            funct3 = inst[14:12];
-            funct7 = inst[31:25];
-            case (opcode)
-                7'b0110111,
-                7'b0010111: dual_alu_supported = 1'b1; // LUI/AUIPC
-                7'b0010011: begin
-                    case (funct3)
-                        3'b001: dual_alu_supported = (funct7 == 7'b0000000);
-                        3'b101: dual_alu_supported = (funct7 == 7'b0000000) ||
-                                                          (funct7 == 7'b0100000);
-                        default: dual_alu_supported = 1'b1;
-                    endcase
-                end
-                7'b0110011: begin
-                    dual_alu_supported = (funct7 == 7'b0000000) ||
-                                         ((funct7 == 7'b0100000) &&
-                                          ((funct3 == 3'b000) ||
-                                           (funct3 == 3'b101)));
-                end
-                default: dual_alu_supported = 1'b0;
-            endcase
-        end
-    endfunction
-
+    pair_predecode u_predecode0 (
+        .instruction(inst0), .is_simple(simple0),
+        .is_control(), .is_lsu(), .is_muldiv(),
+        .uses_rs1(), .uses_rs2(), .uses_rd()
+    );
+    pair_predecode u_predecode1 (
+        .instruction(inst1), .is_simple(simple1),
+        .is_control(), .is_lsu(), .is_muldiv(),
+        .uses_rs1(), .uses_rs2(), .uses_rd()
+    );
+    pair_predecode u_next_predecode0 (
+        .instruction(next_inst0), .is_simple(next_simple0),
+        .is_control(), .is_lsu(), .is_muldiv(),
+        .uses_rs1(), .uses_rs2(), .uses_rd()
+    );
+    pair_predecode u_next_predecode1 (
+        .instruction(next_inst1), .is_simple(next_simple1),
+        .is_control(), .is_lsu(), .is_muldiv(),
+        .uses_rs1(), .uses_rs2(), .uses_rd()
+    );
 
     assign dual_candidate = lane0_valid && lane1_valid &&
-                            dual_alu_supported(inst0) &&
-                            dual_alu_supported(inst1);
+                            simple0 && simple1;
     assign next_dual_candidate = next_bundle_valid && next_lane0_valid &&
                                  next_lane1_valid &&
-                                 dual_alu_supported(next_inst0) &&
-                                 dual_alu_supported(next_inst1);
+                                 next_simple0 && next_simple1;
     assign dual_bundle_valid = !redirect && bundle_valid && dual_candidate &&
                                legacy_idle && !prefer_legacy &&
                                (dual_mode || next_dual_candidate);
