@@ -64,22 +64,6 @@ module tb_uart_benchmark;
         .debug_commit_csr_wen(),
         .debug_commit_csr_addr(),
         .debug_commit_csr_data(),
-        .debug_wb_pc1(),
-        .debug_wb_rf_addr1(),
-        .debug_wb_rf_data1(),
-        .debug_wb_rf_wen1(),
-        .debug_wb_fpu_rf_wen1(),
-        .debug_commit_valid1(),
-        .debug_commit_inst1(),
-        .debug_commit_csr_wen1(),
-        .debug_commit_csr_addr1(),
-        .debug_commit_csr_data1(),
-        .debug_issue_inst0(),
-        .debug_issue_pc0(),
-        .debug_issue_valid0(),
-        .debug_issue_inst1(),
-        .debug_issue_pc1(),
-        .debug_issue_valid1(),
         .debug_store_valid(),
         .debug_store_pc(),
         .debug_store_addr(),
@@ -127,6 +111,13 @@ module tb_uart_benchmark;
                     $display("L3J_WINDOW_START phase=%0d fetch_pc=%08h wb_pc=%08h",
                              perf_phase, debug_inst_pc, debug_wb_pc);
                 end
+                downstream_blocked_cycles <= 0;
+                qfull_downstream_cycles <= 0;
+                qfull_capacity_cycles <= 0;
+                for (depth = 0; depth <= 4; depth = depth + 1) begin
+                    queue_depth_cycles[depth] <= 0;
+                end
+`ifdef P5_ISSUE_QUEUE_PROFILE
                 downstream_blocked_cycles <= !u_my_cpu.u_cpu_top.ds_bundle_allowin;
                 qfull_downstream_cycles <=
                     u_my_cpu.u_cpu_top.u_issue_stage.queue_full_event_now &&
@@ -138,7 +129,9 @@ module tb_uart_benchmark;
                     queue_depth_cycles[depth] <=
                         (u_my_cpu.u_cpu_top.u_issue_stage.queue_count == depth) ? 1 : 0;
                 end
+`endif
             end else if (u_my_cpu.u_cpu_top.u_regfile_csr.perf_enable) begin
+`ifdef P5_ISSUE_QUEUE_PROFILE
                 queue_depth_cycles[u_my_cpu.u_cpu_top.u_issue_stage.queue_count] <=
                     queue_depth_cycles[u_my_cpu.u_cpu_top.u_issue_stage.queue_count] + 1;
                 if (!u_my_cpu.u_cpu_top.ds_bundle_allowin) begin
@@ -151,6 +144,7 @@ module tb_uart_benchmark;
                         qfull_capacity_cycles <= qfull_capacity_cycles + 1;
                     end
                 end
+`endif
             end
 
             if (!u_my_cpu.u_cpu_top.u_regfile_csr.perf_enable && perf_enable_d) begin

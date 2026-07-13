@@ -716,7 +716,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 
 | 阶段 | 状态 | 实施范围 | 阶段签核门槛 |
 | --- | --- | --- | --- |
-| A0 | IN_PROGRESS | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
+| A0 | SIGNED_OFF | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
 | A1 | PENDING | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | PENDING | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | PENDING | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
@@ -738,9 +738,64 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 ### 17.2 当前进度
 
 ```text
-2026-07-13  A0 started
+2026-07-13  A0 SIGNED_OFF
               - created codex/dual-issue-rebuild-v1 from 774f8ce
               - froze rebuild plan and nine-window fixture in 65ee12e
-              - verified all seven fixture SHA256 values against section 12.2
-              - next: protect rv32-p-riscv.hex and run the untouched L0 full regression
+              - verified all seven original fixture SHA256 values against section 12.2
+              - adapted only P5-specific debug ports and optional queue hierarchy in test/tb_top.sv
+              - run_all.bat all: 78/78 passed (1 perf-counter unit test + 77 ISA), 0 failed
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.824, PASS
+              - protected rv32-p-riscv.hex remained at its pre-run SHA256
+              - next: begin A1 synchronous dual-lane IROM/BTB request stage
 ```
+
+### 17.3 A0 签核记录
+
+签核提交基线：
+
+```text
+RTL baseline:       774f8ce974a9e10f7ffcf4f0a9117aa6fe31e18b
+fixture commit:     65ee12efe65fb21fe6e0a812d34c927c3e9ee12e
+status tracker:     73e66e4
+protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+adapted tb_top SHA: 77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701
+```
+
+官方回归：
+
+```text
+command: cmd /c run_all.bat all
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a0\run_all_all_after_fixture.log
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Exceptions |
+| --- | ---: | ---: | ---: | ---: |
+| ALU | 216020 | 216015 | 999 | 0 |
+| MEXT | 190033 | 54020 | 284 | 0 |
+| BRANCH_RANDOM | 279812 | 257254 | 919 | 0 |
+| BRANCH_REGULAR | 105030 | 99021 | 942 | 0 |
+| BRANCH_SHORT | 111028 | 99019 | 891 | 0 |
+| BRANCH_CALL | 204337 | 164127 | 803 | 0 |
+| BRANCH_CAPACITY | 267281 | 135182 | 505 | 0 |
+| BRANCH_RETURN | 1024052 | 848034 | 828 | 0 |
+| MEMORY | 602331 | 601602 | 998 | 0 |
+| **Overall** | **2999924** | **2474274** | **824** | **0** |
+
+```text
+command: vlog -sv +define+PERF_BENCH +define+DEBUG_EN ...
+         vsim -c -do "run -all; quit -force" tb_uart_benchmark
+header:  version=5, cpu_freq_hz=125000000, sink=0x9D3BF787
+result:  PERF_BENCHMARK_PASSED
+compile: 0 errors / 0 warnings
+compile log: F:\Tools\temp\riscv-dual-rebuild-a0\nine_window_compile_final.log
+run log:     F:\Tools\temp\riscv-dual-rebuild-a0\nine_window_benchmark_final.log
+```
+
+`test/tb_top.sv` 的 A0 适配只移除 L0 不存在的 P5 第二 lane debug 端口，并把 P5 issue queue 层次观察放到默认关闭的 `P5_ISSUE_QUEUE_PROFILE` 宏下。软件、预生成 HEX、21-word 报告布局、九个窗口、邮箱、magic/version、timeout、expected sink、exceptions 检查和 overall IPC 算法均未修改。
+
+Questa 在仿真时刻 0 对 `rtl/cpu_top/divider.sv:43` 报告一次 `Infinity results from division operation` warning；它不属于编译 warning，未影响九窗口结果。后续 A4 模块化 Divider 时应消除该未初始化组合除法诊断。
