@@ -183,6 +183,43 @@ module tb_lsu_four_beat_load;
             end
         end
 
+        // A7.5.2: a younger LSU may remain in the same dispatch domain, but the
+        // shared LSU must still serialize it as a new E0-E3 transaction.  The
+        // second request cannot overlap or reuse any beat of the first one.
+        base = 32'h1020;
+        start = 1'b1;
+        #0.1;
+        if (!load_request_valid || busy || done ||
+            (request_count != 1) || (address != 32'h1020)) begin
+            $fatal(1, "chained Load E0 did not start a distinct request");
+        end
+        @(posedge clk);
+        #0.1;
+        start = 1'b0;
+        #0.1;
+
+        if (!busy || done || load_request_valid || (request_count != 2)) begin
+            $fatal(1, "chained Load E1 mismatch busy=%b done=%b request=%b count=%0d",
+                   busy, done, load_request_valid, request_count);
+        end
+        @(posedge clk);
+        #0.1;
+
+        if (!busy || done || load_request_valid || (request_count != 2)) begin
+            $fatal(1, "chained Load E2 resident state mismatch");
+        end
+        response_data = 32'h1234_5678;
+        response_valid = 1'b1;
+        @(posedge clk);
+        #0.1;
+        response_valid = 1'b0;
+
+        if (busy || !done || load_request_valid || (request_count != 2) ||
+            (load_response_data != 32'h1234_5678) ||
+            (address != 32'h1020)) begin
+            $fatal(1, "chained Load E3 response/release mismatch");
+        end
+
         check_mem_extension(`LW,  32'h1000, 32'h89ab_cdef, 32'h89ab_cdef);
         check_mem_extension(`LB,  32'h1003, 32'h807f_0180, 32'hffff_ff80);
         check_mem_extension(`LBU, 32'h1000, 32'h807f_0180, 32'h0000_0080);

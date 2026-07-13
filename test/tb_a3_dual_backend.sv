@@ -511,8 +511,9 @@ module tb_a3_dual_backend;
 
         // A7.5.1 keeps the four-beat LSU resident unchanged, but permits any
         // already-signed-off one-cycle simple/control continuation to consume
-        // its same-edge MEM release.  LSU and long MULDIV remain excluded
-        // followers.
+        // its same-edge MEM release.  A7.5.2 lets a supported younger LSU pair
+        // remain in the same domain but still serializes it through its own
+        // four beats; unsupported dual-LSU and long MULDIV remain excluded.
         dispatch_next_bundle = make_single(32'h0030_0193,
                                            32'h0000_0418, 32'd18);
         #1;
@@ -534,8 +535,14 @@ module tb_a3_dual_backend;
         dispatch_next_bundle = make_pair(32'h0030_0193, 32'h0001_2083,
                                           32'h0000_0418, 32'd18);
         #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "supported LSU follower did not continue an LSU run");
+        end
+        dispatch_next_bundle = make_pair(32'h0001_2083, 32'h0041_2203,
+                                          32'h0000_0418, 32'd18);
+        #1;
         if (dispatch_dual_valid || !dispatch_legacy_valid) begin
-            $fatal(1, "LSU follower incorrectly admitted an LSU run");
+            $fatal(1, "unsupported dual-LSU follower entered an LSU run");
         end
         dispatch_next_bundle = make_single(32'h0220_81B3,
                                            32'h0000_0418, 32'd18);

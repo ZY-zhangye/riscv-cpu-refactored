@@ -93,6 +93,7 @@ module bundle_dispatch (
     logic muldiv_candidate;
     logic next_simple_pair;
     logic next_control_pair;
+    logic next_lsu_pair;
     logic next_fast_continuation;
     logic lsu_run_candidate;
     logic muldiv_run_candidate;
@@ -184,6 +185,8 @@ module bundle_dispatch (
                                next_lane1_valid &&
                                ((next_simple0 && next_control1) ||
                                 (next_control0 && next_simple1));
+    assign next_lsu_pair = next_pair_candidate &&
+                           (next_lsu0 || next_lsu1);
     assign next_fast_continuation = next_simple_pair ||
                                     next_simple_singleton_candidate ||
                                     next_control_singleton_candidate ||
@@ -191,11 +194,12 @@ module bundle_dispatch (
     // A long LSU resident is admitted only inside an already-established dual
     // run and only when a younger one-cycle simple/control bundle can consume
     // the same-edge MEM release.  This preserves the LSU's fixed four-beat
-    // cadence and excludes another LSU or long MULDIV continuation.  Otherwise
-    // the legacy pipeline is cheaper because it can fill younger stages behind
-    // the memory operation.
+    // cadence.  A younger supported LSU pair may also remain resident, but it
+    // still waits for the same single LSU and executes its own complete four
+    // beats; this adds neither request overlap nor another outstanding access.
+    // Long MULDIV and unsupported LSU combinations remain excluded.
     assign lsu_run_candidate = lsu_candidate && dual_mode &&
-                               next_fast_continuation;
+                               (next_fast_continuation || next_lsu_pair);
     // A valid shared MUL/DIV bundle can establish a dual run directly.  A pair
     // overlaps its independent simple lane; a singleton avoids draining into
     // the legacy long-op path and reuses the same resident.  legacy_idle

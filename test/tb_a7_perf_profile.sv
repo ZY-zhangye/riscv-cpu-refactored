@@ -35,6 +35,13 @@ module tb_a7_perf_profile;
     longint unsigned legacy_prefer_fallbacks;
     longint unsigned legacy_drain_wait_cycles;
     longint unsigned dual_backend_wait_cycles;
+    longint unsigned domain_exit_prefer;
+    longint unsigned domain_exit_non_lsu;
+    longint unsigned domain_exit_lsu_gap;
+    longint unsigned domain_exit_lsu_fast;
+    longint unsigned domain_exit_lsu_follower;
+    longint unsigned domain_exit_muldiv_follower;
+    longint unsigned domain_exit_other_follower;
 
     longint unsigned total_imem_requests;
     longint unsigned total_fetch_packets;
@@ -61,6 +68,13 @@ module tb_a7_perf_profile;
     longint unsigned total_legacy_prefer_fallbacks;
     longint unsigned total_legacy_drain_wait_cycles;
     longint unsigned total_dual_backend_wait_cycles;
+    longint unsigned total_domain_exit_prefer;
+    longint unsigned total_domain_exit_non_lsu;
+    longint unsigned total_domain_exit_lsu_gap;
+    longint unsigned total_domain_exit_lsu_fast;
+    longint unsigned total_domain_exit_lsu_follower;
+    longint unsigned total_domain_exit_muldiv_follower;
+    longint unsigned total_domain_exit_other_follower;
 
     function automatic string perf_window_name(input integer index);
         begin
@@ -106,6 +120,13 @@ module tb_a7_perf_profile;
             legacy_prefer_fallbacks = 0;
             legacy_drain_wait_cycles = 0;
             dual_backend_wait_cycles = 0;
+            domain_exit_prefer = 0;
+            domain_exit_non_lsu = 0;
+            domain_exit_lsu_gap = 0;
+            domain_exit_lsu_fast = 0;
+            domain_exit_lsu_follower = 0;
+            domain_exit_muldiv_follower = 0;
+            domain_exit_other_follower = 0;
         end
     endtask
 
@@ -149,6 +170,21 @@ module tb_a7_perf_profile;
                        "A7 profile fallback subset failed: prefer=%0d total=%0d",
                        legacy_prefer_fallbacks, legacy_pair_fallbacks);
             end
+            if (dual_to_legacy_transitions !=
+                (domain_exit_prefer + domain_exit_non_lsu +
+                 domain_exit_lsu_gap + domain_exit_lsu_fast +
+                 domain_exit_lsu_follower +
+                 domain_exit_muldiv_follower +
+                 domain_exit_other_follower)) begin
+                $fatal(1,
+                       "A7 profile domain-exit identity failed: total=%0d classified=%0d",
+                       dual_to_legacy_transitions,
+                       domain_exit_prefer + domain_exit_non_lsu +
+                       domain_exit_lsu_gap + domain_exit_lsu_fast +
+                       domain_exit_lsu_follower +
+                       domain_exit_muldiv_follower +
+                       domain_exit_other_follower);
+            end
         end
     endtask
 
@@ -179,6 +215,13 @@ module tb_a7_perf_profile;
                      legacy_prefer_fallbacks,
                      legacy_pair_fallbacks - legacy_prefer_fallbacks,
                      legacy_drain_wait_cycles, dual_backend_wait_cycles);
+            $display("A7_DOMAIN_EXIT_WINDOW index=%0d name=%s total=%0d prefer=%0d non_lsu=%0d lsu_gap=%0d lsu_fast=%0d lsu_follower=%0d muldiv_follower=%0d other_follower=%0d",
+                     report_index, perf_window_name(report_index),
+                     dual_to_legacy_transitions, domain_exit_prefer,
+                     domain_exit_non_lsu, domain_exit_lsu_gap,
+                     domain_exit_lsu_fast, domain_exit_lsu_follower,
+                     domain_exit_muldiv_follower,
+                     domain_exit_other_follower);
         end
     endtask
 
@@ -209,6 +252,14 @@ module tb_a7_perf_profile;
             total_legacy_prefer_fallbacks += legacy_prefer_fallbacks;
             total_legacy_drain_wait_cycles += legacy_drain_wait_cycles;
             total_dual_backend_wait_cycles += dual_backend_wait_cycles;
+            total_domain_exit_prefer += domain_exit_prefer;
+            total_domain_exit_non_lsu += domain_exit_non_lsu;
+            total_domain_exit_lsu_gap += domain_exit_lsu_gap;
+            total_domain_exit_lsu_fast += domain_exit_lsu_fast;
+            total_domain_exit_lsu_follower += domain_exit_lsu_follower;
+            total_domain_exit_muldiv_follower +=
+                domain_exit_muldiv_follower;
+            total_domain_exit_other_follower += domain_exit_other_follower;
         end
     endtask
 
@@ -241,6 +292,13 @@ module tb_a7_perf_profile;
         total_legacy_prefer_fallbacks = 0;
         total_legacy_drain_wait_cycles = 0;
         total_dual_backend_wait_cycles = 0;
+        total_domain_exit_prefer = 0;
+        total_domain_exit_non_lsu = 0;
+        total_domain_exit_lsu_gap = 0;
+        total_domain_exit_lsu_fast = 0;
+        total_domain_exit_lsu_follower = 0;
+        total_domain_exit_muldiv_follower = 0;
+        total_domain_exit_other_follower = 0;
     end
 
     always @(posedge u_benchmark.clk) begin
@@ -333,6 +391,32 @@ module tb_a7_perf_profile;
                 if (u_benchmark.u_my_cpu.u_cpu_top.legacy_bundle_pop &&
                     u_benchmark.u_my_cpu.u_cpu_top.dual_mode) begin
                     dual_to_legacy_transitions += 1;
+                    if (u_benchmark.u_my_cpu.u_cpu_top.
+                            prefer_legacy_dispatch) begin
+                        domain_exit_prefer += 1;
+                    end else if (!u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.lsu_candidate) begin
+                        domain_exit_non_lsu += 1;
+                    end else if (!u_benchmark.u_my_cpu.u_cpu_top.
+                                     bundle_next_valid) begin
+                        domain_exit_lsu_gap += 1;
+                    end else if (u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.
+                                     next_fast_continuation) begin
+                        domain_exit_lsu_fast += 1;
+                    end else if (u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.next_lsu0 ||
+                                 u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.next_lsu1) begin
+                        domain_exit_lsu_follower += 1;
+                    end else if (u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.next_muldiv0 ||
+                                 u_benchmark.u_my_cpu.u_cpu_top.
+                                     u_bundle_dispatch.next_muldiv1) begin
+                        domain_exit_muldiv_follower += 1;
+                    end else begin
+                        domain_exit_other_follower += 1;
+                    end
                 end
                 if (u_benchmark.u_my_cpu.u_cpu_top.legacy_bundle_pop &&
                     u_benchmark.u_my_cpu.u_cpu_top.bundle_head[
@@ -411,6 +495,13 @@ module tb_a7_perf_profile;
                  total_legacy_pair_fallbacks - total_legacy_prefer_fallbacks,
                  total_legacy_drain_wait_cycles,
                  total_dual_backend_wait_cycles);
+        $display("A7_DOMAIN_EXIT_TOTAL total=%0d prefer=%0d non_lsu=%0d lsu_gap=%0d lsu_fast=%0d lsu_follower=%0d muldiv_follower=%0d other_follower=%0d",
+                 total_dual_to_legacy_transitions,
+                 total_domain_exit_prefer, total_domain_exit_non_lsu,
+                 total_domain_exit_lsu_gap, total_domain_exit_lsu_fast,
+                 total_domain_exit_lsu_follower,
+                 total_domain_exit_muldiv_follower,
+                 total_domain_exit_other_follower);
         if (window_index != 10) begin
             $error("A7 profile expected boot plus 9 windows, got %0d closures",
                    window_index);
