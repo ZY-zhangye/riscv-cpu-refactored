@@ -836,7 +836,9 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.3 directed tests passed 6/6 and run_all.bat all passed 78/78 with compile 0 errors / 0 warnings
               - A7.3 cycles=2686213, exact IPC=0.848575; sink/exceptions/hashes unchanged
               - A7.3 measured 197652 singleton launches and 435860 retire2 cycles; actual dual launches rose to 633512
-              - A7.4 will open only pair classes justified by the new counters
+              - A7.4 design started from clean A7.3 signoff 262e88a; a one-shot external probe preserved the exact A7.3 report
+              - A7.4 census selected only control0+simple1: 125265 clean opportunities, 86.248% of all struct rejects
+              - WAW-only and bitman+simple each have zero frozen-workload opportunities; simple RAW is deferred behind a separate timing gate
               - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
 ```
 
@@ -1899,3 +1901,81 @@ A7.2→A7.3 的真实退休数、branch mispredict、sink 和 exceptions 不变�
 每窗口与总计均满足 class 守恒：`633512 = 293637 simple pair + 197652 singleton + 120043 control + 8180 LSU + 14000 MULDIV`；退休守恒也成立：`633512 = 197652 retire1 + 435860 retire2`。dual backend 覆盖的有效退休指令从 A7.2 的 `815002`（`35.754%`）增至 `1069372`（`46.914%`）。`wait_legacy` 的候选定义在 A7.3 扩展后会额外计入等待 legacy 排空的 singleton，因此其数值不能与 A7.2 直接解释为退化；更稳定的域切换指标是 non-prefer legacy fallback 减少 `28000`，同时整体周期下降 `145521`。
 
 签核后重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`，八项 SHA256 全部与 A7.2/12.2 记录一致，未重建软件、未修改 golden。A7.3 已独立签核，A7 总阶段保持 `IN_PROGRESS`；下一子阶段 A7.4 只根据现有 rejection、class 与窗口计数选择性开放配对，不继续扩大 singleton 类别。
+
+#### 17.10.4 A7.4 data-driven selective pairing 设计记录
+
+```text
+baseline:              262e88a1c9fefe2b64135cf2d56959203c3c4636 (A7.3 signed off, clean worktree)
+status:                IN_PROGRESS (design frozen; implementation not started)
+implementation tranche: A7.4.1
+selected class:        PAIR_CONTROL_SIMPLE = older control0 + younger simple1
+scope:                 defines + Issue + Dispatch + dual branch/commit selection
+                       + directed tests + A7 measurement probe
+out of scope:          simple RAW/WAW relaxation, bitman execution, control+control,
+                       control+LSU/MULDIV, dual LSU/MULDIV, legacy backend,
+                       predictor/RAS policy, frozen CSR/report and A7.5 timing edits
+census compile log:    F:\Tools\Temp\riscv-dual-rebuild-a7-4-census-compile.log
+census log:            F:\Tools\Temp\riscv-dual-rebuild-a7-4-census.log
+rollback gate:         any correctness/event/hash mismatch, regression failure,
+                       no control0 launch, no struct reduction, or no overall cycle reduction
+```
+
+A7.3 的九窗口报告含 `477997` 个 RAW、`255495` 个 WAW 和 `145238` 个 structural reject，但 A6.1 已确认这些原因允许重叠，不能直接作为可开放配对数。为避免按总计误选，本阶段先用工作区外的一次性 measurement-only wrapper 观察当前 Issue head；wrapper 源文件在采样后删除且不进入提交，只保留日志。该运行的九条原报告、overall `2686213/2279454/848`、sink、PASS 与 A7.3 完全相同，编译和仿真均为 `0 errors / 0 warnings`。
+
+候选普查结果：
+
+| Candidate | Clean dynamic opportunities | Decision | Reason |
+| --- | ---: | --- | --- |
+| pure simple WAW younger-wins | 0 WAW-only | 不实施 | `252968` 个 simple WAW 全部同时是 RAW；只放宽写优先级没有性能机会 |
+| simple RAW lane0→lane1 | 100079 RAW-only；另有 252968 RAW+WAW | 本次延后 | 覆盖潜力大，但会形成 RF→ALU0→mux→ALU1 的双 ALU 组合链，直接冲突 A7.5 的 5.000 ns 目标 |
+| bitman0+simple1 / simple0+bitman1 | 0 / 0 | 不实施 | 冻结 workload 无机会，且 dual backend 当前没有 bitman datapath |
+| control0+simple1 | 125265，全部无 RAW/WAW | **本次唯一实施项** | 占全部 structural reject 的 `86.248%`，可复用现有单 branch unit，并行 branch/simple 不增加串联 ALU 路径 |
+
+`control0+simple1` 的窗口分布：
+
+| Window | Clean opportunities |
+| --- | ---: |
+| ALU | 12000 |
+| MEXT | 2 |
+| BRANCH_RANDOM | 23801 |
+| BRANCH_REGULAR | 22505 |
+| BRANCH_SHORT | 14999 |
+| BRANCH_CALL | 19950 |
+| BRANCH_CAPACITY | 4 |
+| BRANCH_RETURN | 32004 |
+| MEMORY | 0 |
+| **Total** | **125265** |
+
+类别中含 `93256` 个条件分支、`23998` 个 JAL 和 `8011` 个 JALR。`92498` 次 lane0 预测 taken，恰好对应 `92498` 次非顺序 lane1 PC；其余 `32767` 次 lane1 PC 为 `pc0+4`。因此实现不得把 lane1 重新生成为固定 `pc0+4`，不得交换 lane 年龄，也不得假设 pair 来自同一取指 packet；必须原样保留 Fetch FIFO 已选择的预测路径 uop、PC、age 和 epoch。
+
+冻结以下实现边界：
+
+1. 在两个镜像 `defines.svh` 的现有 3-bit class 最后一个空闲编码增加 `PAIR_CONTROL_SIMPLE=3'd7`，不扩大 Bundle 或 Fetch metadata。Issue 只在 `control0 && simple1 && !raw_hazard && !waw_hazard` 时接受；JAL/JALR 的 `rd0` 到 lane1 source/destination 相关继续拆单，`control0+control1` 和所有未列类别继续 structural reject。
+2. Dispatch 的 current/next pair candidate 与 `complex_candidate` 增加 `control0+simple1`。它与现有 lane1 control 一样可在 `legacy_idle && !prefer_legacy` 时直接建立 dual run；active legacy、`dual_block_legacy`、redirect、LSU run rule、MULDIV 例外及 A7.3 singleton lookahead 规则全部不变。
+3. dual pipeline 仍只有一个 `branch_exec_unit`。按 control 所在 lane 选择 instruction、PC、RF operands、prediction metadata 和 direct target；新增保存 lane0 `pred_taken/pred_target`，不复制 branch unit、不交换 lane，也不把 control 送入 simple ALU。
+4. 条件分支、JAL 与 JALR 的 branch/BP/RAS update 均使用 control lane 的 PC 和 instruction。control0 JAL/JALR 的 link 写回为 `pc0+4`；lane1 simple 继续使用其自己的 PC，因此 predicted-taken target 上的 AUIPC 等指令必须得到 target PC 而不是 fall-through PC。
+5. dual resident 自己产生的 redirect 在当前 commit edge 清 frontend 并释放自身 resident，但不作为 external kill 在组合上抹去本 pair。control0 mispredict 时 fault-free control0 正常退休，预测路径上的 younger simple1 被精确取消；control0 IAM 时 faulting control0 和 younger simple1 都不退休。外部 redirect/exception 仍杀死两个 lane。
+6. 保留现有 `lane1_control_event` 口径，新增内部 `control0_simple_event` 供 directed test 和 measurement-only probe 使用；不得占用冻结 CSR、修改 21-word report 或改变旧 lane1-control 计数。A7 probe 增加 `control0_simple_launches` 与 `control0_lane1_kills`，class/retire 恒等式同步包含新类。
+7. simple RAW、WAW 和 bitman 不得借本次重构顺带开放。若 A7.4.1 签核后仍要评估 RAW，必须另建 A7.4.2 设计记录，先按 producer/consumer 操作细分并给出 5.000 ns 路径证据；不能把组合旁路隐藏在本类提交中。
+
+精确退休矩阵：
+
+| Resident / outcome | `commit_valid` | Redirect / exception rule |
+| --- | ---: | --- |
+| existing simple0+control1, correct or mispredict | `2'b11` | lane0 更老、lane1 是 control 本身，两条均可退休，保持现有行为 |
+| existing simple0+control1, control1 IAM | `2'b01` | 只退更老 simple0，保持现有行为 |
+| new control0+simple1, prediction correct | `2'b11` | lane1 是已验证预测路径，可退休 |
+| new control0+simple1, direction/target mispredict | `2'b01` | 退 control0，禁止 lane1 writeback/retire，并 redirect |
+| new control0+simple1, control0 IAM | `2'b00` | faulting control0 与所有 younger side effect 均禁止；只发 exception |
+| either orientation, external kill before resolution | `2'b00` | 不发 branch/BP/writeback/retire event |
+
+实现必须增加断言：control0 mispredict 不得退休 lane1；control0 IAM 不得退休任一 lane 或同时 redirect；control1 IAM 仍只能退休 lane0；branch event/BP update 必须来自唯一 control resident；correct predicted-taken pair 必须保留非顺序 lane1 PC；所有 accepted pair 仍满足同 epoch、`age1=age0+1` 和一次原子 launch。
+
+定向签核至少覆盖：
+
+1. `tb_issue_bundle_fifo`：branch/JAL/JALR0+simple1 class 接受；JAL/JALR RAW、WAW 仍拒绝；control+control 与未开放类别仍 structural reject；原六类 class 不变。
+2. `tb_a3_dual_backend`：control0 pair 可作为 complex candidate 直接建立 dual run；`legacy_idle`、`prefer_legacy`、active dual/legacy、lookahead 与 redirect 排斥保持原边界。
+3. `tb_a6_simple_control`：control0 正确 not-taken、正确 taken 且非顺序 lane1 PC、direction/target mispredict 的 lane1 kill、JAL call link、JALR return、lane0 IAM `commit=00`、external kill，以及所有现有 lane1-control 用例。
+4. 重新运行 `tb_if_sync_btb`、`tb_regfiles_4r2w` 和受影响 LSU/MULDIV 定向测试，随后 `run_all.bat all` 78/78、冻结九窗口直跑和 A7 profile A/B。
+
+性能签核要求 A7.3 的 `instret=2279454`、branch=`396041`、branch mispredict=`19405`、sink=`0x9D3BF787` 和 exceptions=0 不变；`control0_simple_launches > 0`，九窗口 structural reject 必须低于 `145238`，目标 branch 窗口 aggregate cycles 必须低于 A7.3 的 `1533045`，overall cycles 必须低于 `2686213`。直跑与 wrapper 的 header、九条 report、overall 和 PASS 必须一致；每窗口满足扩展后的 class identity 与 `dual_launch=retire1+retire2`。最后复核 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv` 八项 SHA256。任一正确性门槛失败或整体周期不降即回退本实现，不以提高 pair counter 代替真实性能收益。
