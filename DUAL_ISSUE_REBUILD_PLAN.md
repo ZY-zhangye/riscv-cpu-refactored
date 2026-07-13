@@ -836,10 +836,13 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.3 directed tests passed 6/6 and run_all.bat all passed 78/78 with compile 0 errors / 0 warnings
               - A7.3 cycles=2686213, exact IPC=0.848575; sink/exceptions/hashes unchanged
               - A7.3 measured 197652 singleton launches and 435860 retire2 cycles; actual dual launches rose to 633512
-              - A7.4 design started from clean A7.3 signoff 262e88a; a one-shot external probe preserved the exact A7.3 report
-              - A7.4 census selected only control0+simple1: 125265 clean opportunities, 86.248% of all struct rejects
-              - WAW-only and bitman+simple each have zero frozen-workload opportunities; simple RAW is deferred behind a separate timing gate
-              - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
+              - A7.4.1 SIGNED_OFF in 6051e2d: older control0 + younger independent simple1, with precise lane1 kill on mispredict
+              - A7.4.1 affected directed tests passed 8/8 and run_all.bat all passed 78/78; compile 0 errors / 0 warnings
+              - A7.4.1 cycles=2454505, exact IPC=0.928682; sink/instret/branch/brmisp/exceptions/hashes unchanged
+              - A7.4.1 measured 74506 control0 launches and 5308 lane1 kills; structural rejects fell from 145238 to 19971
+              - A7.4.1 also qualified MEM exception outputs with ms_valid; this removed a stale-exception frontend redirect exposed by rv32mi-p-ma_fetch
+              - WAW-only and bitman+simple each have zero frozen-workload opportunities; simple RAW remains deferred behind a separate timing gate
+              - next: A7.5 200 MHz timing convergence and IPC x Fmax signoff; A7 overall remains IN_PROGRESS
 ```
 
 ### 17.3 A0 签核记录
@@ -1906,11 +1909,13 @@ A7.2→A7.3 的真实退休数、branch mispredict、sink 和 exceptions 不变�
 
 ```text
 baseline:              262e88a1c9fefe2b64135cf2d56959203c3c4636 (A7.3 signed off, clean worktree)
-status:                IN_PROGRESS (design frozen; implementation not started)
+status:                SIGNED_OFF
 implementation tranche: A7.4.1
+implementation commit: 6051e2d0eac3605f43f1dfdd3d51deb81ceccca1
 selected class:        PAIR_CONTROL_SIMPLE = older control0 + younger simple1
 scope:                 defines + Issue + Dispatch + dual branch/commit selection
-                       + directed tests + A7 measurement probe
+                       + MEM exception-valid qualification + directed tests
+                       + A7 measurement probe
 out of scope:          simple RAW/WAW relaxation, bitman execution, control+control,
                        control+LSU/MULDIV, dual LSU/MULDIV, legacy backend,
                        predictor/RAS policy, frozen CSR/report and A7.5 timing edits
@@ -1979,3 +1984,101 @@ A7.3 的九窗口报告含 `477997` 个 RAW、`255495` 个 WAW 和 `145238` 个 
 4. 重新运行 `tb_if_sync_btb`、`tb_regfiles_4r2w` 和受影响 LSU/MULDIV 定向测试，随后 `run_all.bat all` 78/78、冻结九窗口直跑和 A7 profile A/B。
 
 性能签核要求 A7.3 的 `instret=2279454`、branch=`396041`、branch mispredict=`19405`、sink=`0x9D3BF787` 和 exceptions=0 不变；`control0_simple_launches > 0`，九窗口 structural reject 必须低于 `145238`，目标 branch 窗口 aggregate cycles 必须低于 A7.3 的 `1533045`，overall cycles 必须低于 `2686213`。直跑与 wrapper 的 header、九条 report、overall 和 PASS 必须一致；每窗口满足扩展后的 class identity 与 `dual_launch=retire1+retire2`。最后复核 protected HEX、六项冻结 benchmark 软件/HEX 和 `test/tb_top.sv` 八项 SHA256。任一正确性门槛失败或整体周期不降即回退本实现，不以提高 pair counter 代替真实性能收益。
+
+A7.4.1 按冻结边界实现：Issue 仅接受无 RAW/WAW 的 `control0+simple1`，Dispatch 将其纳入 current/next complex candidate；dual branch 数据路径按 control lane 选择 PC、instruction、operands 与预测元数据。control0 正确预测退休 `11`，mispredict 只退休更老 control0（`01`），IAM 与 external kill 均退休 `00`；JAL/JALR link 固定使用 control0 的 `pc0+4`。原 lane1-control、LSU、MULDIV、singleton 和 legacy 规则保持不变，simple RAW/WAW 与 bitman 均未开放。
+
+完整回归第一次只暴露 `rv32mi-p-ma_fetch` 失败。一次性 trace 证明 MEM resident 已无效后，`mem_stage` 仍把旧 `legacy_exception_code=0x2b` 驱动到 frontend，造成 redirect 常驻；A7.3 只是被一个更年轻的 legacy resident 偶然覆盖该旧值。修复将 `exception_code/exception_mtval` 严格限定在 `ms_valid && !ms_flush` 时有效，并扩展 `tb_lsu_exception_age` 检查 empty MEM 不得重复旧异常。该修改只补足既有有效位语义，没有加入全局 stall、跨级旁路或放宽配对。
+
+定向与完整回归：
+
+```text
+directed: tb_issue_bundle_fifo
+          tb_a3_dual_backend
+          tb_a6_simple_control
+          tb_a6_lsu_pair
+          tb_a6_muldiv_pair
+          tb_if_sync_btb
+          tb_regfiles_4r2w
+          tb_lsu_exception_age
+result:   8/8 passed; compile and simulations 0 errors / 0 warnings
+logs:     F:\Tools\Temp\a74_final_<top>.log
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+elapsed:          145.4 s
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.3 cycles | A7.4.1 cycles | Delta | A7.3 IPC x1000 | A7.4.1 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 180026 | 144030 | -35996 | 1199 | 1499 |
+| MEXT | 186043 | 186042 | -1 | 290 | 290 |
+| BRANCH_RANDOM | 270203 | 208114 | -62089 | 910 | 1181 |
+| BRANCH_REGULAR | 117043 | 67540 | -49503 | 820 | 1421 |
+| BRANCH_SHORT | 99043 | 78053 | -20990 | 939 | 1191 |
+| BRANCH_CALL | 180240 | 117112 | -63128 | 799 | 1229 |
+| BRANCH_CAPACITY | 74385 | 74384 | -1 | 929 | 929 |
+| BRANCH_RETURN | 792131 | 792131 | 0 | 959 | 959 |
+| MEMORY | 787099 | 787099 | 0 | 763 | 763 |
+| **Overall** | **2686213** | **2454505** | **-231708** | **848** | **928** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2454505, instret=2279454, ipc_x1000=928
+exact IPC:    0.928681750496
+sink:         0x9D3BF787
+branch:       396041
+brmisp:       19405
+compile:      0 errors / 0 warnings
+compile log:  F:\Tools\Temp\a74_final_perf_compile.log
+direct log:   F:\Tools\Temp\a74_final_perf_direct.log
+profile log:  F:\Tools\Temp\a74_final_perf_profile.log
+comparison:   direct and profile header, nine reports, overall and PASS are identical
+protected HEX:C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+A7.3→A7.4.1 的真实退休数、branch、branch mispredict、sink 和 exceptions 不变。overall cycles 减少 `231708`（`-8.626%`），精确 IPC 提升 `9.440%`；六个 branch 窗口 aggregate cycles 从 `1533045` 降至 `1337334`，structural reject 从 `145238` 降至 `19971`，全部性能 rollback gate 通过。签核只采用重新以 `PERF_BENCH` 和 `DEBUG_EN` 干净编译得到的最终日志；诊断期遗漏宏、产生历史错误 sink `0x4A27AD51` 的运行不属于有效结果。
+
+| Profile metric | A7.3 | A7.4.1 | Delta |
+| --- | ---: | ---: | ---: |
+| IMEM request | 1400329 | 1389068 | -11261 |
+| Fetch packet | 1380924 | 1369663 | -11261 |
+| Fetched uop | 2490691 | 2468251 | -22440 |
+| Fetch empty cycles | 38810 | 38810 | 0 |
+| Actual dual launch | 633512 | 682572 | +49060 |
+| Simple pair | 293637 | 281638 | -11999 |
+| Simple singleton | 197652 | 185581 | -12071 |
+| Lane1-control pair | 120043 | 118667 | -1376 |
+| Control0-simple pair | 0 | 74506 | +74506 |
+| Control0 lane1 kill | 0 | 5308 | +5308 |
+| Dual retire1 | 197652 | 190889 | -6763 |
+| Dual retire2 | 435860 | 491683 | +55823 |
+| Legacy pair fallback | 369447 | 378454 | +9007 |
+| Non-prefer legacy fallback | 24746 | 9749 | -14997 |
+| Legacy drain wait cycles | 824620 | 738378 | -86242 |
+| Dual backend wait cycles | 118720 | 118720 | 0 |
+
+每窗口与总计均满足扩展后的 class 守恒：`682572 = 281638 simple pair + 185581 singleton + 118667 lane1 control + 74506 control0 simple + 8180 LSU + 14000 MULDIV`；退休守恒也成立：`682572 = 190889 retire1 + 491683 retire2`。control0 pair 的九窗口总计为 `74506`，其中 `5308` 次 mispredict 精确取消 lane1；旧 lane1-control 事件口径和冻结 21-word report 未改变。
+
+最终八项 SHA256：
+
+```text
+test/tb_top.sv
+77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701
+riscv_sim_perf_bench/benchmark.c
+B91D22759F82E3872A65796ED23BF935F0C12E6BE876A29AFB56081A8AA34D5F
+riscv_sim_perf_bench/startup.S
+9FFC7C4A74EB76CA7EC68EDB6C3255B415ABAB87B6E46234E57D8F0842A5E514
+riscv_sim_perf_bench/linker.ld
+42D11987DE1AC460D50AB2DD614305890EB354D3AD9C8D70C665A93B230A361A
+riscv_sim_perf_bench/Makefile
+D4651025676521709768C1BBA5EB7885EA5D9D7204104B1CC4896BCA16E3CCF3
+riscv_sim_perf_bench/out/inst.hex
+459D81149CDD2A8886AE58F32AD27F58976AEECB82844B9BF4B1174FE96F9C7C
+riscv_sim_perf_bench/out/data.hex
+DDB214EE5E790F797FD84456E23DB9CBFF3DCA8E37DF59DC7AD8EB3EB409364B
+hex/riscv-tests/rv32-p-riscv.hex
+C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+A7.4.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。下一阶段仅进入 A7.5：以当前功能/性能提交为基线收敛 200 MHz，并同时报告 Fmax、关键路径、overall IPC 和 IPC x Fmax；在取得时序证据前不启动 A7.4.2 simple RAW 旁路设计。
