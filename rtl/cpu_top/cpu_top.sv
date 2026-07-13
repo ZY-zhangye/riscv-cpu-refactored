@@ -62,9 +62,49 @@ module cpu_top (
     logic bundle_push_ready;
     logic bundle_head_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_head;
+    logic bundle_next_valid;
+    logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_next;
     logic bundle_pop;
     logic [2:0] bundle_count;
     logic issue_queue_full_event;
+    logic legacy_bundle_valid;
+    logic legacy_bundle_pop;
+    logic legacy_adapter_busy;
+    logic legacy_ds_active;
+    logic legacy_domain_idle;
+    logic dual_candidate;
+    logic next_dual_candidate;
+    logic dual_bundle_valid;
+    logic dual_bundle_pop;
+    logic dual_launch_ready;
+    logic dual_busy;
+    logic dual_mode;
+    logic [2:0] legacy_cooldown;
+    logic prefer_legacy_dispatch;
+    logic dual_rf_read_en;
+    logic [4:0] dual_rf_raddr0;
+    logic [4:0] dual_rf_raddr1;
+    logic [4:0] dual_rf_raddr2;
+    logic [4:0] dual_rf_raddr3;
+    logic [31:0] dual_rf_rdata0;
+    logic [31:0] dual_rf_rdata1;
+    logic [31:0] dual_rf_rdata2;
+    logic [31:0] dual_rf_rdata3;
+    logic [1:0] dual_commit_valid;
+    logic [1:0] dual_commit_wen;
+    logic [4:0] dual_commit_waddr0;
+    logic [4:0] dual_commit_waddr1;
+    logic [31:0] dual_commit_wdata0;
+    logic [31:0] dual_commit_wdata1;
+    logic [1:0] dual_retire_count;
+    logic dual_dependency_event;
+    logic dual_pending_stall_event;
+    logic rf_write0_wen;
+    logic [4:0] rf_write0_waddr;
+    logic [31:0] rf_write0_wdata;
+    logic rf_write1_wen;
+    logic [4:0] rf_write1_waddr;
+    logic [31:0] rf_write1_wdata;
     logic br_taken;
     logic [31:0] br_target;
     logic br_redirect;
@@ -141,6 +181,7 @@ module cpu_top (
     logic [31:0] csr_wdata;
     logic [6:0] exception_code;
     logic [31:0] exception_mtval;
+    logic [1:0] legacy_retire_count;
     logic [1:0] retire_count;
 
     //实例化
@@ -209,21 +250,102 @@ module cpu_top (
         .pop_valid(bundle_pop),
         .head_valid(bundle_head_valid),
         .head_bundle(bundle_head),
+        .next_valid(bundle_next_valid),
+        .next_bundle(bundle_next),
         .count(bundle_count),
         .push_ready(bundle_push_ready)
+    );
+
+    // A dual synchronous read may launch while the final legacy WB commits;
+    // the GPR provides explicit same-edge write-to-read bypass.
+    assign legacy_domain_idle = !legacy_adapter_busy && !legacy_ds_active &&
+                                !es_valid && !ms_valid;
+
+    bundle_dispatch u_bundle_dispatch (
+        .redirect(frontend_redirect),
+        .bundle_valid(bundle_head_valid),
+        .bundle(bundle_head),
+        .next_bundle_valid(bundle_next_valid),
+        .next_bundle(bundle_next),
+        .legacy_idle(legacy_domain_idle),
+        .prefer_legacy(prefer_legacy_dispatch),
+        .dual_mode(dual_mode),
+        .dual_candidate(dual_candidate),
+        .next_dual_candidate(next_dual_candidate),
+        .dual_bundle_valid(dual_bundle_valid),
+        .legacy_bundle_valid(legacy_bundle_valid)
     );
 
     bundle_decode_adapter u_bundle_decode_adapter (
         .clk(clk),
         .rst_n(rst_n),
         .redirect(frontend_redirect),
-        .bundle_valid(bundle_head_valid),
+        .bundle_valid(legacy_bundle_valid),
         .bundle(bundle_head),
-        .bundle_pop(bundle_pop),
+        .bundle_pop(legacy_bundle_pop),
+        .busy(legacy_adapter_busy),
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus)
     );
+
+    dual_alu_pipeline u_dual_alu_pipeline (
+        .clk(clk),
+        .rst_n(rst_n),
+        .redirect(frontend_redirect),
+        .launch_valid(dual_bundle_valid),
+        .launch_bundle(bundle_head),
+        .launch_ready(dual_launch_ready),
+        .busy(dual_busy),
+        .rf_read_en(dual_rf_read_en),
+        .rf_raddr0(dual_rf_raddr0),
+        .rf_raddr1(dual_rf_raddr1),
+        .rf_raddr2(dual_rf_raddr2),
+        .rf_raddr3(dual_rf_raddr3),
+        .rf_rdata0(dual_rf_rdata0),
+        .rf_rdata1(dual_rf_rdata1),
+        .rf_rdata2(dual_rf_rdata2),
+        .rf_rdata3(dual_rf_rdata3),
+        .commit_valid(dual_commit_valid),
+        .commit_wen(dual_commit_wen),
+        .commit_waddr0(dual_commit_waddr0),
+        .commit_waddr1(dual_commit_waddr1),
+        .commit_wdata0(dual_commit_wdata0),
+        .commit_wdata1(dual_commit_wdata1),
+        .retire_count(dual_retire_count),
+        .dependency_event(dual_dependency_event),
+        .pending_stall_event(dual_pending_stall_event)
+    );
+
+    assign dual_bundle_pop = dual_bundle_valid && dual_launch_ready;
+    assign bundle_pop = legacy_bundle_pop || dual_bundle_pop;
+
+    always_ff @(posedge clk) begin
+        if (!rst_n || frontend_redirect) begin
+            dual_mode <= 1'b0;
+        end else if (legacy_bundle_pop) begin
+            dual_mode <= 1'b0;
+        end else if (dual_bundle_pop) begin
+            dual_mode <= 1'b1;
+        end
+    end
+
+    // Avoid paying a full domain-drain penalty for a short ALU fragment
+    // immediately following a legacy long-latency producer.  The bounded
+    // cooldown is refreshed only by a real pending EX result and expires as
+    // legacy bundles are consumed; long straight-line ALU runs still enter
+    // dual mode through the lookahead rule.
+    assign prefer_legacy_dispatch = exe_result_pending || exe_load_pending ||
+                                    (legacy_cooldown != 0);
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            legacy_cooldown <= 3'd0;
+        end else if (exe_result_pending || exe_load_pending) begin
+            legacy_cooldown <= 3'd4;
+        end else if (legacy_bundle_pop && (legacy_cooldown != 0)) begin
+            legacy_cooldown <= legacy_cooldown - 1'b1;
+        end
+    end
 
     assign issue_queue_full_event = !frontend_redirect &&
                                     (fetch_count != 0) &&
@@ -235,6 +357,7 @@ module cpu_top (
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
         .ds_allowin(ds_allowin),
+        .ds_active(legacy_ds_active),
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr),
         .rs1_data(rs1_data),
@@ -346,7 +469,7 @@ module cpu_top (
         .csr_wdata(csr_wdata),
         .exception_code(exception_code),
         .exception_mtval(exception_mtval),
-        .retire_count(retire_count)
+        .retire_count(legacy_retire_count)
     );
 
     wb_stage u_wb_stage (
@@ -374,16 +497,38 @@ module cpu_top (
         `endif
     );
 
+    assign rf_write0_wen = dual_commit_valid[0] ?
+                           dual_commit_wen[0] : regfile_wen;
+    assign rf_write0_waddr = dual_commit_valid[0] ?
+                             dual_commit_waddr0 : regfile_waddr;
+    assign rf_write0_wdata = dual_commit_valid[0] ?
+                             dual_commit_wdata0 : regfile_wdata;
+    assign rf_write1_wen = dual_commit_valid[1] && dual_commit_wen[1];
+    assign rf_write1_waddr = dual_commit_waddr1;
+    assign rf_write1_wdata = dual_commit_wdata1;
+
     regfiles u_regfiles (
         .clk(clk),
         .rst_n(rst_n),
-        .regfile_wen(regfile_wen),
-        .regfile_waddr(regfile_waddr),
-        .regfile_wdata(regfile_wdata),
+        .write0_wen(rf_write0_wen),
+        .write0_waddr(rf_write0_waddr),
+        .write0_wdata(rf_write0_wdata),
+        .write1_wen(rf_write1_wen),
+        .write1_waddr(rf_write1_waddr),
+        .write1_wdata(rf_write1_wdata),
         .regfile_raddr1(rs1_addr),
         .regfile_rdata1(rs1_data),
         .regfile_raddr2(rs2_addr),
-        .regfile_rdata2(rs2_data)
+        .regfile_rdata2(rs2_data),
+        .sync_ren(dual_rf_read_en),
+        .sync_raddr0(dual_rf_raddr0),
+        .sync_raddr1(dual_rf_raddr1),
+        .sync_raddr2(dual_rf_raddr2),
+        .sync_raddr3(dual_rf_raddr3),
+        .sync_rdata0(dual_rf_rdata0),
+        .sync_rdata1(dual_rf_rdata1),
+        .sync_rdata2(dual_rf_rdata2),
+        .sync_rdata3(dual_rf_rdata3)
         `ifdef DEBUG_EN
         ,
         .debug_data(debug_data)
@@ -426,10 +571,25 @@ module cpu_top (
         .issue_waw_event(issue_reject_waw),
         .issue_struct_event(issue_reject_struct),
         .issue_qfull_event(issue_queue_full_event),
+        .result_dependency_event(dual_dependency_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
     );
+
+    assign retire_count = legacy_retire_count + dual_retire_count;
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && dual_bundle_valid && legacy_bundle_valid) begin
+            $fatal(1, "bundle dispatch selected both backend domains");
+        end
+        if (rst_n && (legacy_retire_count != 0) &&
+            (dual_retire_count != 0)) begin
+            $fatal(1, "legacy and dual domains retired in the same cycle");
+        end
+    end
+`endif
 
     `ifdef DEBUG_EN
     assign debug_store_valid = store_event;

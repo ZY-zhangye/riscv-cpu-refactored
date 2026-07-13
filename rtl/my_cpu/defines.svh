@@ -99,6 +99,7 @@
 `define CSR_PERF_ISSUE_WAW 12'h7CD
 `define CSR_PERF_ISSUE_STRUCT 12'h7CE
 `define CSR_PERF_ISSUE_QFULL 12'h7D4
+`define CSR_PERF_RESULT_DEP 12'h7D5
 
 `define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
 

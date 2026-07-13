@@ -5,6 +5,7 @@ module id_stage (
     //与if_stage的数据接口
     input logic fs_to_ds_valid,
     output logic ds_allowin,
+    output logic ds_active,
     input logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus,
     //reggiles接口
     output logic [4:0] rs1_addr,
@@ -73,6 +74,7 @@ module id_stage (
     assign ds_to_es_valid = ds_valid && ds_ready_go;
     assign fs_in_fire = fs_to_ds_valid && ds_allowin;
     assign pipe_flush = exception_flag || br_taken;
+    assign ds_active = ds_valid || ds_skid_valid;
 
     //锁存数据
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus_r;

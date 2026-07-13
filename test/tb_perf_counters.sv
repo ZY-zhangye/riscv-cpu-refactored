@@ -22,6 +22,7 @@ module tb_perf_counters;
     logic issue_waw_event;
     logic issue_struct_event;
     logic issue_qfull_event;
+    logic result_dependency_event;
     logic exception_flag;
     logic [31:0] exception_addr;
     logic external_irq_enable;
@@ -47,6 +48,7 @@ module tb_perf_counters;
         .issue_waw_event(issue_waw_event),
         .issue_struct_event(issue_struct_event),
         .issue_qfull_event(issue_qfull_event),
+        .result_dependency_event(result_dependency_event),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr),
         .external_irq_enable(external_irq_enable)
@@ -99,7 +101,8 @@ module tb_perf_counters;
         input logic raw_reject,
         input logic waw_reject,
         input logic struct_reject,
-        input logic qfull
+        input logic qfull,
+        input logic result_dependency
     );
         begin
             @(negedge clk);
@@ -109,6 +112,7 @@ module tb_perf_counters;
             issue_waw_event = waw_reject;
             issue_struct_event = struct_reject;
             issue_qfull_event = qfull;
+            result_dependency_event = result_dependency;
             @(posedge clk);
             #1;
             issue_dual_event = 1'b0;
@@ -117,6 +121,7 @@ module tb_perf_counters;
             issue_waw_event = 1'b0;
             issue_struct_event = 1'b0;
             issue_qfull_event = 1'b0;
+            result_dependency_event = 1'b0;
         end
     endtask
 
@@ -154,6 +159,7 @@ module tb_perf_counters;
         issue_waw_event = 1'b0;
         issue_struct_event = 1'b0;
         issue_qfull_event = 1'b0;
+        result_dependency_event = 1'b0;
 
         repeat (2) @(posedge clk);
         #1 rst_n = 1'b1;
@@ -182,14 +188,15 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_EXCEPTION, 32'd1, "perf_exception");
         expect_csr(`CSR_INSTRET,        32'd2, "instret");
 
-        drive_issue_cycle(1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0);
-        drive_issue_cycle(1'b0, 1'b1, 1'b0, 1'b1, 1'b1, 1'b1);
+        drive_issue_cycle(1'b1, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b1);
+        drive_issue_cycle(1'b0, 1'b1, 1'b0, 1'b1, 1'b1, 1'b1, 1'b0);
         expect_csr(`CSR_PERF_DUAL_ISSUE,   32'd1, "perf_dual_issue");
         expect_csr(`CSR_PERF_SINGLE_ISSUE, 32'd1, "perf_single_issue");
         expect_csr(`CSR_PERF_ISSUE_RAW,    32'd1, "perf_issue_raw");
         expect_csr(`CSR_PERF_ISSUE_WAW,    32'd1, "perf_issue_waw");
         expect_csr(`CSR_PERF_ISSUE_STRUCT, 32'd1, "perf_issue_struct");
         expect_csr(`CSR_PERF_ISSUE_QFULL,  32'd1, "perf_issue_qfull");
+        expect_csr(`CSR_PERF_RESULT_DEP,    32'd1, "perf_result_dependency");
 
         //关闭性能窗口后，标准instret继续按退休数运行。
         drive_cycle(1'b1, `CSR_PERF_CTRL, 32'h0000_0000,
@@ -209,6 +216,7 @@ module tb_perf_counters;
         expect_csr(`CSR_PERF_EXCEPTION, 32'd0, "cleared_perf_exception");
         expect_csr(`CSR_PERF_DUAL_ISSUE, 32'd0, "cleared_perf_dual_issue");
         expect_csr(`CSR_PERF_ISSUE_QFULL, 32'd0, "cleared_perf_issue_qfull");
+        expect_csr(`CSR_PERF_RESULT_DEP, 32'd0, "cleared_perf_result_dependency");
 
         $display("PERF COUNTER TEST PASSED");
         $finish;

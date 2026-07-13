@@ -18,11 +18,14 @@ module tb_issue_bundle_fifo;
     logic bundle_ready;
     logic bundle_head_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_head;
+    logic bundle_next_valid;
+    logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_next;
     logic bundle_pop;
     logic [2:0] bundle_count;
     logic ds_allowin;
     logic fs_to_ds_valid;
     logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus;
+    logic adapter_busy;
 
     logic head_lane1_valid;
     logic head_lane0_valid;
@@ -60,6 +63,8 @@ module tb_issue_bundle_fifo;
         .pop_valid(bundle_pop),
         .head_valid(bundle_head_valid),
         .head_bundle(bundle_head),
+        .next_valid(bundle_next_valid),
+        .next_bundle(bundle_next),
         .count(bundle_count),
         .push_ready(bundle_ready)
     );
@@ -71,6 +76,7 @@ module tb_issue_bundle_fifo;
         .bundle_valid(bundle_head_valid),
         .bundle(bundle_head),
         .bundle_pop(bundle_pop),
+        .busy(adapter_busy),
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus)

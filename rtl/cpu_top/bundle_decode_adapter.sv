@@ -7,6 +7,7 @@ module bundle_decode_adapter (
     input  logic                          bundle_valid,
     input  logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle,
     output logic                          bundle_pop,
+    output logic                          busy,
     input  logic                          ds_allowin,
     output logic                          fs_to_ds_valid,
     output logic [`FS_DS_WIDTH-1:0]       fs_to_ds_bus
@@ -46,6 +47,7 @@ module bundle_decode_adapter (
                            selected_pred_taken, selected_pred_target};
     assign output_fire = fs_to_ds_valid && ds_allowin;
     assign bundle_pop = output_fire && !held_valid;
+    assign busy = held_valid;
 
     always_ff @(posedge clk) begin
         if (!rst_n || redirect) begin

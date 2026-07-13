@@ -11,6 +11,8 @@ module issue_bundle_fifo #(
     input  logic                          pop_valid,
     output logic                          head_valid,
     output logic [`ISSUE_BUNDLE_WIDTH-1:0] head_bundle,
+    output logic                          next_valid,
+    output logic [`ISSUE_BUNDLE_WIDTH-1:0] next_bundle,
     output logic [$clog2(DEPTH+1)-1:0]    count,
     output logic                          push_ready
 );
@@ -22,6 +24,8 @@ module issue_bundle_fifo #(
 
     assign head_valid = (count != 0);
     assign head_bundle = entries[read_ptr];
+    assign next_valid = (count >= 2);
+    assign next_bundle = entries[read_ptr + 1'b1];
     assign push_ready = (count != DEPTH);
 
     always_ff @(posedge clk) begin
