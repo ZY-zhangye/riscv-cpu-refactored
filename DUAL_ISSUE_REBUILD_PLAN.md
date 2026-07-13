@@ -719,7 +719,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A0 | SIGNED_OFF | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
 | A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
-| A3 | PENDING | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
+| A3 | IN_PROGRESS | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
@@ -766,6 +766,11 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.821, PASS
               - A2 IPC is an expected interim regression while the old Decode remains single-lane
               - next: A3 synchronous 4R2W GPR, dual-lane datapath and scoreboard
+2026-07-13  A3 IN_PROGRESS
+              - preserve the legacy backend for single/control/LSU/MULDIV while A4/A5 are pending
+              - add a drained-domain fast path for supported independent dual integer ALU bundles
+              - implement synchronous 4R2W, 2W commit, WB read bypass and explicit stage scoreboard
+              - prohibit switching domains until adapter/ID/EX/MEM/WB or the dual ID/EX resident drains
 ```
 
 ### 17.3 A0 签核记录
