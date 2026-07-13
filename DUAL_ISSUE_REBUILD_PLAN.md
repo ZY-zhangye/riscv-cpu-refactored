@@ -805,7 +805,8 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A6.4 adds exactly one shared MUL/DIV per bundle and holds both lanes until completion
               - every substage has a separate commit, directed tests, run_all.bat all and frozen nine-window run
               - A6.1 SIGNED_OFF in 40eb13a: unified simple predecode; 78/78 and nine-window PASS
-              - current: A6.2 lane0 simple + lane1 control
+              - A6.2 SIGNED_OFF in 7f063ba: lane0 simple + lane1 control; precise redirect/IAM; 78/78 and nine-window PASS
+              - current: A6.3 simple + LSU / LSU + simple
 ```
 
 ### 17.3 A0 签核记录
@@ -1342,7 +1343,7 @@ A6 开始基线：
 start commit:       d5a097369b0c3c6aa9a37385f690ebd652ced3b4
 protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
 status:              IN_PROGRESS
-current substage:    A6.2 simple + control
+current substage:    A6.3 simple + LSU / LSU + simple
 ```
 
 统一年龄与提交规则：
@@ -1412,3 +1413,60 @@ protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA
 | MEMORY | 787465 | 601238 | 763 | 92785 | 416404 | 276913 | 138239 | 230664 | 0 |
 
 A6.1 的九个 cycles/instret/IPC、dual/single/struct、sink 和 exceptions 与 A5 相同，证明 simple 双执行行为未改变。RAW 计数增加是统一预译码现在也观察到尚未开放的 control/LSU 类别中的真实包内相关；拒绝原因允许多因并存，不代表额外 stall 或执行行为变化。
+
+#### 17.9.2 A6.2 `simple + control` 签核
+
+实现提交：
+
+```text
+commit:  7f063ba7c392ba2b67ddd2d39fa375ecf1c67f95
+subject: backend: pair simple with lane1 control
+status:  SIGNED_OFF
+```
+
+实现只开放 lane0 simple + lane1 control。dual resident 保存 lane1 的预测 metadata 和同步 RF 数据，复用 `branch_exec_unit` 完成 BEQ/BNE/BLT/BGE/BLTU/BGEU、JAL 与 JALR。自身 mispredict 在两个 lane 到达同一提交边界后清空年轻前端，不作为 kill 反杀当前 pair；外部 redirect 仍会在提交前杀死两个 lane。JAL/JALR 的 link 写回 `pc+4`，predictor update 复用 Branch/JAL/JALR/Call/Return 类型。目标未按 4 字节对齐时输出 IAM：lane0 已完成的 simple 单独退休，lane1 不写 GPR、不 redirect、不退休，CSR 记录 lane1 PC/target。
+
+`CSR_PERF_LANE1_CONTROL=0x7D0` 现在统计真正进入 dual resident 的 control pair。isolated control pair 在 legacy 域空闲时可直接进入 dual；这是为了真实开放 JAL/JALR，而不是只在双 ALU lookahead 已建立时偶然执行。当前 split dual/legacy backend 使 CALL 后立即切回尚未开放 LSU 的 legacy 序列仍有域切换代价，留给 A6.3 继续消除。
+
+定向与受影响回归：
+
+```text
+tests:   tb_a6_simple_control
+         tb_issue_bundle_fifo
+         tb_a3_dual_backend
+         tb_perf_counters
+result:  4/4 passed; compile/simulation 0 errors / 0 warnings
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-2-*-directed-final-2.log
+compile: F:\Tools\temp\riscv-dual-rebuild-a6-2-compile-final-2.log
+
+ISA:     rv32ui-p-{beq,bne,blt,bge,bltu,bgeu,jal,jalr}
+result:  8/8 passed
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-2-ui-*-final.log
+```
+
+官方回归与九窗口：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\temp\riscv-dual-rebuild-a6-2-run_all_all-final-3.log
+sink:            0x9D3BF787
+overall:         cycles=2999558, instret=2279454, ipc_x1000=759
+result:          PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+compile log:     F:\Tools\temp\riscv-dual-rebuild-a6-2-nine-window-compile-final-3.log
+run log:         F:\Tools\temp\riscv-dual-rebuild-a6-2-nine-window-final-3.log
+protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+| Window | Cycles | Instret | IPC x1000 | Dual | Single | Lane1 control | Brmisp | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216028 | 216013 | 999 | 60000 | 96014 | 11999 | 2 | 0 |
+| MEXT | 190046 | 54016 | 284 | 10009 | 34016 | 0 | 4 | 0 |
+| BRANCH_RANDOM | 319213 | 245975 | 770 | 60478 | 148867 | 5793 | 9475 | 0 |
+| BRANCH_REGULAR | 111050 | 96017 | 864 | 37512 | 27011 | 10501 | 1505 | 0 |
+| BRANCH_SHORT | 117048 | 93015 | 794 | 42007 | 15013 | 3000 | 3005 | 0 |
+| BRANCH_CALL | 204567 | 144022 | 704 | 36007 | 92299 | 11999 | 4061 | 0 |
+| BRANCH_CAPACITY | 141971 | 69133 | 486 | 1032 | 70402 | 0 | 1152 | 0 |
+| BRANCH_RETURN | 912170 | 760025 | 833 | 255993 | 248111 | 55990 | 16 | 0 |
+| MEMORY | 787465 | 601238 | 763 | 92787 | 416401 | 0 | 185 | 0 |
+
+A6.1→A6.2 的 overall cycles 减少 `5048`（`-0.170%`），精确 IPC 从 `0.758653` 升至 `0.759930`；真实退休数、sink、exceptions 和 branch mispredict 总数保持不变。BRANCH_RANDOM 与 BRANCH_RETURN 分别减少 `5145` 和 `8000` cycles；BRANCH_CALL 因 control pair 后的 LSU/stack 序列仍切回 legacy 而增加 `8104` cycles。该局部回退如实保留，A6.3 必须用统一 LSU resident 和单端口精确提交解决，不能关闭已验证的 JAL/JALR pairing 来隐藏。
