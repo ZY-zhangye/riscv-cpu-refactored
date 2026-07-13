@@ -61,9 +61,25 @@ module exe_stage(
     logic es_core_allowin;
     logic es_allowin_r;
     logic es_skid_valid_next;
-    logic mul_stall;
     logic fpu_stall;
-    assign es_ready_go = !mul_stall && !fpu_stall;
+    logic is_alu;
+    logic is_fpu;
+    logic is_mul;
+    logic is_mem;
+    logic is_csr;
+    logic is_br_jmp;
+    logic is_bitman;
+    logic resident_ready;
+    logic resident_killed;
+    logic resident_start;
+    logic resident_started;
+    logic resident_completed;
+    logic [31:0] resident_result;
+    logic selected_unit_busy;
+    logic selected_unit_done;
+    logic [31:0] selected_unit_result;
+
+    assign es_ready_go = is_fpu ? !fpu_stall : resident_ready;
     assign es_core_allowin = !es_valid || es_ready_go && ms_allowin;
     assign es_allowin = es_allowin_r;
     assign es_to_ms_valid = es_valid && es_ready_go;
@@ -157,7 +173,7 @@ module exe_stage(
             end
         end
     end
-    assign es_flush = rst_n && (ds_flush_r || exception_flag);
+    assign es_flush = rst_n && resident_killed;
     //一级解包
     `ifdef Z_BITMAIN_ENABLE
         logic [`BITMAN_PACKET_WIDTH-1:0] bitman_packet;
@@ -219,7 +235,6 @@ module exe_stage(
     logic [31:0] bp_pred_target;
     assign {bp_pred_taken, bp_pred_target, br_jmp_target, br_jmp_imm, br_jmp_opcode, is_jal, is_jalr} = br_jmp_packet;
     //CTRL_PACKET解包
-    logic is_alu, is_fpu, is_mul, is_mem, is_csr, is_br_jmp , is_bitman;
     logic [4:0] rd_addr;
     logic regfile_wen;
     logic reg_fpu_wen;
@@ -353,36 +368,58 @@ module exe_stage(
 
     //ALU计算
     logic [31:0] alu_result;
-    always_comb begin
-        unique case (alu_op)
-            `ALU_OP_ADD: alu_result = src1 + src2;
-            `ALU_OP_SUB: alu_result = src1 - src2;
-            `ALU_OP_AND: alu_result = src1 & src2;
-            `ALU_OP_OR:  alu_result = src1 | src2;
-            `ALU_OP_XOR: alu_result = src1 ^ src2;
-            `ALU_OP_SLL: alu_result = src1 << src2[4:0];
-            `ALU_OP_SRL: alu_result = src1 >> src2[4:0];
-            `ALU_OP_SRA: alu_result = $signed(src1) >>> src2[4:0];
-            `ALU_OP_SLT: alu_result = ($signed(src1) < $signed(src2)) ? 32'b1 : 32'b0;
-            `ALU_OP_SLTU: alu_result = (src1 < src2) ? 32'b1 : 32'b0;
-            default: alu_result = 32'b0;
-        endcase
-    end
+    logic alu_busy;
+    logic alu_done;
+    alu_exec_unit u_alu (
+        .start(resident_start && is_alu),
+        .kill(resident_killed),
+        .op(alu_op),
+        .src1(src1),
+        .src2(src2),
+        .busy(alu_busy),
+        .done(alu_done),
+        .result(alu_result)
+    );
 
-    //MUL计算
+    //MUL/DIV计算；两个共享单元由 resident 类型天然互斥。
     logic [31:0] mul_result;
+    logic mul_busy;
+    logic mul_done;
+    logic [31:0] div_result;
+    logic div_busy;
+    logic div_done;
+    logic mul_op_mul;
+    logic mul_op_div;
+    assign mul_op_mul = mul_op[3] || mul_op[2];
+    assign mul_op_div = mul_op[1] || mul_op[0];
+
     mul u_mul (
         .clk(clk),
         .rst_n(rst_n),
-        .is_mul(is_mul),
-        .is_multicycle(is_multicycle),
-        .mul_src1(src1),
-        .mul_src2(src2),
+        .start(resident_start && is_mul && mul_op_mul),
+        .kill(resident_killed),
+        .src1(src1),
+        .src2(src2),
         .src1_signed(src1_signed),
         .src2_signed(src2_signed),
-        .mul_op(mul_op),
-        .mul_result(mul_result),
-        .mul_stall(mul_stall)
+        .high_result(mul_op[2]),
+        .busy(mul_busy),
+        .done(mul_done),
+        .result(mul_result)
+    );
+
+    divider u_divider (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(resident_start && is_mul && mul_op_div),
+        .kill(resident_killed),
+        .dividend(src1),
+        .divisor(src2),
+        .signed_mode(src1_signed && src2_signed),
+        .remainder(mul_op[0]),
+        .busy(div_busy),
+        .done(div_done),
+        .result(div_result)
     );
 
     //FPU计算
@@ -412,49 +449,25 @@ module exe_stage(
     );
 
     //MEM访问
-    logic inst_lb, inst_sb, inst_lh, inst_sh, inst_lw, inst_sw,inst_lbu, inst_lhu;
     logic [5:0] load_inst;
-    assign load_inst = {(inst_lb || inst_sb), (inst_lh || inst_sh), (inst_lw || inst_sw), inst_lbu, inst_lhu, is_store};
-    assign inst_lb  = mem_op[4] & ~is_store;
-    assign inst_lh  = mem_op[3] & ~is_store;
-    assign inst_lw  = mem_op[2] & ~is_store;
-    assign inst_lbu = mem_op[1] & ~is_store;
-    assign inst_lhu = mem_op[0] & ~is_store;
-
-    assign inst_sb  = mem_op[4] & is_store;
-    assign inst_sh  = mem_op[3] & is_store;
-    assign inst_sw  = mem_op[2] & is_store;
-    assign dmem_addr = src1 + mem_imm;
-    assign dmem_wdata = (inst_sb) ? {4{src2[7:0]}} :
-                       (inst_sh) ? {2{src2[15:0]}} :
-                       src2;
-    logic [3:0] sb_wen, sh_wen;
-    always_comb begin
-        case (dmem_addr[1:0])
-            2'b00: sb_wen = 4'b0001;
-            2'b01: sb_wen = 4'b0010;
-            2'b10: sb_wen = 4'b0100;
-            default: sb_wen = 4'b1000;
-        endcase
-    end
-    always_comb begin
-        case (dmem_addr[1])
-            1'b0: sh_wen = 4'b0011;
-            default: sh_wen = 4'b1100;
-        endcase
-    end
-    always_comb begin
-        dmem_wen = 4'b0000;
-        if (!es_flush) begin
-            unique case (1'b1)
-                inst_sb: dmem_wen = sb_wen;
-                inst_sh: dmem_wen = sh_wen;
-                inst_sw: dmem_wen = 4'b1111;
-                default: dmem_wen = 4'b0000;
-            endcase
-        end
-    end
-    assign dmem_en = es_valid && |mem_op && !es_flush;
+    logic lsu_busy;
+    logic lsu_done;
+    lsu_exec_unit u_lsu (
+        .start(resident_start && is_mem),
+        .kill(resident_killed),
+        .base(src1),
+        .store_data(src2),
+        .immediate(mem_imm),
+        .mem_op(mem_op),
+        .is_store(is_store),
+        .busy(lsu_busy),
+        .done(lsu_done),
+        .request_valid(dmem_en),
+        .address(dmem_addr),
+        .write_data(dmem_wdata),
+        .write_enable(dmem_wen),
+        .load_metadata(load_inst)
+    );
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;
@@ -475,56 +488,35 @@ module exe_stage(
                        32'b0;
     
     //BR/JMP计算
-    logic is_beq, is_bne, is_blt, is_bge, is_bltu, is_bgeu;
-    assign is_beq = br_jmp_opcode[5];
-    assign is_bne = br_jmp_opcode[4];
-    assign is_blt = br_jmp_opcode[3];
-    assign is_bge = br_jmp_opcode[2];
-    assign is_bltu= br_jmp_opcode[1];
-    assign is_bgeu= br_jmp_opcode[0];
-    // 1. 预计算减法和标志位 (FPGA 会将其映射到进位链)
-    logic [32:0] sub_res;
-    assign sub_res = {1'b0, src1} - {1'b0, src2};
-
-    logic eq, lt, ltu;
-    assign eq  = (src1 == src2); // 部分综合器对 == 0 优化更好，但直接比较通常也能进位链优化
-    assign ltu = sub_res[32];    // 无符号小于即看减法的借位
-
-    // 有符号小于：如果符号不同，则 src1负数时为真；如果符号相同，看减法结果
-    assign lt  = (src1[31] != src2[31]) ? src1[31] : ltu;
-
-    // 2. 并行选择逻辑 (代替 case(1'b1))
-    // 这种写法在 FPGA 中会被优化为单层 LUT 逻辑
-    logic br_cond_raw;
-    assign br_cond_raw = (is_beq  & eq)
-                       | (is_bne  & !eq)
-                       | (is_blt  & lt)
-                       | (is_bge  & !lt)
-                       | (is_bltu & ltu)
-                       | (is_bgeu & !ltu);
-
-    // 3. 优化 br_taken 的判定路径
-    // 将 br_jmp_opcode 是否有效的判断与 br_cond 合并
-    logic is_branch;
     logic branch_resolve_fire;
-    assign is_branch = |br_jmp_opcode;
+    logic branch_busy;
+    logic branch_done;
+    logic branch_mispredict;
 
-    assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
-
-    // 4. 计算目标地址
-    // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
-    logic [31:0] jalr_sum;
-    logic [31:0] pc_jalr;
-    assign jalr_sum = src1 + br_jmp_imm;
-    assign pc_jalr = { jalr_sum[31:1], 1'b0 };
-    assign br_target = is_jalr ? pc_jalr : br_jmp_target;
+    branch_exec_unit u_branch (
+        .start(resident_start && is_br_jmp),
+        .kill(resident_killed),
+        .pc(exe_pc),
+        .src1(src1),
+        .src2(src2),
+        .immediate(br_jmp_imm),
+        .direct_target(br_jmp_target),
+        .branch_opcode(br_jmp_opcode),
+        .is_jal(is_jal),
+        .is_jalr(is_jalr),
+        .predicted_taken(bp_pred_taken),
+        .predicted_target(bp_pred_target),
+        .busy(branch_busy),
+        .done(branch_done),
+        .taken(br_taken),
+        .target(br_target),
+        .mispredict(branch_mispredict),
+        .redirect_target(br_redirect_target)
+    );
 
     assign branch_resolve_fire = es_to_ms_valid && ms_allowin &&
                                  !es_flush && is_br_jmp;
-    assign br_redirect = branch_resolve_fire &&
-                         ((br_taken != bp_pred_taken) ||
-                          (br_taken && (br_target != bp_pred_target)));
-    assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
+    assign br_redirect = branch_resolve_fire && branch_mispredict;
 
     assign bp_update_valid = branch_resolve_fire;
     assign bp_update_pc = exe_pc;
@@ -556,19 +548,51 @@ module exe_stage(
     end
     assign branch_event = branch_resolve_fire;
     assign branch_mispredict_event = branch_event && br_redirect;
+
+    logic other_done;
+    assign other_done = resident_start &&
+                        !is_alu && !is_br_jmp && !is_mem &&
+                        !is_mul && !is_fpu;
+    assign selected_unit_busy = (is_mul && mul_op_mul) ? mul_busy :
+                                (is_mul && mul_op_div) ? div_busy :
+                                alu_busy || branch_busy || lsu_busy;
+    assign selected_unit_done = alu_done || branch_done || lsu_done ||
+                                mul_done || div_done || other_done;
+
+    always_comb begin
+        unique case (1'b1)
+            is_bitman: selected_unit_result = bitman_result;
+            is_alu: selected_unit_result = alu_result;
+            is_mem: selected_unit_result = dmem_addr;
+            is_mul && mul_op_mul: selected_unit_result = mul_result;
+            is_mul && mul_op_div: selected_unit_result = div_result;
+            is_csr: selected_unit_result = csr_data;
+            default: selected_unit_result = exe_pc + 32'd4;
+        endcase
+    end
+
+    ex_resident_control u_resident_control (
+        .clk(clk),
+        .rst_n(rst_n),
+        .resident_valid(es_valid && !is_fpu),
+        .resident_kill(ds_flush_r || exception_flag),
+        .slot_replace(es_core_allowin),
+        .unit_busy(selected_unit_busy),
+        .unit_done(selected_unit_done),
+        .unit_result(selected_unit_result),
+        .unit_start(resident_start),
+        .resident_ready(resident_ready),
+        .resident_result(resident_result),
+        .resident_killed(resident_killed),
+        .resident_started(resident_started),
+        .resident_completed(resident_completed)
+    );
+
     //结果选择
     always_comb begin
         exe_result = 32'b0;
         if (!es_flush) begin
-            unique case (1'b1)
-                is_bitman: exe_result = bitman_result;
-                is_alu: exe_result = alu_result;
-                is_fpu: exe_result = fpu_result;
-                is_mem: exe_result = dmem_addr;
-                is_mul: exe_result = mul_result;
-                is_csr: exe_result = csr_data;
-                default: exe_result = exe_pc + 4; //默认写回PC+4，方便调试和实现JAL/JALR
-            endcase
+            exe_result = is_fpu ? fpu_result : resident_result;
         end
     end
 
@@ -607,6 +631,21 @@ module exe_stage(
     logic [32:0] br_bus;
     assign br_bus = {br_taken, br_target};
     assign exe_exc_bus = {br_bus, ds_exc_bus_r};
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && resident_killed && resident_start) begin
+            $fatal(1, "killed EX resident attempted to start a unit");
+        end
+        if (rst_n && dmem_en && (!resident_start || resident_killed)) begin
+            $fatal(1, "LSU request was not a live resident start pulse");
+        end
+        if (rst_n && resident_killed &&
+            (branch_resolve_fire || exe_csr_wen || store_event)) begin
+            $fatal(1, "killed EX resident produced an architectural side effect");
+        end
+    end
+`endif
 
 
 endmodule

@@ -1,82 +1,107 @@
-// 除法器模块 - 逻辑验证版本
-// 实现 AXI Stream 接口的除法功能
-// 输出格式: [63:32] = 余数, [31:0] = 商
-
-module divider (
-    input logic aclk,
-    input logic aresetn,
-    
-    // AXI Stream 除数输入
-    input logic s_axis_divisor_tvalid,
-    output logic s_axis_divisor_tready,
-    input logic [31:0] s_axis_divisor_tdata,
-    
-    // AXI Stream 被除数输入
-    input logic s_axis_dividend_tvalid,
-    output logic s_axis_dividend_tready,
-    input logic [31:0] s_axis_dividend_tdata,
-    
-    // AXI Stream 输出结果
-    output logic m_axis_dout_tvalid,
-    output logic [63:0] m_axis_dout_tdata
+module divider #(
+    parameter integer LATENCY = 12
+) (
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic        start,
+    input  logic        kill,
+    input  logic [31:0] dividend,
+    input  logic [31:0] divisor,
+    input  logic        signed_mode,
+    input  logic        remainder,
+    output logic        busy,
+    output logic        done,
+    output logic [31:0] result
 );
 
-    // 内部信号
-    logic [31:0] divisor_reg, dividend_reg;
-    logic [1:0] state;
-    logic [4:0] delay_counter;
-    logic input_handshake_done;
+    logic [7:0] cycles_left;
+    logic [31:0] pending_result;
 
-    // 状态定义
-    localparam IDLE = 2'b00;
-    localparam WAIT_RESULT = 2'b01;
-    localparam OUTPUT_VALID = 2'b10;
+    function automatic logic [31:0] divide_result(
+        input logic [31:0] dividend_value,
+        input logic [31:0] divisor_value,
+        input logic signed_operation,
+        input logic want_remainder
+    );
+        logic [31:0] dividend_magnitude;
+        logic [31:0] divisor_magnitude;
+        logic [31:0] quotient_magnitude;
+        logic [31:0] remainder_magnitude;
+        logic [31:0] quotient_value;
+        logic [31:0] remainder_value;
+        begin
+            if (divisor_value == 32'b0) begin
+                quotient_value = 32'hffff_ffff;
+                remainder_value = dividend_value;
+            end else if (signed_operation &&
+                         (dividend_value == 32'h8000_0000) &&
+                         (divisor_value == 32'hffff_ffff)) begin
+                quotient_value = 32'h8000_0000;
+                remainder_value = 32'b0;
+            end else begin
+                dividend_magnitude = signed_operation && dividend_value[31] ?
+                                     (~dividend_value + 1'b1) : dividend_value;
+                divisor_magnitude = signed_operation && divisor_value[31] ?
+                                    (~divisor_value + 1'b1) : divisor_value;
+                quotient_magnitude = dividend_magnitude / divisor_magnitude;
+                remainder_magnitude = dividend_magnitude % divisor_magnitude;
+                quotient_value = signed_operation &&
+                                 (dividend_value[31] ^ divisor_value[31]) ?
+                                 (~quotient_magnitude + 1'b1) :
+                                 quotient_magnitude;
+                remainder_value = signed_operation && dividend_value[31] ?
+                                  (~remainder_magnitude + 1'b1) :
+                                  remainder_magnitude;
+            end
+            divide_result = want_remainder ? remainder_value : quotient_value;
+        end
+    endfunction
 
-    // AXI Stream 握手逻辑 - 两个输入都有效时才ready
-    assign s_axis_divisor_tready = (state == IDLE) && s_axis_dividend_tvalid;
-    assign s_axis_dividend_tready = (state == IDLE) && s_axis_divisor_tvalid;
-    assign input_handshake_done = s_axis_divisor_tvalid && s_axis_divisor_tready &&
-                                  s_axis_dividend_tvalid && s_axis_dividend_tready;
-
-    // 输出握手逻辑
-    assign m_axis_dout_tvalid = (state == OUTPUT_VALID);
-    assign m_axis_dout_tdata = {dividend_reg % divisor_reg, dividend_reg / divisor_reg};
-
-    always_ff @(posedge aclk or negedge aresetn) begin
-        if (!aresetn) begin
-            state <= IDLE;
-            divisor_reg <= 32'b0;
-            dividend_reg <= 32'b0;
-            delay_counter <= 5'b0;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            cycles_left <= 8'b0;
+            pending_result <= 32'b0;
+            busy <= 1'b0;
+            done <= 1'b0;
+            result <= 32'b0;
         end else begin
-            unique case (state)
-                IDLE: begin
-                    if (input_handshake_done) begin
-                        divisor_reg <= s_axis_divisor_tdata;
-                        dividend_reg <= s_axis_dividend_tdata;
-                        delay_counter <= 5'd10; // 模拟除法延迟 10 个周期
-                        state <= WAIT_RESULT;
-                    end
+            done <= 1'b0;
+            if (kill) begin
+                cycles_left <= 8'b0;
+                busy <= 1'b0;
+            end else if (start && !busy) begin
+                if ((divisor == 32'b0) ||
+                    (signed_mode && (dividend == 32'h8000_0000) &&
+                     (divisor == 32'hffff_ffff))) begin
+                    busy <= 1'b0;
+                    done <= 1'b1;
+                    result <= divide_result(dividend, divisor,
+                                            signed_mode, remainder);
+                end else begin
+                    pending_result <= divide_result(dividend, divisor,
+                                                    signed_mode, remainder);
+                    cycles_left <= LATENCY;
+                    busy <= 1'b1;
                 end
-                
-                WAIT_RESULT: begin
-                    if (delay_counter > 5'b0) begin
-                        delay_counter <= delay_counter - 1'b1;
-                    end else begin
-                        state <= OUTPUT_VALID;
-                    end
+            end else if (busy) begin
+                if (cycles_left > 8'd1) begin
+                    cycles_left <= cycles_left - 1'b1;
+                end else begin
+                    cycles_left <= 8'b0;
+                    busy <= 1'b0;
+                    done <= 1'b1;
+                    result <= pending_result;
                 end
-                
-                OUTPUT_VALID: begin
-                    // 输出一个周期后回到空闲状态
-                    state <= IDLE;
-                end
-                
-                default: begin
-                    state <= IDLE;
-                end
-            endcase
+            end
         end
     end
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && start && busy) begin
+            $fatal(1, "divider received a duplicate start while busy");
+        end
+    end
+`endif
 
 endmodule

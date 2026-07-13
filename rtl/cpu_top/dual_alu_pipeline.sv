@@ -90,6 +90,12 @@ module dual_alu_pipeline (
     logic scoreboard_stall;
     logic [11:0] scoreboard_forward_sel;
     logic launch_fire;
+    logic alu_busy0;
+    logic alu_busy1;
+    logic alu_done0;
+    logic alu_done1;
+    logic [31:0] alu_result0;
+    logic [31:0] alu_result1;
 
     assign {launch_lane1_valid, launch_lane0_valid,
             launch_uop1, launch_uop0} = launch_bundle;
@@ -109,67 +115,6 @@ module dual_alu_pipeline (
 
     function automatic logic instruction_uses_rs2(input logic [31:0] inst);
         instruction_uses_rs2 = (inst[6:0] == 7'b0110011);
-    endfunction
-
-    function automatic logic [31:0] alu_result(
-        input logic [31:0] inst,
-        input logic [31:0] pc,
-        input logic [31:0] rs1,
-        input logic [31:0] rs2
-    );
-        logic [6:0] opcode;
-        logic [2:0] funct3;
-        logic [6:0] funct7;
-        logic [31:0] imm_i;
-        begin
-            opcode = inst[6:0];
-            funct3 = inst[14:12];
-            funct7 = inst[31:25];
-            imm_i = {{20{inst[31]}}, inst[31:20]};
-            case (opcode)
-                7'b0110111: alu_result = {inst[31:12], 12'b0};
-                7'b0010111: alu_result = pc + {inst[31:12], 12'b0};
-                7'b0010011: begin
-                    case (funct3)
-                        3'b000: alu_result = rs1 + imm_i;
-                        3'b010: alu_result = ($signed(rs1) < $signed(imm_i));
-                        3'b011: alu_result = (rs1 < imm_i);
-                        3'b100: alu_result = rs1 ^ imm_i;
-                        3'b110: alu_result = rs1 | imm_i;
-                        3'b111: alu_result = rs1 & imm_i;
-                        3'b001: alu_result = rs1 << inst[24:20];
-                        3'b101: begin
-                            if (funct7 == 7'b0100000) begin
-                                alu_result = $signed(rs1) >>> inst[24:20];
-                            end else begin
-                                alu_result = rs1 >> inst[24:20];
-                            end
-                        end
-                        default: alu_result = 32'b0;
-                    endcase
-                end
-                7'b0110011: begin
-                    case (funct3)
-                        3'b000: alu_result = funct7[5] ? rs1 - rs2 : rs1 + rs2;
-                        3'b001: alu_result = rs1 << rs2[4:0];
-                        3'b010: alu_result = ($signed(rs1) < $signed(rs2));
-                        3'b011: alu_result = (rs1 < rs2);
-                        3'b100: alu_result = rs1 ^ rs2;
-                        3'b101: begin
-                            if (funct7 == 7'b0100000) begin
-                                alu_result = $signed(rs1) >>> rs2[4:0];
-                            end else begin
-                                alu_result = rs1 >> rs2[4:0];
-                            end
-                        end
-                        3'b110: alu_result = rs1 | rs2;
-                        3'b111: alu_result = rs1 & rs2;
-                        default: alu_result = 32'b0;
-                    endcase
-                end
-                default: alu_result = 32'b0;
-            endcase
-        end
     endfunction
 
     assign launch_uses_rs1_0 = instruction_uses_rs1(launch_inst0);
@@ -248,16 +193,37 @@ module dual_alu_pipeline (
         end
     end
 
-    assign commit_valid = {idex_valid && idex_lane1_valid && !redirect,
-                           idex_valid && idex_lane0_valid && !redirect};
+    simple_alu_exec_unit u_alu0 (
+        .start(idex_valid && idex_lane0_valid),
+        .kill(redirect),
+        .instruction(idex_inst0),
+        .pc(idex_pc0),
+        .rs1(rf_rdata0),
+        .rs2(rf_rdata1),
+        .busy(alu_busy0),
+        .done(alu_done0),
+        .result(alu_result0)
+    );
+
+    simple_alu_exec_unit u_alu1 (
+        .start(idex_valid && idex_lane1_valid),
+        .kill(redirect),
+        .instruction(idex_inst1),
+        .pc(idex_pc1),
+        .rs1(rf_rdata2),
+        .rs2(rf_rdata3),
+        .busy(alu_busy1),
+        .done(alu_done1),
+        .result(alu_result1)
+    );
+
+    assign commit_valid = {alu_done1, alu_done0};
     assign commit_wen[0] = commit_valid[0] && (idex_rd0 != 0);
     assign commit_wen[1] = commit_valid[1] && (idex_rd1 != 0);
     assign commit_waddr0 = idex_rd0;
     assign commit_waddr1 = idex_rd1;
-    assign commit_wdata0 = alu_result(idex_inst0, idex_pc0,
-                                      rf_rdata0, rf_rdata1);
-    assign commit_wdata1 = alu_result(idex_inst1, idex_pc1,
-                                      rf_rdata2, rf_rdata3);
+    assign commit_wdata0 = alu_result0;
+    assign commit_wdata1 = alu_result1;
     assign retire_count = {1'b0, commit_valid[0]} +
                           {1'b0, commit_valid[1]};
     assign commit_pc0 = idex_pc0;

@@ -314,7 +314,15 @@ module cpu_top (
         .commit_wdata1(dual_commit_wdata1),
         .retire_count(dual_retire_count),
         .dependency_event(dual_dependency_event),
-        .pending_stall_event(dual_pending_stall_event)
+        .pending_stall_event(dual_pending_stall_event),
+        .commit_pc0(),
+        .commit_pc1(),
+        .commit_inst0(),
+        .commit_inst1(),
+        .commit_age0(),
+        .commit_age1(),
+        .commit_epoch0(),
+        .commit_epoch1()
     );
 
     assign dual_bundle_pop = dual_bundle_valid && dual_launch_ready;
