@@ -827,7 +827,9 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A6 final: cycles=2999204, instret=2279454, ipc_x1000=760, sink=0x9D3BF787, exceptions=0
               - next: A7 final functional/performance audit and 200 MHz timing convergence
 2026-07-13  A7 IN_PROGRESS
-              - A7.1 first adds a measurement-only probe; no RTL or frozen fixture changes
+              - A7.1 SIGNED_OFF in 7640bee: measurement-only probe; no RTL or frozen fixture changes
+              - A7.1 run_all.bat all passed 78/78; direct and wrapped nine-window reports match A6.4 exactly
+              - A7.1 measured 354773 actual dual launches, 379273 legacy pair fallbacks and 458102 fetch-empty cycles
               - A7.2 will remove the every-other-cycle IF request ceiling with tagged continuous requests
               - A7.3 will reduce dual/legacy switching, beginning with safe singleton simple residency
               - A7.4 will open only pair classes justified by the new counters
@@ -1650,4 +1652,63 @@ protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA
 
 表中 `Dual/Single` 是 Issue 原子 bundle 决策，`MULDIV pair` 是 `0x7D6` 的真实 dual resident 进入次数。A6.3→A6.4 的真实退休数、sink、exceptions、LSU pair 与其余八窗口 cycles 全部不变；MEXT cycles 从 `190046` 降到 `182052`（`-7994`, `-4.206%`），精确 MEXT IPC 从 `0.284226` 升到 `0.296706`。overall 同样减少 `7994` cycles（`-0.266%`），精确 IPC 从 `0.757999` 升到 `0.760020`（`+0.267%`）。
 
-A6 的四个子阶段至此全部独立实现、提交并完成 full regression/九窗口签核，阶段状态改为 `SIGNED_OFF`。签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`，八项 SHA256 全部与 12.2/17.3 相同，未重建软件、未修改 golden。A7 的最终 `IPC > A0` 门槛当前尚未满足（A6 为 `0.760`，A0 为 `0.824`），下一阶段必须把该功能/性能差距与 200 MHz 时序收敛一起如实处理。
+A6 的四个子阶段至此全部独立实现、提交并完成 full regression/九窗口签核，阶段状态改为 `SIGNED_OFF`。签核时再次核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`，八项 SHA256 全部与 12.2/17.3 相同，未重建软件、未修改 golden。A7 必须继续恢复 A1 之后损失的有效执行周期并完成 200 MHz 时序收敛；A0 的 `0.824` 包含错误路径 NOP 退休，不能继续作为有效 IPC 的直接数值门槛，最终同时报告修正口径 IPC、相对 A0 cycles 与 `IPC x Fmax`。
+
+### 17.10 A7 性能恢复与最终收敛记录
+
+#### 17.10.1 A7.1 性能可观测性与冻结基线签核
+
+规划与实现提交：
+
+```text
+plan commit:           30ae4ed15c64237c79b192f57547e5d1cf0535f9
+implementation commit: 7640bee99c3d6d4b7df50c2e4db1f3f78bbfa69e
+status:                SIGNED_OFF
+next:                  A7.2 tagged continuous IF requests
+```
+
+`tb_a7_perf_profile` 是 `tb_uart_benchmark` 外的 measurement-only wrapper。它只观察已经存在的层次信号，并在既有 `perf_enable` 窗口内计数；本子阶段未修改任何 RTL、CPU 端口、CSR、冻结 `test/tb_top.sv`、21-word report、benchmark 软件/HEX 或 golden。probe 对每个窗口检查：
+
+```text
+fetch_uops = 2 * fetch_packets - single_uop_packets
+actual_dual_launch = simple_pair + control_pair + lsu_pair + muldiv_pair
+legacy_prefer_fallback <= legacy_pair_fallback
+```
+
+三项不变量在 boot 与九个正式窗口全部通过；九窗口合计还满足 `dual_retire2_cycles = actual_dual_launch = 354773`。`imem_requests - fetch_packets = 19405`，与九窗口 branch mispredict 合计相等，说明 redirect 丢弃的 in-flight response 没有混入 packet 统计。
+
+官方回归与冻结基线：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\Temp\riscv-dual-rebuild-a7-1-run_all_all-final.log
+
+direct result:   PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:         cycles=2999204, instret=2279454, ipc_x1000=760
+exact IPC:       0.7600196585494018
+sink:            0x9D3BF787
+compile log:     F:\Tools\Temp\riscv-dual-rebuild-a7-1-nine-window-compile-final.log
+direct log:      F:\Tools\Temp\riscv-dual-rebuild-a7-1-nine-window-final.log
+profile log:     F:\Tools\Temp\riscv-dual-rebuild-a7-1-profile-final.log
+comparison:      A7.1 header, nine L3J_REPORT lines, overall and PASS are identical to A6.4
+protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+| Window | IMEM request | Fetch packet | 1-uop packet | Fetch empty | Issue pair | Actual dual | Legacy pair | Wait legacy | Wait dual |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 108012 | 108010 | 0 | 60001 | 60001 | 60000 | 3 | 36005 | 0 |
+| MEXT | 28029 | 28025 | 1999 | 19 | 24006 | 13996 | 10004 | 20012 | 101976 |
+| BRANCH_RANDOM | 156743 | 147268 | 14847 | 100388 | 60481 | 44796 | 9037 | 47896 | 0 |
+| BRANCH_REGULAR | 55523 | 54018 | 2998 | 45021 | 37512 | 33004 | 3003 | 37499 | 0 |
+| BRANCH_SHORT | 57023 | 54018 | 9000 | 57020 | 42007 | 39001 | 3 | 20998 | 0 |
+| BRANCH_CALL | 100253 | 96192 | 28049 | 60187 | 36011 | 11999 | 19955 | 44117 | 0 |
+| BRANCH_CAPACITY | 70410 | 69258 | 65408 | 69382 | 1032 | 0 | 1029 | 1022 | 0 |
+| BRANCH_RETURN | 424080 | 424064 | 87995 | 64110 | 304009 | 151974 | 152013 | 279986 | 15996 |
+| MEMORY | 325153 | 324968 | 46513 | 1974 | 184410 | 3 | 184226 | 91632 | 0 |
+| **Overall** | **1325226** | **1305821** | **256809** | **458102** | **749469** | **354773** | **379273** | **579167** | **117972** |
+
+九窗口实际 dual class 分解为 `simple=233499`、`control=99282`、`LSU=7998`、`MULDIV=13994`，合计 `354773`。只有 `47.337%` 的 Issue pair 实际进入 dual resident；`50.606%` 明确回退 legacy，剩余部分位于 redirect/窗口边界等未完成路径。`379273` 次 legacy pair fallback 中 `335898` 次（`88.564%`）发生在 `prefer_legacy_dispatch` 有效时。实际双退休覆盖 `31.128%` 的有效退休指令，但前端仍只有 `0.785153` fetched uop/cycle，并在 Issue FIFO 可接收时空供给 `458102` cycles（总周期 `15.274%`）。
+
+窗口归因进一步冻结 A7 后续顺序：ALU 每 `216028` cycles 只有 `108012` 次 request，且每个实际 dual launch 对应一次 Fetch empty，证明 A7.2 连续 request 是提升纯算术 IPC 的必要条件；BRANCH_CAPACITY 的 `69258` 个 packet 中 `65408` 个仅含一个 uop（`94.436%`），隔拍 request 把该窗口压到约 `0.5 IPC`。另一方面，MEMORY 的 `184410` 个 Issue pair 只有 `3` 个实际 dual launch，BRANCH_RETURN 也有约一半 pair 回退 legacy，证明 A7.3 必须处理域切换而非继续扩大 LSU 白名单；MEXT 的 `101976` 个 wait-dual cycles 则来自共享长 resident，不能由前端供给修复。
+
+A7.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。下一子阶段严格限于 A7.2 连续取指 request/response tag 管线，不混入 Dispatch、singleton 或配对白名单修改。
