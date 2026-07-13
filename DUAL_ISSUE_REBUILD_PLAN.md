@@ -720,7 +720,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
 | A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
-| A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
+| A4 | IN_PROGRESS | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
 | A7 | PENDING | 最终功能、九窗口性能及 200 MHz 时序收敛 | 官方回归与全部定向测试通过；sink=`0x9D3BF787`、exceptions=0；双发 IPC>A0；5.000 ns 下 setup/hold 通过，或如实记录 175 MHz 以上结果及 `IPC x Fmax` |
@@ -775,6 +775,12 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS
               - A3 remains an interim performance regression until the legacy backend is replaced in A4/A5
               - next: A4 modular ALU/Branch/LSU/MUL/DIV and local resident hold
+2026-07-13  A4 IN_PROGRESS
+              - freeze A3 implementation commit f3d4b6a and protected HEX SHA256 before edits
+              - split ALU, branch, LSU shell, multiplier and divider behind explicit local execution protocols
+              - make the EX resident the sole owner of start-once, completion retention, kill and release
+              - keep A3 dual-issue eligibility unchanged; A4 does not pre-open control/LSU/MULDIV pairing
+              - defer four-cycle load, two-cycle store and precise memory side effects to A5
 ```
 
 ### 17.3 A0 签核记录
@@ -1089,3 +1095,29 @@ A3 的真实退休数、sink、exceptions、branch mispredict 总数均与 A2 �
 诊断期间曾遗漏 `+define+PERF_BENCH`，从 `0x8000_0000` 启动后使 AUIPC 软件栈落到未映射的 `0xE000_xxxx`，从而复现历史错误 sink `0x4A27AD51`。这不是有效的九窗口签核配置；未修改 golden，最终记录只采用本节明确列出的 PERF_BENCH 编译命令。
 
 签核时再次核对冻结夹具：六项软件/HEX SHA256 与 12.2 相同；`test/tb_top.sv` 保持 A0 适配后的 `77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701`。
+
+### 17.7 A4 设计与签核记录
+
+A4 开始基线：
+
+```text
+start commit:       f3d4b6a886a84757fd587a47489401965b01569e
+protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+status:              IN_PROGRESS
+```
+
+实现边界：
+
+- `ALU`、`Branch` 和 A5 前的 `LSU shell` 是单周期执行单元：只有有效且未 kill 的请求才产生 `done`；所有结果和分支 metadata 都由模块输出，不再散落在 EX resident 的控制逻辑中。
+- `MUL` 与 `DIV` 是独立共享单元：请求边沿锁存 operands/op，执行期间 `busy=1`，完成只产生一次 `done`；除零和有符号溢出在 DIV 单元内按 RISC-V M 语义完成，不向底层组合除法传递零除数。
+- EX resident 为每个 uop 保存 `valid/started/completed/killed`。多周期 `start` 只能由 `valid && !started && !killed` 产生；`done` 后锁存结果，在 MEM backpressure 下保持 resident 和结果；release 后才允许下一 uop 占用。
+- kill uop 不发出任何单元 start，不因单元 busy 或 done 阻塞，并沿原有 flush 路径禁止 redirect、预测器更新、GPR/CSR 写、memory request 和 retire。
+- A4 保持 A3 dispatch 白名单不变，不开放 control、LSU 或 MULDIV 双发；四拍 Load、两拍 Store、固定 EX/MEM 和 Store commit-only 副作用属于 A5。
+
+阶段签核要点：
+
+1. 单周期 ALU/Branch/LSU shell 的请求、结果、branch taken/target/mispredict、地址/mask 定向测试通过。
+2. MUL/DIV 每个 resident uop 恰好一次 start 和一次 done；下游 hold 跨过 done 时结果稳定且不重新启动。
+3. resident 被 hold 时不能被新输入覆盖；kill-before-start 不启动，kill-during-wait 立即释放且不提交。
+4. forwarding 操作数在 start 边沿锁存，等待期间上游输入变化不改变在途运算。
+5. A3 directed tests、MULDIV ISA 回归、`run_all.bat all` 和九窗口全部通过；sink、exceptions 与冻结夹具不变。
