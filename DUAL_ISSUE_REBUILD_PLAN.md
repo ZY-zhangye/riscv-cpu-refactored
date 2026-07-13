@@ -830,7 +830,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.1 SIGNED_OFF in 7640bee: measurement-only probe; no RTL or frozen fixture changes
               - A7.1 run_all.bat all passed 78/78; direct and wrapped nine-window reports match A6.4 exactly
               - A7.1 measured 354773 actual dual launches, 379273 legacy pair fallbacks and 458102 fetch-empty cycles
-              - A7.2 will remove the every-other-cycle IF request ceiling with tagged continuous requests
+              - A7.2 IN_PROGRESS: remove the every-other-cycle IF request ceiling with tagged continuous requests
               - A7.3 will reduce dual/legacy switching, beginning with safe singleton simple residency
               - A7.4 will open only pair classes justified by the new counters
               - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
@@ -1712,3 +1712,22 @@ protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA
 窗口归因进一步冻结 A7 后续顺序：ALU 每 `216028` cycles 只有 `108012` 次 request，且每个实际 dual launch 对应一次 Fetch empty，证明 A7.2 连续 request 是提升纯算术 IPC 的必要条件；BRANCH_CAPACITY 的 `69258` 个 packet 中 `65408` 个仅含一个 uop（`94.436%`），隔拍 request 把该窗口压到约 `0.5 IPC`。另一方面，MEMORY 的 `184410` 个 Issue pair 只有 `3` 个实际 dual launch，BRANCH_RETURN 也有约一半 pair 回退 legacy，证明 A7.3 必须处理域切换而非继续扩大 LSU 白名单；MEXT 的 `101976` 个 wait-dual cycles 则来自共享长 resident，不能由前端供给修复。
 
 A7.1 已独立签核，A7 总阶段保持 `IN_PROGRESS`。下一子阶段严格限于 A7.2 连续取指 request/response tag 管线，不混入 Dispatch、singleton 或配对白名单修改。
+
+#### 17.10.2 A7.2 连续取指 request/response 设计记录
+
+```text
+baseline: 0cd312c (A7.1 signed off, clean worktree)
+status:   IN_PROGRESS
+scope:    if_stage + tb_if_sync_btb only
+```
+
+同步 IROM 在 request 边沿锁存 PC/PC+4，并在下一完整周期提供 response。A7.2 保留恰好一个 `req_valid` tag 和一个 `packet_valid` skid packet，冻结以下所有权不变量：
+
+1. `req_valid` 表示本周期可消费的一拍 response；`packet_valid` 只表示此前因 Fetch FIFO 空间不足而保留的完整 packet，正常状态下二者不得同时有效。
+2. 没有 held packet 且 Fetch FIFO 空间足够时，live response 直接形成 `fetch_push_*`，并在同一边沿使用该 packet 的预测 next PC 发出下一 request；因此可形成一拍一个 request/packet 的稳态。
+3. live response 遇到 backpressure 时必须完整进入 skid，当前边沿不得再发 request；held packet 释放的同一边沿才允许用其已保存的 next PC 恢复 request。
+4. request tag 必须保存 PC、epoch 和 request 时刻的 RAS top；BTB 双查询继续与 request 同边沿锁存。packet 进入 Fetch FIFO 时才分配 age 并更新 speculative RAS，同拍新 request 必须看到 call/return 更新后的 RAS top。
+5. redirect 同拍同时抑制 packet push 和新 request，递增 epoch，并清除 in-flight tag 与 held packet；旧 IROM response 不得进入 Fetch FIFO。
+6. A7.2 不改变 Fetch FIFO、Issue、Dispatch、dual/legacy backend、LSU/MULDIV 时序或任何 pairing class。
+
+定向签核新增连续三拍 request/packet、slot0 taken 后目标 request、backpressure skid hold/release、释放同拍 request、redirect 覆盖 in-flight response，以及现有 BTB write-through、lane1 taken、JAL/JALR/RAS 和 age/epoch 检查。正式签核仍需 78/78、冻结九窗口直跑、A7 profile A/B 和全部夹具 SHA256 复核。
