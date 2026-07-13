@@ -130,9 +130,12 @@ module tb_issue_bundle_fifo;
                 (reject_raw !== expected_raw) ||
                 (reject_waw !== expected_waw) ||
                 (reject_struct !== expected_struct)) begin
-                $fatal(1, "issue decision mismatch pop=%0d pair=%0d class=%0d raw=%0d waw=%0d struct=%0d",
+                $fatal(1, "issue decision mismatch inst0=%08h inst1=%08h actual(pop=%0d pair=%0d class=%0d raw=%0d waw=%0d struct=%0d) expected(pop=%0d pair=%0d class=%0d raw=%0d waw=%0d struct=%0d)",
+                       inst0, inst1,
                        fetch_pop_count, pair_accepted, pair_class, reject_raw,
-                       reject_waw, reject_struct);
+                       reject_waw, reject_struct, expected_pop, expected_pair,
+                       expected_class, expected_raw, expected_waw,
+                       expected_struct);
             end
             @(posedge clk);
             @(negedge clk);
@@ -183,7 +186,7 @@ module tb_issue_bundle_fifo;
                      `PAIR_NONE, 0, 1, 0);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "WAW bundle not lane0-only");
         clear_pipeline();
-        present_pair(32'h023100b3, 32'h00200113, 1, 0,
+        present_pair(32'h403170b3, 32'h00200113, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "structural bundle not lane0-only");
 
@@ -232,10 +235,22 @@ module tb_issue_bundle_fifo;
             $fatal(1, "dual LSU structural conflict was not classified");
         end
         clear_pipeline();
-        // MULDIV and bitman remain outside the dual whitelist.
-        present_pair(32'h00100093, 32'h02310133, 1, 0,
+        // A6.4 opens exactly one shared MUL/DIV in either lane.
+        present_pair(32'h00100093, 32'h02310133, 2, 1,
+                     `PAIR_SIMPLE_MULDIV, 0, 0, 0);
+        clear_pipeline();
+        present_pair(32'h023100b3, 32'h00200213, 2, 1,
+                     `PAIR_MULDIV_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+        // A MUL/DIV result consumed by lane1 remains a forbidden RAW.
+        present_pair(32'h023100b3, 32'h00108193, 1, 0,
+                     `PAIR_NONE, 1, 0, 0);
+        clear_pipeline();
+        // Two RV32M operations contend for the single shared unit.
+        present_pair(32'h023100b3, 32'h025201b3, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
+        // Bitman remains outside the A6 dual whitelist.
         present_pair(32'h403170b3, 32'h00200113, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
 

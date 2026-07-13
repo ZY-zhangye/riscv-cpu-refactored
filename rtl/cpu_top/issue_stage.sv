@@ -114,6 +114,10 @@ module issue_stage (
             candidate_class = `PAIR_SIMPLE_LSU;
         end else if (lsu0 && simple1) begin
             candidate_class = `PAIR_LSU_SIMPLE;
+        end else if (simple0 && muldiv1) begin
+            candidate_class = `PAIR_SIMPLE_MULDIV;
+        end else if (muldiv0 && simple1) begin
+            candidate_class = `PAIR_MULDIV_SIMPLE;
         end
     end
 

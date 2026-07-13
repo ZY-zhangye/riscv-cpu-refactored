@@ -113,6 +113,7 @@
 `define CSR_PERF_CROSS_PACKET 12'h7D3
 `define CSR_PERF_ISSUE_QFULL 12'h7D4
 `define CSR_PERF_RESULT_DEP 12'h7D5
+`define CSR_PERF_MULDIV_PAIR 12'h7D6
 
 `define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
 

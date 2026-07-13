@@ -56,6 +56,7 @@ module dual_alu_pipeline (
     output logic [`BP_TYPE_WIDTH-1:0]      bp_update_type,
     output logic                           lane1_control_event,
     output logic                           lsu_pair_event,
+    output logic                           muldiv_pair_event,
     output logic                           exception_valid,
     output logic [6:0]                     exception_code,
     output logic [31:0]                    exception_pc,
@@ -130,14 +131,20 @@ module dual_alu_pipeline (
     logic launch_control1;
     logic launch_lsu0;
     logic launch_lsu1;
+    logic launch_muldiv0;
+    logic launch_muldiv1;
     logic idex_simple0;
     logic idex_simple1;
     logic idex_control0;
     logic idex_control1;
     logic idex_lsu0;
     logic idex_lsu1;
+    logic idex_muldiv0;
+    logic idex_muldiv1;
     logic idex_has_lsu;
+    logic idex_has_muldiv;
     logic idex_lsu_started;
+    logic idex_muldiv_started;
     logic idex_uses_rd0;
     logic idex_uses_rd1;
     logic pipeline_clear;
@@ -174,6 +181,27 @@ module dual_alu_pipeline (
     logic [31:0] lsu_load_response_data;
     logic lsu_misaligned;
     logic stale_response_pending;
+
+    logic [31:0] muldiv_instruction;
+    logic [31:0] muldiv_src1;
+    logic [31:0] muldiv_src2;
+    logic [2:0] muldiv_funct3;
+    logic muldiv_use_div;
+    logic muldiv_src1_signed;
+    logic muldiv_src2_signed;
+    logic muldiv_high_result;
+    logic muldiv_remainder;
+    logic muldiv_start;
+    logic mul_start;
+    logic mul_busy;
+    logic mul_done;
+    logic [31:0] mul_result;
+    logic div_start;
+    logic div_busy;
+    logic div_done;
+    logic [31:0] div_result;
+    logic muldiv_done;
+    logic [31:0] muldiv_result;
 
     logic mem_valid;
     logic mem_lane0_valid;
@@ -249,24 +277,28 @@ module dual_alu_pipeline (
 
     pair_predecode u_launch_predecode0 (
         .instruction(launch_inst0), .is_simple(launch_simple0),
-        .is_control(launch_control0), .is_lsu(launch_lsu0), .is_muldiv(),
+        .is_control(launch_control0), .is_lsu(launch_lsu0),
+        .is_muldiv(launch_muldiv0),
         .uses_rs1(launch_uses_rs1_0), .uses_rs2(launch_uses_rs2_0),
         .uses_rd()
     );
     pair_predecode u_launch_predecode1 (
         .instruction(launch_inst1), .is_simple(launch_simple1),
-        .is_control(launch_control1), .is_lsu(launch_lsu1), .is_muldiv(),
+        .is_control(launch_control1), .is_lsu(launch_lsu1),
+        .is_muldiv(launch_muldiv1),
         .uses_rs1(launch_uses_rs1_1), .uses_rs2(launch_uses_rs2_1),
         .uses_rd()
     );
     pair_predecode u_idex_predecode0 (
         .instruction(idex_inst0), .is_simple(idex_simple0),
-        .is_control(idex_control0), .is_lsu(idex_lsu0), .is_muldiv(),
+        .is_control(idex_control0), .is_lsu(idex_lsu0),
+        .is_muldiv(idex_muldiv0),
         .uses_rs1(), .uses_rs2(), .uses_rd(idex_uses_rd0)
     );
     pair_predecode u_idex_predecode1 (
         .instruction(idex_inst1), .is_simple(idex_simple1),
-        .is_control(idex_control1), .is_lsu(idex_lsu1), .is_muldiv(),
+        .is_control(idex_control1), .is_lsu(idex_lsu1),
+        .is_muldiv(idex_muldiv1),
         .uses_rs1(), .uses_rs2(), .uses_rd(idex_uses_rd1)
     );
     assign rf_raddr0 = launch_inst0[19:15];
@@ -277,6 +309,7 @@ module dual_alu_pipeline (
     assign consumer_uses = {launch_uses_rs2_1, launch_uses_rs1_1,
                             launch_uses_rs2_0, launch_uses_rs1_0};
     assign idex_has_lsu = idex_lsu0 || idex_lsu1;
+    assign idex_has_muldiv = idex_muldiv0 || idex_muldiv1;
 
     // Slot priority: EX lane1, EX lane0, then reserved MEM/WB lane slots.
     assign producer_valid = {4'b0,
@@ -285,7 +318,9 @@ module dual_alu_pipeline (
                              idex_valid && idex_lane1_valid && idex_uses_rd1 &&
                                  (idex_rd1 != 0)};
     assign producer_kill = 6'b0;
-    assign producer_pending = idex_has_lsu ? producer_valid : 6'b0;
+    assign producer_pending = (idex_has_lsu ||
+                               (idex_has_muldiv && !muldiv_done)) ?
+                              producer_valid : 6'b0;
     assign producer_result_valid = producer_valid & ~producer_pending;
     assign producer_dest_flat = {20'b0, idex_rd0, idex_rd1};
 
@@ -305,8 +340,10 @@ module dual_alu_pipeline (
 
     // A normal MEM resident commits on the coming edge.  The next bundle may
     // synchronously read (with WB bypass) or enter the legacy adapter on that
-    // same edge; only an unfinished EX LSU or a quarantined response blocks it.
+    // same edge.  An unfinished EX LSU, unfinished MUL/DIV, or quarantined Load
+    // response remains the sole cross-domain exclusion owner.
     assign resident_block = (idex_valid && idex_has_lsu) ||
+                            (idex_valid && idex_has_muldiv && !muldiv_done) ||
                             stale_response_pending;
     assign pipeline_clear = redirect || branch_redirect || exception_valid;
     assign launch_ready = !pipeline_clear && !scoreboard_stall &&
@@ -336,6 +373,7 @@ module dual_alu_pipeline (
             idex_pred_taken1 <= 1'b0;
             idex_pred_target1 <= 32'b0;
             idex_lsu_started <= 1'b0;
+            idex_muldiv_started <= 1'b0;
         end else if (idex_valid && idex_has_lsu) begin
             if (lsu_done) begin
                 idex_valid <= 1'b0;
@@ -345,9 +383,14 @@ module dual_alu_pipeline (
             end else if (lsu_start) begin
                 idex_lsu_started <= 1'b1;
             end
+        end else if (idex_valid && idex_has_muldiv && !muldiv_done) begin
+            if (muldiv_start) begin
+                idex_muldiv_started <= 1'b1;
+            end
         end else begin
             idex_valid <= launch_fire;
             idex_lsu_started <= 1'b0;
+            idex_muldiv_started <= 1'b0;
             if (launch_fire) begin
                 idex_lane0_valid <= launch_lane0_valid;
                 idex_lane1_valid <= launch_lane1_valid;
@@ -390,6 +433,58 @@ module dual_alu_pipeline (
         .done(alu_done1),
         .result(alu_result1)
     );
+
+    // The pair owns one shared RV32M unit.  funct3[2] separates DIV/REM from
+    // MUL*, while the low bits select signedness, high-half, and remainder.
+    assign muldiv_instruction = idex_muldiv0 ? idex_inst0 : idex_inst1;
+    assign muldiv_src1 = idex_muldiv0 ? rf_rdata0 : rf_rdata2;
+    assign muldiv_src2 = idex_muldiv0 ? rf_rdata1 : rf_rdata3;
+    assign muldiv_funct3 = muldiv_instruction[14:12];
+    assign muldiv_use_div = muldiv_funct3[2];
+    assign muldiv_src1_signed = muldiv_use_div ? !muldiv_funct3[0] :
+                                (muldiv_funct3 != 3'b011);
+    assign muldiv_src2_signed = muldiv_use_div ? !muldiv_funct3[0] :
+                                ((muldiv_funct3 == 3'b000) ||
+                                 (muldiv_funct3 == 3'b001));
+    assign muldiv_high_result = !muldiv_use_div &&
+                                (muldiv_funct3 != 3'b000);
+    assign muldiv_remainder = muldiv_use_div && muldiv_funct3[1];
+    assign muldiv_start = idex_valid && idex_has_muldiv &&
+                          !idex_muldiv_started && !pipeline_clear;
+    assign mul_start = muldiv_start && !muldiv_use_div;
+    assign div_start = muldiv_start && muldiv_use_div;
+
+    mul u_dual_mul (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(mul_start),
+        .kill(redirect),
+        .src1(muldiv_src1),
+        .src2(muldiv_src2),
+        .src1_signed(muldiv_src1_signed),
+        .src2_signed(muldiv_src2_signed),
+        .high_result(muldiv_high_result),
+        .busy(mul_busy),
+        .done(mul_done),
+        .result(mul_result)
+    );
+
+    divider u_dual_divider (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(div_start),
+        .kill(redirect),
+        .dividend(muldiv_src1),
+        .divisor(muldiv_src2),
+        .signed_mode(muldiv_src1_signed && muldiv_src2_signed),
+        .remainder(muldiv_remainder),
+        .busy(div_busy),
+        .done(div_done),
+        .result(div_result)
+    );
+
+    assign muldiv_done = muldiv_use_div ? div_done : mul_done;
+    assign muldiv_result = muldiv_use_div ? div_result : mul_result;
 
     assign lsu_base = idex_lsu0 ? rf_rdata0 : rf_rdata2;
     assign lsu_store_data = idex_lsu0 ? rf_rdata1 : rf_rdata3;
@@ -598,6 +693,8 @@ module dual_alu_pipeline (
 
     assign lane1_control_event = launch_fire && launch_control1;
     assign lsu_pair_event = launch_fire && (launch_lsu0 || launch_lsu1);
+    assign muldiv_pair_event = launch_fire &&
+                               (launch_muldiv0 || launch_muldiv1);
 
     assign branch_exception_valid = branch_iam;
     assign lsu_exception_valid = mem_valid && mem_lsu_misaligned && !redirect;
@@ -612,10 +709,16 @@ module dual_alu_pipeline (
                              mem_lsu_address;
 
     assign lane1_done = (idex_simple1 && alu_done1) ||
-                        (idex_control1 && branch_done);
-    assign fast_commit_valid[0] = !idex_has_lsu && alu_done0;
-    assign fast_commit_valid[1] = !idex_has_lsu && lane1_done &&
-                                  !branch_exception_valid;
+                         (idex_control1 && branch_done);
+    assign fast_commit_valid[0] = idex_has_muldiv ?
+                                  (idex_valid && idex_lane0_valid &&
+                                   muldiv_done && !redirect) :
+                                  (!idex_has_lsu && alu_done0);
+    assign fast_commit_valid[1] = idex_has_muldiv ?
+                                  (idex_valid && idex_lane1_valid &&
+                                   muldiv_done && !redirect) :
+                                  (!idex_has_lsu && lane1_done &&
+                                   !branch_exception_valid);
 
     assign mem_normal_commit = mem_valid && !mem_lsu_misaligned && !redirect;
     assign mem_commit_valid = mem_normal_commit ?
@@ -658,10 +761,11 @@ module dual_alu_pipeline (
     assign commit_waddr1 = mem_valid ? mem_rd1 : idex_rd1;
     assign commit_wdata0 = mem_valid ?
                            (mem_lsu_lane1 ? mem_alu_result0 : mem_load_result) :
-                           alu_result0;
+                           (idex_muldiv0 ? muldiv_result : alu_result0);
     assign commit_wdata1 = mem_valid ?
                            (mem_lsu_lane1 ? mem_load_result : mem_alu_result1) :
-                           (idex_control1 ? (idex_pc1 + 32'd4) : alu_result1);
+                           (idex_muldiv1 ? muldiv_result :
+                            idex_control1 ? (idex_pc1 + 32'd4) : alu_result1);
     assign retire_count = {1'b0, commit_valid[0]} +
                           {1'b0, commit_valid[1]};
     assign commit_pc0 = mem_valid ? mem_pc0 : idex_pc0;
@@ -685,9 +789,10 @@ module dual_alu_pipeline (
         end
         if (rst_n && launch_fire &&
             !((launch_simple0 &&
-               (launch_simple1 || launch_control1 || launch_lsu1)) ||
-              (launch_lsu0 && launch_simple1))) begin
-            $fatal(1, "unsupported pairing class entered the A6.3 dual resident");
+               (launch_simple1 || launch_control1 || launch_lsu1 ||
+                launch_muldiv1)) ||
+              ((launch_lsu0 || launch_muldiv0) && launch_simple1))) begin
+            $fatal(1, "unsupported pairing class entered the A6.4 dual resident");
         end
         if (rst_n && branch_event &&
             (!idex_valid || !idex_lane1_valid || !idex_control1)) begin
@@ -703,6 +808,22 @@ module dual_alu_pipeline (
         if (rst_n && idex_valid && idex_has_lsu &&
             (idex_lsu0 == idex_lsu1)) begin
             $fatal(1, "A6.3 resident did not contain exactly one LSU");
+        end
+        if (rst_n && idex_valid && idex_has_muldiv &&
+            ((idex_muldiv0 == idex_muldiv1) || idex_has_lsu)) begin
+            $fatal(1, "A6.4 resident did not contain exactly one MUL/DIV");
+        end
+        if (rst_n && mul_start && div_start) begin
+            $fatal(1, "dual MUL and DIV started in the same resident");
+        end
+        if (rst_n && idex_valid && idex_has_muldiv && !muldiv_done &&
+            (commit_valid != 2'b00)) begin
+            $fatal(1, "MUL/DIV pair retired before shared-unit completion");
+        end
+        if (rst_n && idex_valid && idex_has_muldiv && muldiv_done &&
+            !redirect &&
+            (commit_valid != {idex_lane1_valid, idex_lane0_valid})) begin
+            $fatal(1, "MUL/DIV pair did not retire atomically at completion");
         end
         if (rst_n && lsu_load_request_valid && !lsu_start) begin
             $fatal(1, "dual LSU emitted a duplicate or unowned Load request");

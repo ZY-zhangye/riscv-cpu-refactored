@@ -117,6 +117,7 @@ module tb_a6_simple_control;
         .bp_update_type(bp_update_type),
         .lane1_control_event(lane1_control_event),
         .lsu_pair_event(),
+        .muldiv_pair_event(),
         .exception_valid(exception_valid), .exception_code(exception_code),
         .exception_pc(exception_pc), .exception_mtval(exception_mtval)
     );

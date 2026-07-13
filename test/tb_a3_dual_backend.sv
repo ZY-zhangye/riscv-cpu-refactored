@@ -179,6 +179,7 @@ module tb_a3_dual_backend;
         .bp_update_type(),
         .lane1_control_event(),
         .lsu_pair_event(),
+        .muldiv_pair_event(),
         .exception_valid(),
         .exception_code(),
         .exception_pc(),
@@ -417,12 +418,27 @@ module tb_a3_dual_backend;
         dispatch_dual_block_legacy = 1'b0;
         dispatch_dual_mode = 1'b0;
 
+        // A6.4 may establish a dual run directly because the simple lane
+        // overlaps the long shared-unit operation without using the data port.
         dispatch_bundle = make_pair(32'h0220_81B3, 32'h0020_0113,
-                                    32'h0000_0420, 32'd20); // MUL unsupported in A3
+                                    32'h0000_0420, 32'd20);
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "MUL pair did not establish a dual run");
+        end
+        dispatch_prefer_legacy = 1'b1;
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "historical legacy cooldown made MUL pairing unreachable");
+        end
+        dispatch_prefer_legacy = 1'b0;
+
+        dispatch_bundle = make_pair(32'h4031_70B3, 32'h0020_0113,
+                                    32'h0000_0420, 32'd20);
         #1;
         if (dispatch_dual_candidate || dispatch_dual_valid ||
             !dispatch_legacy_valid) begin
-            $fatal(1, "unsupported bundle did not route to legacy backend");
+            $fatal(1, "unsupported bitman bundle did not route to legacy backend");
         end
         // A current dual resident may commit while the younger legacy uop
         // enters Decode; retirement remains ordered and non-overlapping.

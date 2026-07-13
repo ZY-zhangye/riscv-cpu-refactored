@@ -104,6 +104,7 @@ module cpu_top (
     logic dual_dependency_event;
     logic dual_pending_stall_event;
     logic dual_lsu_pair_event;
+    logic dual_muldiv_pair_event;
     logic dual_dmem_load_en;
     logic [31:0] dual_dmem_load_addr;
     logic dual_lsu_port_ready;
@@ -400,6 +401,7 @@ module cpu_top (
         .bp_update_type(dual_bp_update_type),
         .lane1_control_event(dual_lane1_control_event),
         .lsu_pair_event(dual_lsu_pair_event),
+        .muldiv_pair_event(dual_muldiv_pair_event),
         .exception_valid(dual_exception_valid),
         .exception_code(dual_exception_code),
         .exception_pc(dual_exception_pc),
@@ -719,6 +721,7 @@ module cpu_top (
         .issue_struct_event(issue_reject_struct),
         .lane1_control_event(dual_lane1_control_event),
         .lsu_pair_event(dual_lsu_pair_event),
+        .muldiv_pair_event(dual_muldiv_pair_event),
         .lsu_conflict_event(issue_reject_lsu_conflict),
         .issue_qfull_event(issue_queue_full_event),
         .result_dependency_event(dual_dependency_event),
