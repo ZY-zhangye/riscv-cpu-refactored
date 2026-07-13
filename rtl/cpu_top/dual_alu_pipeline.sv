@@ -106,6 +106,8 @@ module dual_alu_pipeline (
     logic [31:0] idex_pred_target0;
     logic idex_pred_taken1;
     logic [31:0] idex_pred_target1;
+    logic [31:0] idex_branch_immediate;
+    logic [31:0] idex_branch_direct_target;
 
     logic launch_uses_rs1_0;
     logic launch_uses_rs2_0;
@@ -136,6 +138,10 @@ module dual_alu_pipeline (
     logic launch_lsu1;
     logic launch_muldiv0;
     logic launch_muldiv1;
+    logic [31:0] launch_branch_inst;
+    logic [31:0] launch_branch_pc;
+    logic [31:0] launch_branch_immediate;
+    logic [31:0] launch_branch_direct_target;
     logic idex_simple0;
     logic idex_simple1;
     logic idex_control0;
@@ -300,6 +306,21 @@ module dual_alu_pipeline (
         .uses_rs1(launch_uses_rs1_1), .uses_rs2(launch_uses_rs2_1),
         .uses_rd()
     );
+    assign launch_branch_inst = launch_control0 ? launch_inst0 : launch_inst1;
+    assign launch_branch_pc = launch_control0 ? launch_pc0 : launch_pc1;
+    assign launch_branch_immediate =
+        (launch_branch_inst[6:0] == 7'b1101111) ?
+            {{11{launch_branch_inst[31]}}, launch_branch_inst[31],
+             launch_branch_inst[19:12], launch_branch_inst[20],
+             launch_branch_inst[30:21], 1'b0} :
+        (launch_branch_inst[6:0] == 7'b1100111) ?
+            {{20{launch_branch_inst[31]}}, launch_branch_inst[31:20]} :
+            {{19{launch_branch_inst[31]}}, launch_branch_inst[31],
+             launch_branch_inst[7], launch_branch_inst[30:25],
+             launch_branch_inst[11:8], 1'b0};
+    assign launch_branch_direct_target =
+        launch_branch_pc + launch_branch_immediate;
+
     pair_predecode u_idex_predecode0 (
         .instruction(idex_inst0), .is_simple(idex_simple0),
         .is_control(idex_control0), .is_lsu(idex_lsu0),
@@ -366,8 +387,10 @@ module dual_alu_pipeline (
     assign dependency_event = launch_valid && scoreboard_dependency;
     assign pending_stall_event = launch_valid && scoreboard_stall;
 
+    // Local control resolution makes launch_fire zero.  Only an older external
+    // redirect needs this forced kill path for a resident LSU or MUL/DIV.
     always_ff @(posedge clk) begin
-        if (!rst_n || pipeline_clear) begin
+        if (!rst_n || redirect) begin
             idex_valid <= 1'b0;
             idex_lane0_valid <= 1'b0;
             idex_lane1_valid <= 1'b0;
@@ -385,6 +408,11 @@ module dual_alu_pipeline (
             idex_pred_target0 <= 32'b0;
             idex_pred_taken1 <= 1'b0;
             idex_pred_target1 <= 32'b0;
+            idex_branch_immediate <= 32'b0;
+            idex_branch_direct_target <= 32'b0;
+            branch_control_lane0 <= 1'b0;
+            idex_is_jal <= 1'b0;
+            idex_is_jalr <= 1'b0;
             idex_lsu_started <= 1'b0;
             idex_muldiv_started <= 1'b0;
         end else if (idex_valid && idex_has_lsu) begin
@@ -404,24 +432,32 @@ module dual_alu_pipeline (
             idex_valid <= launch_fire;
             idex_lsu_started <= 1'b0;
             idex_muldiv_started <= 1'b0;
-            if (launch_fire) begin
-                idex_lane0_valid <= launch_lane0_valid;
-                idex_lane1_valid <= launch_lane1_valid;
-                idex_epoch0 <= launch_epoch0;
-                idex_epoch1 <= launch_epoch1;
-                idex_age0 <= launch_age0;
-                idex_age1 <= launch_age1;
-                idex_inst0 <= launch_inst0;
-                idex_inst1 <= launch_inst1;
-                idex_pc0 <= launch_pc0;
-                idex_pc1 <= launch_pc1;
-                idex_rd0 <= launch_inst0[11:7];
-                idex_rd1 <= launch_inst1[11:7];
-                idex_pred_taken0 <= launch_pred_taken0;
-                idex_pred_target0 <= launch_pred_target0;
-                idex_pred_taken1 <= launch_pred_taken1;
-                idex_pred_target1 <= launch_pred_target1;
-            end
+            // Metadata is don't-care when idex_valid is low.  Updating it on
+            // every non-unit cycle avoids broadcasting launch_fire to the CE
+            // input of the complete ID/EX bundle.
+            idex_lane0_valid <= launch_lane0_valid;
+            idex_lane1_valid <= launch_lane1_valid;
+            idex_epoch0 <= launch_epoch0;
+            idex_epoch1 <= launch_epoch1;
+            idex_age0 <= launch_age0;
+            idex_age1 <= launch_age1;
+            idex_inst0 <= launch_inst0;
+            idex_inst1 <= launch_inst1;
+            idex_pc0 <= launch_pc0;
+            idex_pc1 <= launch_pc1;
+            idex_rd0 <= launch_inst0[11:7];
+            idex_rd1 <= launch_inst1[11:7];
+            idex_pred_taken0 <= launch_pred_taken0;
+            idex_pred_target0 <= launch_pred_target0;
+            idex_pred_taken1 <= launch_pred_taken1;
+            idex_pred_target1 <= launch_pred_target1;
+            idex_branch_immediate <= launch_branch_immediate;
+            idex_branch_direct_target <= launch_branch_direct_target;
+            branch_control_lane0 <= launch_control0;
+            idex_is_jal <= (launch_control0 || launch_control1) &&
+                           (launch_branch_inst[6:0] == 7'b1101111);
+            idex_is_jalr <= (launch_control0 || launch_control1) &&
+                            (launch_branch_inst[6:0] == 7'b1100111);
         end
     end
 
@@ -464,8 +500,12 @@ module dual_alu_pipeline (
     assign muldiv_high_result = !muldiv_use_div &&
                                 (muldiv_funct3 != 3'b000);
     assign muldiv_remainder = muldiv_use_div && muldiv_funct3[1];
+    // A legal resident never mixes control flow with MUL/DIV or LSU.  Only an
+    // older external redirect can kill either unit before its first start;
+    // feeding the resident's own branch result back here creates a false
+    // branch-target-to-unit-control timing path.
     assign muldiv_start = idex_valid && idex_has_muldiv &&
-                          !idex_muldiv_started && !pipeline_clear;
+                          !idex_muldiv_started && !redirect;
     assign mul_start = muldiv_start && !muldiv_use_div;
     assign div_start = muldiv_start && muldiv_use_div;
 
@@ -527,7 +567,7 @@ module dual_alu_pipeline (
 
     assign lsu_start = idex_valid && idex_has_lsu &&
                        !idex_lsu_started && lsu_port_ready &&
-                       !pipeline_clear;
+                       !redirect;
 
     lsu_exec_unit u_lsu (
         .clk(clk),
@@ -568,8 +608,10 @@ module dual_alu_pipeline (
         end
     end
 
+    // A local branch or exception cannot overlap this one-cycle MEM resident;
+    // the ordinary path drops mem_valid after its commit cycle.
     always_ff @(posedge clk) begin
-        if (!rst_n || pipeline_clear) begin
+        if (!rst_n || redirect) begin
             mem_valid <= 1'b0;
             mem_lane0_valid <= 1'b0;
             mem_lane1_valid <= 1'b0;
@@ -627,7 +669,6 @@ module dual_alu_pipeline (
         end
     end
 
-    assign branch_control_lane0 = idex_control0;
     assign branch_inst = branch_control_lane0 ? idex_inst0 : idex_inst1;
     assign branch_pc = branch_control_lane0 ? idex_pc0 : idex_pc1;
     assign branch_src1 = branch_control_lane0 ? rf_rdata0 : rf_rdata2;
@@ -636,17 +677,8 @@ module dual_alu_pipeline (
                                idex_pred_taken0 : idex_pred_taken1;
     assign branch_pred_target = branch_control_lane0 ?
                                 idex_pred_target0 : idex_pred_target1;
-    assign idex_is_jal = (idex_control0 || idex_control1) &&
-                         (branch_inst[6:0] == 7'b1101111);
-    assign idex_is_jalr = (idex_control0 || idex_control1) &&
-                          (branch_inst[6:0] == 7'b1100111);
-    assign branch_immediate = idex_is_jal ?
-        {{11{branch_inst[31]}}, branch_inst[31], branch_inst[19:12],
-         branch_inst[20], branch_inst[30:21], 1'b0} :
-        idex_is_jalr ? {{20{branch_inst[31]}}, branch_inst[31:20]} :
-        {{19{branch_inst[31]}}, branch_inst[31], branch_inst[7],
-         branch_inst[30:25], branch_inst[11:8], 1'b0};
-    assign branch_direct_target = branch_pc + branch_immediate;
+    assign branch_immediate = idex_branch_immediate;
+    assign branch_direct_target = idex_branch_direct_target;
 
     always_comb begin
         branch_opcode = 6'b0;
@@ -815,7 +847,27 @@ module dual_alu_pipeline (
     assign commit_epoch1 = mem_valid ? mem_epoch1 : idex_epoch1;
 
 `ifndef SYNTHESIS
+    logic [31:0] expected_branch_immediate;
+    assign expected_branch_immediate =
+        (branch_inst[6:0] == 7'b1101111) ?
+            {{11{branch_inst[31]}}, branch_inst[31], branch_inst[19:12],
+             branch_inst[20], branch_inst[30:21], 1'b0} :
+        (branch_inst[6:0] == 7'b1100111) ?
+            {{20{branch_inst[31]}}, branch_inst[31:20]} :
+            {{19{branch_inst[31]}}, branch_inst[31], branch_inst[7],
+             branch_inst[30:25], branch_inst[11:8], 1'b0};
+
     always_ff @(posedge clk) begin
+        if (rst_n && branch_event &&
+            ((branch_control_lane0 !== idex_control0) ||
+             (idex_is_jal !== (branch_inst[6:0] == 7'b1101111)) ||
+             (idex_is_jalr !== (branch_inst[6:0] == 7'b1100111)) ||
+             (idex_branch_immediate !== expected_branch_immediate) ||
+             (!idex_is_jalr &&
+              (idex_branch_direct_target !==
+               (branch_pc + expected_branch_immediate))))) begin
+            $fatal(1, "registered branch predecode lost resident alignment");
+        end
         if (rst_n && launch_fire && !launch_lane0_valid) begin
             $fatal(1, "dual ALU launch split an atomic bundle");
         end
@@ -877,6 +929,11 @@ module dual_alu_pipeline (
         if (rst_n && idex_valid && idex_has_muldiv &&
             ((idex_muldiv0 == idex_muldiv1) || idex_has_lsu)) begin
             $fatal(1, "A6.4 resident did not contain exactly one MUL/DIV");
+        end
+        if (rst_n && idex_valid &&
+            (idex_has_lsu || idex_has_muldiv) &&
+            (idex_control0 || idex_control1)) begin
+            $fatal(1, "shared-unit resident also contained control flow");
         end
         if (rst_n && mul_start && div_start) begin
             $fatal(1, "dual MUL and DIV started in the same resident");

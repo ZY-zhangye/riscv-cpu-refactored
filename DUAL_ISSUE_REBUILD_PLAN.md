@@ -2677,3 +2677,62 @@ detailed checklist:    doc/core_bare_synthesis_guide.md
 7. 所有 OOC module 使用同一 5.000 ns clock、uncertainty、IO budget 或 register wrapper，并检查 unconstrained path 与 black box；纯组合 module 未约束的 WNS没有意义。
 
 A7.6 当前尚未进行 Vivado synthesis，不得标为 `SIGNED_OFF`。每个模块的 part、defines、IP、约束、WNS/TNS、critical path、资源和 FIX/HOLD 决策按详细指南模板记录；整体修改后继续以 `78/78`、冻结九窗口、sink、exceptions 和 HEX SHA256 为功能签核门。
+
+#### 17.10.12 A7.6.1 dual_alu_pipeline 单模块时序修复与仿真参数审计
+
+```text
+module:                dual_alu_pipeline
+OOC timing status:     PASS at 5.000 ns
+functional status:     PERF/DIRECTED PASS
+A7.6 overall status:   IN_PROGRESS
+original WNS:          -1.943 ns
+current WNS:           +0.781 ns
+current data path:     4.193 ns (logic 1.013 ns, route 3.180 ns)
+critical path:         registered control-lane select -> branch compare/redirect
+                       -> idex_valid
+report root:           F:\RISCV_CPU_Vivado_20260703\quick_synth_dual_modules_200m\dual_alu_pipeline
+next module:           if_stage
+```
+
+本轮只处理原 `dual_alu_pipeline` 的 branch/redirect 长锥，不改变 pair 白名单、退休顺序、LSU 四拍、single-outstanding 或 Divider/MUL 数据路径：
+
+1. LSU/MULDIV start 只受更老的外部 `redirect` 抑制，移除 resident 自身 branch/exception 对不可能并存共享单元的伪组合依赖。
+2. local branch/exception 不再清零整组 ID/EX 和 MEM 元数据；无效周期元数据作为 don't-care 更新，避免 `launch_fire` 广播到整组 CE。
+3. control lane、JAL/JALR 类别、branch immediate 和非 JALR direct target 在 launch 边界预译码并寄存；执行拍仍用原 branch unit，未复制单元或增加旁路。
+4. `ifndef SYNTHESIS` 下增加预译码与 resident instruction/PC 的逐拍一致性断言；该断言不进入 OOC 网表。
+
+OOC 报告的最差路径为 `branch_control_lane0_reg/C -> idex_valid_reg/D`，WNS 从 `-1.943 ns` 提升到 `+0.781 ns`。当前工作区的可综合内容已与该 OOC 输入快照一致，唯一额外差异是上述仿真专用断言。
+
+功能签核期间曾出现直接 benchmark 的错误 sink `0x4A27AD51`，且 A7.3/A7.4 以相同方式失败。根因不是 branch 预译码或新增配对，而是增量仿真库污染：调试时未带 `PERF_BENCH` 单独重编译 `if_stage`，把 reset PC 从 `0x00000000` 改为 `0x80000000`。错误日志首窗口为 `fetch_pc=80000718`，历史通过日志为 `fetch_pc=00000718`；错误运行随后又跳入低地址并重复窗口。
+
+性能签核必须使用物理隔离的全新 Questa library，并全量执行以下编译口径；不得在该库中用无宏的局部 `vlog if_stage.sv`：
+
+```powershell
+vlog -work <clean_perf_work> -sv +define+PERF_BENCH +define+DEBUG_EN `
+  +incdir+rtl/cpu_top +incdir+rtl/my_cpu `
+  rtl/cpu_top/*.sv rtl/cpu_top/*.svh `
+  rtl/my_cpu/*.svh rtl/my_cpu/*.sv test/*.sv
+```
+
+`DEBUG_EN` 当前也在 `defines.svh` 内部硬定义，因此本次启动地址错误的直接决定项是 `PERF_BENCH`；两项仍应显式出现在仿真命令中，正式综合则按 17.10.11 关闭 `DEBUG_EN`。普通 ISA 回归、性能仿真和 OOC/综合分别使用独立 library/output directory，禁止共享增量 `work`。
+
+本轮干净库签核结果：
+
+```text
+compile:              0 errors / 0 warnings
+first window PC:      fetch=0x00000718, wb=0x000006D0
+direct benchmark:     PERF_BENCHMARK_PASSED
+profile wrapper:      PERF_BENCHMARK_PASSED
+direct/profile:       header, all nine reports, overall and PASS identical
+overall:              cycles=2077216, instret=2279454, ipc_x1000=1097
+exact IPC:            1.0973601204689354
+sink:                 0x9D3BF787
+exceptions:           0
+directed tests:       9/9 PASS (A4 execution, A3 backend, A6 control/LSU/MULDIV,
+                      LSU four-beat, Store commit/order and exception age)
+branch assertion:     no failure across directed tests and full nine-window run
+protected HEX SHA256: C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+clean library:        F:\Tools\Temp\questa_perf_a76_clean2\work
+```
+
+二分前的完整版本还曾完成官方 `78/78`；本轮从 OOC 输入快照恢复后重新完成干净全量编译、九窗口 direct/profile 与 9 项受影响定向测试。`dual_alu_pipeline` 因此关闭为单模块 OOC/功能通过，但 A7.6 整体仍保持 `IN_PROGRESS`，下一步进入 `if_stage`，不得把 `+0.781 ns` 等同于全核实现后余量。
