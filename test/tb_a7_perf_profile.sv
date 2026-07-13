@@ -42,6 +42,27 @@ module tb_a7_perf_profile;
     longint unsigned domain_exit_lsu_follower;
     longint unsigned domain_exit_muldiv_follower;
     longint unsigned domain_exit_other_follower;
+    longint unsigned raw_simple_simple;
+    longint unsigned raw_simple_control;
+    longint unsigned raw_control_simple;
+    longint unsigned raw_simple_lsu;
+    longint unsigned raw_lsu_simple;
+    longint unsigned raw_simple_muldiv;
+    longint unsigned raw_muldiv_simple;
+    longint unsigned raw_unsupported;
+    longint unsigned raw_waw_overlap;
+    longint unsigned raw_rs1_match;
+    longint unsigned raw_rs2_match;
+    longint unsigned mul_launches;
+    longint unsigned divrem_launches;
+    longint unsigned mul_wait_cycles;
+    longint unsigned divrem_wait_cycles;
+    longint unsigned raw_only_simple_simple;
+    longint unsigned raw_only_simple_control;
+    longint unsigned raw_only_simple_lsu;
+    longint unsigned raw_only_lsu_simple;
+    longint unsigned raw_only_muldiv_simple;
+    longint unsigned raw_only_other;
 
     longint unsigned total_imem_requests;
     longint unsigned total_fetch_packets;
@@ -75,6 +96,27 @@ module tb_a7_perf_profile;
     longint unsigned total_domain_exit_lsu_follower;
     longint unsigned total_domain_exit_muldiv_follower;
     longint unsigned total_domain_exit_other_follower;
+    longint unsigned total_raw_simple_simple;
+    longint unsigned total_raw_simple_control;
+    longint unsigned total_raw_control_simple;
+    longint unsigned total_raw_simple_lsu;
+    longint unsigned total_raw_lsu_simple;
+    longint unsigned total_raw_simple_muldiv;
+    longint unsigned total_raw_muldiv_simple;
+    longint unsigned total_raw_unsupported;
+    longint unsigned total_raw_waw_overlap;
+    longint unsigned total_raw_rs1_match;
+    longint unsigned total_raw_rs2_match;
+    longint unsigned total_mul_launches;
+    longint unsigned total_divrem_launches;
+    longint unsigned total_mul_wait_cycles;
+    longint unsigned total_divrem_wait_cycles;
+    longint unsigned total_raw_only_simple_simple;
+    longint unsigned total_raw_only_simple_control;
+    longint unsigned total_raw_only_simple_lsu;
+    longint unsigned total_raw_only_lsu_simple;
+    longint unsigned total_raw_only_muldiv_simple;
+    longint unsigned total_raw_only_other;
 
     function automatic string perf_window_name(input integer index);
         begin
@@ -127,11 +169,34 @@ module tb_a7_perf_profile;
             domain_exit_lsu_follower = 0;
             domain_exit_muldiv_follower = 0;
             domain_exit_other_follower = 0;
+            raw_simple_simple = 0;
+            raw_simple_control = 0;
+            raw_control_simple = 0;
+            raw_simple_lsu = 0;
+            raw_lsu_simple = 0;
+            raw_simple_muldiv = 0;
+            raw_muldiv_simple = 0;
+            raw_unsupported = 0;
+            raw_waw_overlap = 0;
+            raw_rs1_match = 0;
+            raw_rs2_match = 0;
+            mul_launches = 0;
+            divrem_launches = 0;
+            mul_wait_cycles = 0;
+            divrem_wait_cycles = 0;
+            raw_only_simple_simple = 0;
+            raw_only_simple_control = 0;
+            raw_only_simple_lsu = 0;
+            raw_only_lsu_simple = 0;
+            raw_only_muldiv_simple = 0;
+            raw_only_other = 0;
         end
     endtask
 
     task automatic check_window_invariants;
         longint unsigned class_launches;
+        longint unsigned raw_class_total;
+        longint unsigned raw_only_total;
         begin
             class_launches = simple_pair_launches +
                 simple_singleton_launches +
@@ -141,6 +206,13 @@ module tb_a7_perf_profile;
                 control0_simple_launches +
                 u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.perf_lsu_pair +
                 u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.perf_muldiv_pair;
+            raw_class_total = raw_simple_simple + raw_simple_control +
+                raw_control_simple + raw_simple_lsu + raw_lsu_simple +
+                raw_simple_muldiv + raw_muldiv_simple + raw_unsupported;
+            raw_only_total = raw_only_simple_simple +
+                raw_only_simple_control + raw_only_simple_lsu +
+                raw_only_lsu_simple + raw_only_muldiv_simple +
+                raw_only_other;
             if (fetch_uops != ((2 * fetch_packets) - fetch_single_packets)) begin
                 $fatal(1,
                        "A7 profile fetch identity failed: uops=%0d packets=%0d single=%0d",
@@ -169,6 +241,29 @@ module tb_a7_perf_profile;
                 $fatal(1,
                        "A7 profile fallback subset failed: prefer=%0d total=%0d",
                        legacy_prefer_fallbacks, legacy_pair_fallbacks);
+            end
+            if (raw_class_total !=
+                u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.perf_issue_raw) begin
+                $fatal(1,
+                       "A7 RAW class identity failed: classified=%0d csr=%0d",
+                       raw_class_total,
+                       u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.perf_issue_raw);
+            end
+            if (raw_class_total != (raw_only_total + raw_waw_overlap)) begin
+                $fatal(1,
+                       "A7 RAW subset identity failed: total=%0d raw_only=%0d waw_overlap=%0d",
+                       raw_class_total, raw_only_total, raw_waw_overlap);
+            end
+            if ((mul_launches + divrem_launches) !=
+                (muldiv_singleton_launches +
+                 u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.
+                     perf_muldiv_pair)) begin
+                $fatal(1,
+                       "A7 MULDIV launch identity failed: classified=%0d singleton=%0d pair=%0d",
+                       mul_launches + divrem_launches,
+                       muldiv_singleton_launches,
+                       u_benchmark.u_my_cpu.u_cpu_top.u_regfile_csr.
+                           perf_muldiv_pair);
             end
             if (dual_to_legacy_transitions !=
                 (domain_exit_prefer + domain_exit_non_lsu +
@@ -222,6 +317,28 @@ module tb_a7_perf_profile;
                      domain_exit_lsu_fast, domain_exit_lsu_follower,
                      domain_exit_muldiv_follower,
                      domain_exit_other_follower);
+            $display("A7_RAW_REJECT_WINDOW index=%0d name=%s total=%0d simple_simple=%0d simple_control=%0d control_simple=%0d simple_lsu=%0d lsu_simple=%0d simple_muldiv=%0d muldiv_simple=%0d unsupported=%0d waw_overlap=%0d rs1_match=%0d rs2_match=%0d",
+                     report_index, perf_window_name(report_index),
+                     raw_simple_simple + raw_simple_control +
+                     raw_control_simple + raw_simple_lsu +
+                     raw_lsu_simple + raw_simple_muldiv +
+                     raw_muldiv_simple + raw_unsupported,
+                     raw_simple_simple, raw_simple_control,
+                     raw_control_simple, raw_simple_lsu, raw_lsu_simple,
+                     raw_simple_muldiv, raw_muldiv_simple, raw_unsupported,
+                     raw_waw_overlap, raw_rs1_match, raw_rs2_match);
+            $display("A7_MULDIV_WINDOW index=%0d name=%s mul_launch=%0d divrem_launch=%0d mul_wait=%0d divrem_wait=%0d",
+                     report_index, perf_window_name(report_index),
+                     mul_launches, divrem_launches,
+                     mul_wait_cycles, divrem_wait_cycles);
+            $display("A7_RAW_ONLY_WINDOW index=%0d name=%s total=%0d simple_simple=%0d simple_control=%0d simple_lsu=%0d lsu_simple=%0d muldiv_simple=%0d other=%0d",
+                     report_index, perf_window_name(report_index),
+                     raw_only_simple_simple + raw_only_simple_control +
+                     raw_only_simple_lsu + raw_only_lsu_simple +
+                     raw_only_muldiv_simple + raw_only_other,
+                     raw_only_simple_simple, raw_only_simple_control,
+                     raw_only_simple_lsu, raw_only_lsu_simple,
+                     raw_only_muldiv_simple, raw_only_other);
         end
     endtask
 
@@ -260,6 +377,27 @@ module tb_a7_perf_profile;
             total_domain_exit_muldiv_follower +=
                 domain_exit_muldiv_follower;
             total_domain_exit_other_follower += domain_exit_other_follower;
+            total_raw_simple_simple += raw_simple_simple;
+            total_raw_simple_control += raw_simple_control;
+            total_raw_control_simple += raw_control_simple;
+            total_raw_simple_lsu += raw_simple_lsu;
+            total_raw_lsu_simple += raw_lsu_simple;
+            total_raw_simple_muldiv += raw_simple_muldiv;
+            total_raw_muldiv_simple += raw_muldiv_simple;
+            total_raw_unsupported += raw_unsupported;
+            total_raw_waw_overlap += raw_waw_overlap;
+            total_raw_rs1_match += raw_rs1_match;
+            total_raw_rs2_match += raw_rs2_match;
+            total_mul_launches += mul_launches;
+            total_divrem_launches += divrem_launches;
+            total_mul_wait_cycles += mul_wait_cycles;
+            total_divrem_wait_cycles += divrem_wait_cycles;
+            total_raw_only_simple_simple += raw_only_simple_simple;
+            total_raw_only_simple_control += raw_only_simple_control;
+            total_raw_only_simple_lsu += raw_only_simple_lsu;
+            total_raw_only_lsu_simple += raw_only_lsu_simple;
+            total_raw_only_muldiv_simple += raw_only_muldiv_simple;
+            total_raw_only_other += raw_only_other;
         end
     endtask
 
@@ -299,6 +437,27 @@ module tb_a7_perf_profile;
         total_domain_exit_lsu_follower = 0;
         total_domain_exit_muldiv_follower = 0;
         total_domain_exit_other_follower = 0;
+        total_raw_simple_simple = 0;
+        total_raw_simple_control = 0;
+        total_raw_control_simple = 0;
+        total_raw_simple_lsu = 0;
+        total_raw_lsu_simple = 0;
+        total_raw_simple_muldiv = 0;
+        total_raw_muldiv_simple = 0;
+        total_raw_unsupported = 0;
+        total_raw_waw_overlap = 0;
+        total_raw_rs1_match = 0;
+        total_raw_rs2_match = 0;
+        total_mul_launches = 0;
+        total_divrem_launches = 0;
+        total_mul_wait_cycles = 0;
+        total_divrem_wait_cycles = 0;
+        total_raw_only_simple_simple = 0;
+        total_raw_only_simple_control = 0;
+        total_raw_only_simple_lsu = 0;
+        total_raw_only_lsu_simple = 0;
+        total_raw_only_muldiv_simple = 0;
+        total_raw_only_other = 0;
     end
 
     always @(posedge u_benchmark.clk) begin
@@ -438,7 +597,82 @@ module tb_a7_perf_profile;
                         `ISSUE_BUNDLE_WIDTH-1] &&
                     u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
                         launch_muldiv0) begin
-                    legacy_muldiv_singletons += 1;
+                        legacy_muldiv_singletons += 1;
+                end
+                if (u_benchmark.u_my_cpu.u_cpu_top.issue_reject_raw) begin
+                    case (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.
+                              candidate_class)
+                        `PAIR_SIMPLE_SIMPLE:  raw_simple_simple += 1;
+                        `PAIR_SIMPLE_CONTROL: raw_simple_control += 1;
+                        `PAIR_CONTROL_SIMPLE: raw_control_simple += 1;
+                        `PAIR_SIMPLE_LSU:     raw_simple_lsu += 1;
+                        `PAIR_LSU_SIMPLE:     raw_lsu_simple += 1;
+                        `PAIR_SIMPLE_MULDIV:  raw_simple_muldiv += 1;
+                        `PAIR_MULDIV_SIMPLE:  raw_muldiv_simple += 1;
+                        default:              raw_unsupported += 1;
+                    endcase
+                    if (u_benchmark.u_my_cpu.u_cpu_top.
+                            issue_reject_waw) begin
+                        raw_waw_overlap += 1;
+                    end else begin
+                        case (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.
+                                  candidate_class)
+                            `PAIR_SIMPLE_SIMPLE:
+                                raw_only_simple_simple += 1;
+                            `PAIR_SIMPLE_CONTROL:
+                                raw_only_simple_control += 1;
+                            `PAIR_SIMPLE_LSU:
+                                raw_only_simple_lsu += 1;
+                            `PAIR_LSU_SIMPLE:
+                                raw_only_lsu_simple += 1;
+                            `PAIR_MULDIV_SIMPLE:
+                                raw_only_muldiv_simple += 1;
+                            default: raw_only_other += 1;
+                        endcase
+                    end
+                    if (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.
+                            uses_rs1_1 &&
+                        (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.rs1_1 ==
+                         u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.rd_0)) begin
+                        raw_rs1_match += 1;
+                    end
+                    if (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.
+                            uses_rs2_1 &&
+                        (u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.rs2_1 ==
+                         u_benchmark.u_my_cpu.u_cpu_top.u_issue_stage.rd_0)) begin
+                        raw_rs2_match += 1;
+                    end
+                end
+                if (u_benchmark.u_my_cpu.u_cpu_top.dual_bundle_pop &&
+                    (u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                         launch_muldiv0 ||
+                     u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                         launch_muldiv1)) begin
+                    if ((u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                             launch_muldiv0 &&
+                         u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                             launch_inst0[14]) ||
+                        (u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                             launch_muldiv1 &&
+                         u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                             launch_inst1[14])) begin
+                        divrem_launches += 1;
+                    end else begin
+                        mul_launches += 1;
+                    end
+                end
+                if (u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                        idex_valid &&
+                    u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                        idex_has_muldiv &&
+                    !u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                         muldiv_done) begin
+                    if (u_benchmark.u_my_cpu.u_cpu_top.u_dual_alu_pipeline.
+                            muldiv_instruction[14]) begin
+                        divrem_wait_cycles += 1;
+                    end else begin
+                        mul_wait_cycles += 1;
+                    end
                 end
                 if (!u_benchmark.u_my_cpu.u_cpu_top.frontend_redirect &&
                     u_benchmark.u_my_cpu.u_cpu_top.bundle_head_valid &&
@@ -502,6 +736,31 @@ module tb_a7_perf_profile;
                  total_domain_exit_lsu_follower,
                  total_domain_exit_muldiv_follower,
                  total_domain_exit_other_follower);
+        $display("A7_RAW_REJECT_TOTAL total=%0d simple_simple=%0d simple_control=%0d control_simple=%0d simple_lsu=%0d lsu_simple=%0d simple_muldiv=%0d muldiv_simple=%0d unsupported=%0d waw_overlap=%0d rs1_match=%0d rs2_match=%0d",
+                 total_raw_simple_simple + total_raw_simple_control +
+                 total_raw_control_simple + total_raw_simple_lsu +
+                 total_raw_lsu_simple + total_raw_simple_muldiv +
+                 total_raw_muldiv_simple + total_raw_unsupported,
+                 total_raw_simple_simple, total_raw_simple_control,
+                 total_raw_control_simple, total_raw_simple_lsu,
+                 total_raw_lsu_simple, total_raw_simple_muldiv,
+                 total_raw_muldiv_simple, total_raw_unsupported,
+                 total_raw_waw_overlap, total_raw_rs1_match,
+                 total_raw_rs2_match);
+        $display("A7_MULDIV_TOTAL mul_launch=%0d divrem_launch=%0d mul_wait=%0d divrem_wait=%0d",
+                 total_mul_launches, total_divrem_launches,
+                 total_mul_wait_cycles, total_divrem_wait_cycles);
+        $display("A7_RAW_ONLY_TOTAL total=%0d simple_simple=%0d simple_control=%0d simple_lsu=%0d lsu_simple=%0d muldiv_simple=%0d other=%0d",
+                 total_raw_only_simple_simple +
+                 total_raw_only_simple_control +
+                 total_raw_only_simple_lsu + total_raw_only_lsu_simple +
+                 total_raw_only_muldiv_simple + total_raw_only_other,
+                 total_raw_only_simple_simple,
+                 total_raw_only_simple_control,
+                 total_raw_only_simple_lsu,
+                 total_raw_only_lsu_simple,
+                 total_raw_only_muldiv_simple,
+                 total_raw_only_other);
         if (window_index != 10) begin
             $error("A7 profile expected boot plus 9 windows, got %0d closures",
                    window_index);
