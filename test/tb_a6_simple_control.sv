@@ -9,6 +9,7 @@ module tb_a6_simple_control;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] launch_bundle;
     logic launch_ready;
     logic busy;
+    logic block_legacy;
     logic rf_read_en;
     logic [4:0] rf_raddr0;
     logic [4:0] rf_raddr1;
@@ -90,11 +91,16 @@ module tb_a6_simple_control;
         .clk(clk), .rst_n(rst_n), .redirect(redirect),
         .launch_valid(launch_valid), .launch_bundle(launch_bundle),
         .launch_ready(launch_ready), .busy(busy),
+        .block_legacy(block_legacy),
         .rf_read_en(rf_read_en),
         .rf_raddr0(rf_raddr0), .rf_raddr1(rf_raddr1),
         .rf_raddr2(rf_raddr2), .rf_raddr3(rf_raddr3),
         .rf_rdata0(rf_rdata0), .rf_rdata1(rf_rdata1),
         .rf_rdata2(rf_rdata2), .rf_rdata3(rf_rdata3),
+        .dmem_rdata(32'b0), .dmem_rvalid(1'b0),
+        .lsu_port_ready(1'b1), .dmem_load_en(), .dmem_load_addr(),
+        .store_event(), .store_pc(), .store_addr(), .store_wen(),
+        .store_wdata(),
         .commit_valid(commit_valid), .commit_wen(commit_wen),
         .commit_waddr0(commit_waddr0), .commit_waddr1(commit_waddr1),
         .commit_wdata0(commit_wdata0), .commit_wdata1(commit_wdata1),
@@ -110,6 +116,7 @@ module tb_a6_simple_control;
         .bp_update_taken(bp_update_taken), .bp_update_target(bp_update_target),
         .bp_update_type(bp_update_type),
         .lane1_control_event(lane1_control_event),
+        .lsu_pair_event(),
         .exception_valid(exception_valid), .exception_code(exception_code),
         .exception_pc(exception_pc), .exception_mtval(exception_mtval)
     );

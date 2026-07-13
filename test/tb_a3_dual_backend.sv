@@ -9,6 +9,7 @@ module tb_a3_dual_backend;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] launch_bundle;
     logic launch_ready;
     logic busy;
+    logic block_legacy;
     logic rf_read_en;
     logic [4:0] rf_raddr0;
     logic [4:0] rf_raddr1;
@@ -49,6 +50,7 @@ module tb_a3_dual_backend;
     logic dispatch_legacy_idle;
     logic dispatch_prefer_legacy;
     logic dispatch_dual_mode;
+    logic dispatch_dual_block_legacy;
     logic dispatch_dual_candidate;
     logic dispatch_next_dual_candidate;
     logic dispatch_dual_valid;
@@ -129,6 +131,7 @@ module tb_a3_dual_backend;
         .launch_bundle(launch_bundle),
         .launch_ready(launch_ready),
         .busy(busy),
+        .block_legacy(block_legacy),
         .rf_read_en(rf_read_en),
         .rf_raddr0(rf_raddr0),
         .rf_raddr1(rf_raddr1),
@@ -138,6 +141,16 @@ module tb_a3_dual_backend;
         .rf_rdata1(rf_rdata1),
         .rf_rdata2(rf_rdata2),
         .rf_rdata3(rf_rdata3),
+        .dmem_rdata(32'b0),
+        .dmem_rvalid(1'b0),
+        .lsu_port_ready(1'b1),
+        .dmem_load_en(),
+        .dmem_load_addr(),
+        .store_event(),
+        .store_pc(),
+        .store_addr(),
+        .store_wen(),
+        .store_wdata(),
         .commit_valid(commit_valid),
         .commit_wen(commit_wen),
         .commit_waddr0(commit_waddr0),
@@ -154,7 +167,22 @@ module tb_a3_dual_backend;
         .commit_age0(commit_age0),
         .commit_age1(commit_age1),
         .commit_epoch0(commit_epoch0),
-        .commit_epoch1(commit_epoch1)
+        .commit_epoch1(commit_epoch1),
+        .branch_event(),
+        .branch_mispredict_event(),
+        .branch_redirect(),
+        .branch_redirect_target(),
+        .bp_update_valid(),
+        .bp_update_pc(),
+        .bp_update_taken(),
+        .bp_update_target(),
+        .bp_update_type(),
+        .lane1_control_event(),
+        .lsu_pair_event(),
+        .exception_valid(),
+        .exception_code(),
+        .exception_pc(),
+        .exception_mtval()
     );
 
     bundle_dispatch u_dispatch (
@@ -166,6 +194,7 @@ module tb_a3_dual_backend;
         .legacy_idle(dispatch_legacy_idle),
         .prefer_legacy(dispatch_prefer_legacy),
         .dual_mode(dispatch_dual_mode),
+        .dual_block_legacy(dispatch_dual_block_legacy),
         .dual_candidate(dispatch_dual_candidate),
         .next_dual_candidate(dispatch_next_dual_candidate),
         .dual_bundle_valid(dispatch_dual_valid),
@@ -206,6 +235,7 @@ module tb_a3_dual_backend;
         dispatch_legacy_idle = 1'b1;
         dispatch_prefer_legacy = 1'b0;
         dispatch_dual_mode = 1'b0;
+        dispatch_dual_block_legacy = 1'b0;
         sb_consumer_valid = 1'b0;
         sb_consumer_uses = '0;
         sb_consumer_rs_flat = '0;
@@ -359,8 +389,36 @@ module tb_a3_dual_backend;
         dispatch_prefer_legacy = 1'b0;
         dispatch_dual_mode = 1'b0;
 
+        // A6.3 keeps an isolated LSU pair on the cheaper legacy pipeline.
+        // Inside an established dual run, a younger simple pair amortizes the
+        // resident and receives the same-edge registered MEM handoff.
+        dispatch_bundle = make_pair(32'h0001_2083, 32'h0020_0113,
+                                    32'h0000_0410, 32'd16);
+        dispatch_next_bundle_valid = 1'b1;
+        dispatch_next_bundle = make_pair(32'h0030_0193, 32'h0040_0213,
+                                         32'h0000_0418, 32'd18);
+        #1;
+        if (!dispatch_dual_candidate || dispatch_dual_valid ||
+            !dispatch_legacy_valid) begin
+            $fatal(1, "isolated LSU pair did not use cost-aware legacy fallback");
+        end
+        dispatch_dual_mode = 1'b1;
+        #1;
+        if (!dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "LSU pair did not enter an established dual run");
+        end
+        dispatch_prefer_legacy = 1'b1;
+        dispatch_dual_block_legacy = 1'b1;
+        #1;
+        if (dispatch_dual_valid || dispatch_legacy_valid) begin
+            $fatal(1, "active dual LSU did not block a younger legacy fallback");
+        end
+        dispatch_prefer_legacy = 1'b0;
+        dispatch_dual_block_legacy = 1'b0;
+        dispatch_dual_mode = 1'b0;
+
         dispatch_bundle = make_pair(32'h0220_81B3, 32'h0020_0113,
-                                    32'h0000_0410, 32'd16); // MUL unsupported in A3
+                                    32'h0000_0420, 32'd20); // MUL unsupported in A3
         #1;
         if (dispatch_dual_candidate || dispatch_dual_valid ||
             !dispatch_legacy_valid) begin
@@ -373,7 +431,7 @@ module tb_a3_dual_backend;
             $fatal(1, "dual-to-legacy same-edge handoff was not allowed");
         end
         dispatch_bundle = make_single(32'h0010_0493,
-                                      32'h0000_0418, 32'd18);
+                                      32'h0000_0428, 32'd22);
         #1;
         if (dispatch_dual_candidate || !dispatch_legacy_valid) begin
             $fatal(1, "single simple uop escaped the legacy backend");

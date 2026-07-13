@@ -13,7 +13,8 @@ module issue_stage (
     output logic [`PAIR_CLASS_WIDTH-1:0] pair_class,
     output logic                         reject_raw,
     output logic                         reject_waw,
-    output logic                         reject_struct
+    output logic                         reject_struct,
+    output logic                         reject_lsu_conflict
 );
 
     logic [`FETCH_EPOCH_WIDTH-1:0] epoch0;
@@ -63,6 +64,7 @@ module issue_stage (
     logic structural_hazard;
     logic can_pair;
     logic [`PAIR_CLASS_WIDTH-1:0] candidate_class;
+    logic lsu_conflict;
 
     assign {epoch0, age0, inst0, pc0, pred_taken0, pred_target0,
             pred_type0, btb_hit0, ras_valid0, ras_target0} = fetch_uop0;
@@ -108,9 +110,14 @@ module issue_stage (
             candidate_class = `PAIR_SIMPLE_SIMPLE;
         end else if (simple0 && control1) begin
             candidate_class = `PAIR_SIMPLE_CONTROL;
+        end else if (simple0 && lsu1) begin
+            candidate_class = `PAIR_SIMPLE_LSU;
+        end else if (lsu0 && simple1) begin
+            candidate_class = `PAIR_LSU_SIMPLE;
         end
     end
 
+    assign lsu_conflict = lsu0 && lsu1;
     assign structural_hazard = (candidate_class == `PAIR_NONE);
     assign can_pair = (fetch_count >= 2) && !structural_hazard &&
                       !raw_hazard && !waw_hazard;
@@ -124,6 +131,7 @@ module issue_stage (
         reject_raw = 1'b0;
         reject_waw = 1'b0;
         reject_struct = 1'b0;
+        reject_lsu_conflict = 1'b0;
 
         if (!redirect && bundle_ready && (fetch_count != 0)) begin
             bundle_valid = 1'b1;
@@ -139,6 +147,7 @@ module issue_stage (
                     reject_raw = raw_hazard;
                     reject_waw = waw_hazard;
                     reject_struct = structural_hazard;
+                    reject_lsu_conflict = lsu_conflict;
                 end
             end
         end

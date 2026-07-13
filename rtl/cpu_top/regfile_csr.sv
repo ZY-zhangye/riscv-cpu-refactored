@@ -24,6 +24,8 @@ module regfile_csr (
     input logic issue_waw_event,
     input logic issue_struct_event,
     input logic lane1_control_event,
+    input logic lsu_pair_event,
+    input logic lsu_conflict_event,
     input logic issue_qfull_event,
     input logic result_dependency_event,
     output logic exception_flag,
@@ -56,6 +58,8 @@ module regfile_csr (
     logic [31:0] perf_issue_waw;
     logic [31:0] perf_issue_struct;
     logic [31:0] perf_lane1_control;
+    logic [31:0] perf_lsu_pair;
+    logic [31:0] perf_lsu_conflict;
     logic [31:0] perf_issue_qfull;
     logic [31:0] perf_result_dependency;
 
@@ -91,6 +95,8 @@ module regfile_csr (
             perf_issue_waw <= 32'b0;
             perf_issue_struct <= 32'b0;
             perf_lane1_control <= 32'b0;
+            perf_lsu_pair <= 32'b0;
+            perf_lsu_conflict <= 32'b0;
             perf_issue_qfull <= 32'b0;
             perf_result_dependency <= 32'b0;
         end else begin
@@ -114,6 +120,8 @@ module regfile_csr (
                 perf_issue_waw <= 32'b0;
                 perf_issue_struct <= 32'b0;
                 perf_lane1_control <= 32'b0;
+                perf_lsu_pair <= 32'b0;
+                perf_lsu_conflict <= 32'b0;
                 perf_issue_qfull <= 32'b0;
                 perf_result_dependency <= 32'b0;
             end else if (csr_wen && (csr_waddr == `CSR_PERF_CTRL)) begin
@@ -156,6 +164,12 @@ module regfile_csr (
                 end
                 if (lane1_control_event) begin
                     perf_lane1_control <= perf_lane1_control + 1'b1;
+                end
+                if (lsu_pair_event) begin
+                    perf_lsu_pair <= perf_lsu_pair + 1'b1;
+                end
+                if (lsu_conflict_event) begin
+                    perf_lsu_conflict <= perf_lsu_conflict + 1'b1;
                 end
                 if (issue_qfull_event) begin
                     perf_issue_qfull <= perf_issue_qfull + 1'b1;
@@ -249,7 +263,9 @@ module regfile_csr (
             `CSR_PERF_ISSUE_RAW: csr_rdata = perf_issue_raw;
             `CSR_PERF_ISSUE_WAW: csr_rdata = perf_issue_waw;
             `CSR_PERF_ISSUE_STRUCT: csr_rdata = perf_issue_struct;
+            `CSR_PERF_LSU_PAIR: csr_rdata = perf_lsu_pair;
             `CSR_PERF_LANE1_CONTROL: csr_rdata = perf_lane1_control;
+            `CSR_PERF_LSU_CONFLICT: csr_rdata = perf_lsu_conflict;
             `CSR_PERF_ISSUE_QFULL: csr_rdata = perf_issue_qfull;
             `CSR_PERF_RESULT_DEP: csr_rdata = perf_result_dependency;
             default: csr_rdata = 32'b0;

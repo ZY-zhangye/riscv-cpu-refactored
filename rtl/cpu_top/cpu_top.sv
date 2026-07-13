@@ -61,6 +61,7 @@ module cpu_top (
     logic issue_reject_raw;
     logic issue_reject_waw;
     logic issue_reject_struct;
+    logic issue_reject_lsu_conflict;
     logic bundle_push_ready;
     logic bundle_head_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_head;
@@ -80,6 +81,7 @@ module cpu_top (
     logic dual_bundle_pop;
     logic dual_launch_ready;
     logic dual_busy;
+    logic dual_block_legacy;
     logic dual_mode;
     logic [2:0] legacy_cooldown;
     logic prefer_legacy_dispatch;
@@ -101,6 +103,15 @@ module cpu_top (
     logic [1:0] dual_retire_count;
     logic dual_dependency_event;
     logic dual_pending_stall_event;
+    logic dual_lsu_pair_event;
+    logic dual_dmem_load_en;
+    logic [31:0] dual_dmem_load_addr;
+    logic dual_lsu_port_ready;
+    logic dual_store_event;
+    logic [31:0] dual_store_pc;
+    logic [31:0] dual_store_addr;
+    logic [3:0] dual_store_wen;
+    logic [31:0] dual_store_wdata;
     logic rf_write0_wen;
     logic [4:0] rf_write0_waddr;
     logic [31:0] rf_write0_wdata;
@@ -219,6 +230,11 @@ module cpu_top (
     logic [31:0] store_addr;
     logic [3:0] store_wen;
     logic [31:0] store_wdata;
+    logic architectural_store_event;
+    logic [31:0] architectural_store_pc;
+    logic [31:0] architectural_store_addr;
+    logic [3:0] architectural_store_wen;
+    logic [31:0] architectural_store_wdata;
 
     //实例化
     if_stage u_if_stage (
@@ -275,7 +291,8 @@ module cpu_top (
         .pair_class(issue_pair_class),
         .reject_raw(issue_reject_raw),
         .reject_waw(issue_reject_waw),
-        .reject_struct(issue_reject_struct)
+        .reject_struct(issue_reject_struct),
+        .reject_lsu_conflict(issue_reject_lsu_conflict)
     );
 
     issue_bundle_fifo u_issue_bundle_fifo (
@@ -307,6 +324,7 @@ module cpu_top (
         .legacy_idle(legacy_domain_idle),
         .prefer_legacy(prefer_legacy_dispatch),
         .dual_mode(dual_mode),
+        .dual_block_legacy(dual_block_legacy),
         .dual_candidate(dual_candidate),
         .next_dual_candidate(next_dual_candidate),
         .dual_bundle_valid(dual_bundle_valid),
@@ -334,6 +352,7 @@ module cpu_top (
         .launch_bundle(bundle_head),
         .launch_ready(dual_launch_ready),
         .busy(dual_busy),
+        .block_legacy(dual_block_legacy),
         .rf_read_en(dual_rf_read_en),
         .rf_raddr0(dual_rf_raddr0),
         .rf_raddr1(dual_rf_raddr1),
@@ -343,6 +362,16 @@ module cpu_top (
         .rf_rdata1(dual_rf_rdata1),
         .rf_rdata2(dual_rf_rdata2),
         .rf_rdata3(dual_rf_rdata3),
+        .dmem_rdata(dmem_rdata),
+        .dmem_rvalid(dmem_rvalid),
+        .lsu_port_ready(dual_lsu_port_ready),
+        .dmem_load_en(dual_dmem_load_en),
+        .dmem_load_addr(dual_dmem_load_addr),
+        .store_event(dual_store_event),
+        .store_pc(dual_store_pc),
+        .store_addr(dual_store_addr),
+        .store_wen(dual_store_wen),
+        .store_wdata(dual_store_wdata),
         .commit_valid(dual_commit_valid),
         .commit_wen(dual_commit_wen),
         .commit_waddr0(dual_commit_waddr0),
@@ -370,6 +399,7 @@ module cpu_top (
         .bp_update_target(dual_bp_update_target),
         .bp_update_type(dual_bp_update_type),
         .lane1_control_event(dual_lane1_control_event),
+        .lsu_pair_event(dual_lsu_pair_event),
         .exception_valid(dual_exception_valid),
         .exception_code(dual_exception_code),
         .exception_pc(dual_exception_pc),
@@ -563,13 +593,31 @@ module cpu_top (
     assign exception_mtval = dual_exception_valid ? dual_exception_mtval :
                              legacy_exception_mtval;
 
-    // The data port is single-ported.  An older Store at MEM commit wins over
-    // a younger EX LSU request; the resident remains unstarted and retries.
-    assign lsu_port_ready = !store_event;
-    assign dmem_en = store_event || ex_dmem_en;
-    assign dmem_addr = store_event ? store_addr : ex_dmem_addr;
-    assign dmem_wen = store_event ? store_wen : 4'b0000;
-    assign dmem_wdata = store_event ? store_wdata : ex_dmem_wdata;
+    // The data port is single-ported.  Registered Store commits have priority
+    // over EX Load requests.  Backend-domain exclusion prevents legal legacy
+    // and dual requests from overlapping; the explicit priority is retained
+    // as a safety boundary and for deterministic debug traces.
+    assign lsu_port_ready = !store_event && !dual_store_event;
+    assign dual_lsu_port_ready = !store_event && !ex_dmem_en;
+    assign dmem_en = store_event || dual_store_event || ex_dmem_en ||
+                     dual_dmem_load_en;
+    assign dmem_addr = store_event ? store_addr :
+                       dual_store_event ? dual_store_addr :
+                       ex_dmem_en ? ex_dmem_addr : dual_dmem_load_addr;
+    assign dmem_wen = store_event ? store_wen :
+                      dual_store_event ? dual_store_wen : 4'b0000;
+    assign dmem_wdata = store_event ? store_wdata :
+                        dual_store_event ? dual_store_wdata :
+                        ex_dmem_en ? ex_dmem_wdata : 32'b0;
+
+    assign architectural_store_event = store_event || dual_store_event;
+    assign architectural_store_pc = dual_store_event ? dual_store_pc : store_pc;
+    assign architectural_store_addr = dual_store_event ? dual_store_addr :
+                                      store_addr;
+    assign architectural_store_wen = dual_store_event ? dual_store_wen :
+                                     store_wen;
+    assign architectural_store_wdata = dual_store_event ? dual_store_wdata :
+                                       store_wdata;
 
     wb_stage u_wb_stage (
         .clk(clk),
@@ -670,6 +718,8 @@ module cpu_top (
         .issue_waw_event(issue_reject_waw),
         .issue_struct_event(issue_reject_struct),
         .lane1_control_event(dual_lane1_control_event),
+        .lsu_pair_event(dual_lsu_pair_event),
+        .lsu_conflict_event(issue_reject_lsu_conflict),
         .issue_qfull_event(issue_queue_full_event),
         .result_dependency_event(dual_dependency_event),
         .exception_flag(exception_flag),
@@ -697,15 +747,22 @@ module cpu_top (
         if (rst_n && dual_exception_valid && legacy_csr_we) begin
             $fatal(1, "dual exception overlapped a legacy CSR commit");
         end
+        if (rst_n &&
+            ((store_event && (dual_store_event || ex_dmem_en ||
+                              dual_dmem_load_en)) ||
+             (dual_store_event && (ex_dmem_en || dual_dmem_load_en)) ||
+             (ex_dmem_en && dual_dmem_load_en))) begin
+            $fatal(1, "single data port observed overlapping backend owners");
+        end
     end
 `endif
 
     `ifdef DEBUG_EN
-    assign debug_store_valid = store_event;
-    assign debug_store_pc = store_pc;
-    assign debug_store_addr = store_addr;
-    assign debug_store_wen = store_wen;
-    assign debug_store_wdata = store_wdata;
+    assign debug_store_valid = architectural_store_event;
+    assign debug_store_pc = architectural_store_pc;
+    assign debug_store_addr = architectural_store_addr;
+    assign debug_store_wen = architectural_store_wen;
+    assign debug_store_wdata = architectural_store_wdata;
     `endif
 
 

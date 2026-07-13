@@ -16,6 +16,7 @@ module tb_issue_bundle_fifo;
     logic reject_raw;
     logic reject_waw;
     logic reject_struct;
+    logic reject_lsu_conflict;
     logic bundle_ready;
     logic bundle_head_valid;
     logic [`ISSUE_BUNDLE_WIDTH-1:0] bundle_head;
@@ -53,7 +54,8 @@ module tb_issue_bundle_fifo;
         .pair_class(pair_class),
         .reject_raw(reject_raw),
         .reject_waw(reject_waw),
-        .reject_struct(reject_struct)
+        .reject_struct(reject_struct),
+        .reject_lsu_conflict(reject_lsu_conflict)
     );
 
     issue_bundle_fifo fifo (
@@ -181,7 +183,7 @@ module tb_issue_bundle_fifo;
                      `PAIR_NONE, 0, 1, 0);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "WAW bundle not lane0-only");
         clear_pipeline();
-        present_pair(32'h00002083, 32'h00200113, 1, 0,
+        present_pair(32'h023100b3, 32'h00200113, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         if (!head_lane0_valid || head_lane1_valid) $fatal(1, "structural bundle not lane0-only");
 
@@ -212,10 +214,25 @@ module tb_issue_bundle_fifo;
         present_pair(32'h00000463, 32'h00200113, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
-        // LSU, MULDIV and bitman remain outside the dual whitelist.
-        present_pair(32'h00100093, 32'h00012103, 1, 0,
-                     `PAIR_NONE, 0, 0, 1);
+        // A6.3 opens one LSU in either lane.
+        present_pair(32'h00100093, 32'h00012103, 2, 1,
+                     `PAIR_SIMPLE_LSU, 0, 0, 0);
         clear_pipeline();
+        present_pair(32'h00012083, 32'h00200113, 2, 1,
+                     `PAIR_LSU_SIMPLE, 0, 0, 0);
+        clear_pipeline();
+        // A load result consumed by lane1 remains a forbidden RAW.
+        present_pair(32'h00012083, 32'h00108193, 1, 0,
+                     `PAIR_NONE, 1, 0, 0);
+        clear_pipeline();
+        // Two LSU operations contend for the single port and stay single.
+        present_pair(32'h00012083, 32'h00412283, 1, 0,
+                     `PAIR_NONE, 0, 0, 1);
+        if (!reject_lsu_conflict) begin
+            $fatal(1, "dual LSU structural conflict was not classified");
+        end
+        clear_pipeline();
+        // MULDIV and bitman remain outside the dual whitelist.
         present_pair(32'h00100093, 32'h02310133, 1, 0,
                      `PAIR_NONE, 0, 0, 1);
         clear_pipeline();
