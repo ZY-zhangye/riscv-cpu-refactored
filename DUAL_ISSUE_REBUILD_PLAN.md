@@ -832,7 +832,8 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.1 measured 354773 actual dual launches, 379273 legacy pair fallbacks and 458102 fetch-empty cycles
               - A7.2 SIGNED_OFF in 5ba2046: tagged live-response bypass plus one complete skid packet
               - A7.2 run_all.bat all passed 78/78; cycles=2831734, exact IPC=0.804968, sink/exceptions unchanged
-              - A7.3 will reduce dual/legacy switching, beginning with safe singleton simple residency
+              - A7.3 design started from clean signed-off commit 6e00e02; scope is safe singleton simple residency only
+              - A7.3 keeps every A6 pair whitelist, legacy_idle exclusion and prefer_legacy cost gate unchanged
               - A7.4 will open only pair classes justified by the new counters
               - A7.5 retains the original 200 MHz implementation and IPC x Fmax signoff
 ```
@@ -1798,3 +1799,28 @@ A7.1→A7.2 的真实退休数、branch mispredict、sink 和 exceptions 不变�
 前端空供给下降 `91.528%`，实际双退休覆盖从有效退休指令的 `31.128%` 增至 `35.754%`。九窗口仍满足 `imem_requests - fetch_packets = 19405 = branch mispredict total`、fetch packet/uop 恒等式和 actual class launch 恒等式。BRANCH_CAPACITY request/cycle 已达到 `0.9643`，窗口 IPC 从 `0.486` 升至 `0.916`；MEXT 与 MEMORY cycles 几乎不变，同时 legacy fallback 和 legacy wait 继续增长，清晰地把下一瓶颈固定到 A7.3 的 dual/legacy 域切换，而不是继续扩大配对白名单。
 
 签核后重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 `test/tb_top.sv`，八项 SHA256 全部与 A7.1/12.2 记录一致，未重建软件、未修改 golden。A7.2 已独立签核，A7 总阶段保持 `IN_PROGRESS`；下一子阶段只处理安全 singleton simple residency 与域切换，不混入 A7.4 白名单项目。
+
+#### 17.10.3 A7.3 singleton simple dual residency 设计记录
+
+```text
+baseline:              6e00e029cb5f5a237fda6c3d241259227b15aa17 (A7.2 signed off, clean worktree)
+status:                IN_PROGRESS
+scope:                 bundle_dispatch + dual_alu_pipeline + directed test + A7 measurement probe
+out of scope:          Issue pairing whitelist, control/LSU/MULDIV/bitman/CSR singleton,
+                       legacy pipeline, shared-unit timing and A7.4 pair classes
+rollback gate:         any architectural mismatch, exception/sink/hash change, regression failure,
+                       or no overall nine-window cycle reduction
+```
+
+A7.2 将前端空供给从 `458102` 降至 `38810` cycles，但九窗口仍有 `397807` 个 pair 回退 legacy 和 `637875` 个 legacy-domain drain wait cycles。连续供给也让 single-uop packet 从 `256809` 增至 `271157`；若一个安全 simple singleton 夹在两个 dual-compatible bundle 之间，现有 Dispatch 会先把它送进 legacy，再等待 legacy 全部排空后切回 dual。A7.3 只消除这一类无收益的域往返。
+
+冻结以下候选、所有权和成本规则：
+
+1. `simple singleton` 的唯一合法定义是 `lane0_valid && !lane1_valid && simple0`；`simple0` 必须来自 A6.1 已签核的 `pair_predecode`。control、LSU、MULDIV、bitman、CSR、非法编码和 lane0 无效 bundle 均不得通过 singleton 路径进入 dual resident。
+2. 当前与 lookahead 的 `dual_candidate` 含义扩展为“可由 dual backend 原子接收的 bundle”，即原 A6 pair 候选或 simple singleton；pair 内部 class、LSU run rule、MULDIV 例外与 lane1 control rule 不变，不新增任何配对组合。
+3. simple singleton 只有在 `legacy_idle && !prefer_legacy`，并且 `(dual_mode || next_dual_candidate)` 时才发往 dual。未建立 dual run 且 lookahead 尚未有效时保持 head 等待一次观察；lookahead 有效但不兼容时回 legacy。已经建立 dual run 时不因暂时缺 lookahead 而退出。
+4. `legacy_idle` 继续是跨域硬排斥；`dual_block_legacy` 继续阻止 active long resident 与 younger legacy 重叠；redirect 同拍同时抑制 dual/legacy dispatch。singleton 不使用 MULDIV 对 `prefer_legacy` 的历史例外。
+5. dual pipeline 接收 singleton 后只置 lane0 resident：`commit_valid=2'b01`、`retire_count=1`，lane1 不读寄存器、不写回、不产生 control/LSU/MULDIV event。redirect/exception/scoreboard/forwarding 的现有精确语义不变。
+6. 性能 probe 将 simple pair 与 simple singleton 分开计数，并增加 dual `retire1` 计数；每窗口必须满足 `dual_launch = simple_pair + simple_singleton + control_pair + lsu_pair + muldiv_pair`，且在无异常的冻结 workload 中 `dual_launch = retire1 + retire2`。
+
+定向签核至少覆盖：dual mode 内 singleton、singleton 与 compatible lookahead 建立/维持 dual run、lookahead gap 等待、非兼容 lookahead 回 legacy、`prefer_legacy` 回退、active legacy/dual exclusion、非 simple singleton 保持 legacy，以及 singleton 的单 lane writeback/retire/redirect kill。随后运行受影响 directed tests、`run_all.bat all`、冻结九窗口直跑与 A7 profile A/B；直跑和 wrapper 的九条 report、overall、sink 与 PASS 行必须一致，并复核八项冻结 SHA256。
