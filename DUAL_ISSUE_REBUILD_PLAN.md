@@ -859,7 +859,15 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - A7.5.2 directed tests passed 8/8 and run_all.bat all passed 78/78; compile 0 errors / 0 warnings
               - A7.5.2 cycles=2165216, exact IPC=1.052761; RETURN cycles fell by 119978; all architectural invariants and hashes unchanged
               - dual-to-legacy transitions fell from 8000 to 1; the remaining event is a lookahead gap, not another optimizable class
-              - next: audit post-LSU bottlenecks; any RAW/long-unit restructuring remains behind an explicit timing-risk decision
+              - A7.5.3 SIGNED_OFF in 4c4da85: measurement-only RAW/WAW class and MUL/DIV resident-wait attribution
+              - A7.5.3 run_all.bat all passed 78/78; compile 0 errors / 0 warnings; no RTL or frozen fixture changes
+              - 444157 RAW rejects contain 238809 WAW overlaps; 205348 RAW-only events all require timing-sensitive cross-lane paths
+              - MEXT has 8000 MUL / 32000 wait cycles and 8000 DIV/REM / 104000 wait cycles
+              - A7.5.4 SIGNED_OFF in 0c3803d: registered divider result releases after one resident delay instead of twelve
+              - A7.5.4 run_all.bat all passed 78/78; direct/profile match; all DIV/REM ISA tests pass
+              - A7.5.4 cycles=2077216, exact IPC=1.097360; MEXT cycles fell from 166041 to 78041
+              - divider datapath and result-capture edge are unchanged; LSU remains fixed four-beat and single-outstanding
+              - next: user decision between timing-sensitive RAW bypass and A7.6 timing convergence
 ```
 
 ### 17.3 A0 签核记录
@@ -2403,3 +2411,158 @@ A7.5.1→A7.5.2 的真实退休数、branch、branch mispredict、sink、excepti
 总计继续满足 class 守恒：`1415284 = 393457 simple pair + 437905 simple singleton + 107344 control singleton + 2000 MULDIV singleton + 187568 lane1 control + 100854 control0 simple + 172156 LSU pair + 14000 MULDIV pair`；退休守恒为 `1415284 = 552556 retire1 + 862728 retire2`。四拍 LSU resident 增加会提高 dual wait，但 legacy drain 减少更多，且 retire2 增加 `159976`，最终真实总周期净减 `119978`。
 
 签核后只剩 `1` 次 dual→legacy transition，原因是 BRANCH_CAPACITY 的 lookahead gap；该事件没有可稳定利用的后继包，不值得增加预测或组合反馈。LSU 域切换优化至此收敛。后续 IPC 缺口主要落在固定四拍 MEMORY wait、共享 MULDIV 等待和 simple RAW 等类别；其中改变 LSU 吞吐、MULDIV resident/退休结构或增加同拍 RAW 旁路都可能进入主频敏感路径，实施前必须先给出测量结果和主频风险供用户决定。
+
+#### 17.10.8 A7.5.3 剩余 IPC 瓶颈与主频风险审计
+
+```text
+baseline:              653e015 (A7.5.2 signed off, clean worktree)
+measurement commit:    4c4da85
+status:                SIGNED_OFF (measurement only)
+RTL changes:           none
+fixture/report changes:none
+scope:                 RAW rejection class, RAW/WAW overlap, operand match,
+                       MUL versus DIV/REM launch and resident-wait attribution
+next:                  explicit user decision before any timing-sensitive implementation
+```
+
+本阶段扩展 `tb_a7_perf_profile` 的观测，不修改 Issue、dual resident、LSU、MULDIV、CSR、21-word report 或 benchmark。probe 对每窗口和总计新增三组守恒：
+
+1. RAW class 总数必须等于 `perf_issue_raw`。
+2. `RAW-only + RAW/WAW overlap` 必须严格等于 RAW class 总数。
+3. `MUL launch + DIV/REM launch` 必须等于 MULDIV singleton 与 pair launch 总和。
+
+正式九窗口结果：
+
+```text
+overall:               cycles=2165216, instret=2279454, ipc_x1000=1052
+exact IPC:             1.0527605559907187
+sink:                  0x9D3BF787
+exceptions:            0
+direct/profile diff:   0
+
+RAW reject total:      444157
+RAW + WAW overlap:     238809 (53.767%)
+RAW-only:              205348 (46.233%)
+  simple -> simple:     86371 (42.061% of RAW-only)
+  simple -> control:    25832 (12.580% of RAW-only)
+  simple -> LSU:        93134 (45.354% of RAW-only)
+  LSU -> simple:           10
+  MULDIV -> simple:         0 after WAW exclusion
+  other:                    1
+
+MUL launch:              8000
+MUL resident wait:      32000 (4.0 cycles/launch)
+DIV/REM launch:          8000
+DIV/REM resident wait: 104000 (13.0 cycles/launch)
+MEXT resident wait:    136000 (81.907% of MEXT cycles)
+```
+
+RAW-only 分窗口集中位置与路径风险：
+
+| Candidate | Count | Main windows | Required implementation path | Fmax risk |
+| --- | ---: | --- | --- | --- |
+| simple→simple | 86371 | ALU 36000, RANDOM 24368, RETURN 24003 | lane0 ALU result→lane1 operand mux→lane1 ALU in one cycle | High |
+| simple→control | 25832 | RANDOM 10830, SHORT 3001, CALL 12001 | lane0 ALU result→branch compare/target/redirect | High |
+| simple→LSU | 93134 | MEMORY 92599, CAPACITY 513 | lane0 ALU result→LSU base/store-data/request path | High |
+| LSU→simple | 10 | scattered | registered Load response→dependent ALU or extra resident sequencing | Medium/High, negligible gain |
+| control→simple | 0 | none | PC+4 low-risk bypass has no workload opportunity | No benefit |
+| simple→MULDIV | 0 | none | no workload opportunity | No benefit |
+
+`205348` 是 rejection event 上限，不等于可直接节省的周期；这些候选会与后续重新配对、branch redirect、resident wait 和 qfull 重叠，不能把数量直接相加到 IPC。尤其不能以放开 Issue whitelist 代替真正的数据可用性。
+
+共享长单元结论：
+
+- MUL 使用冻结的 `MUL_CYCLE=4`，8000 次 launch 对应 32000 resident wait。缩短周期必须重新确认 FPGA multiplier IP latency、result-valid 对齐和乘法关键路径。
+- DIV/REM 使用 `LATENCY=12`，start 加 resident 等待实测为 13 cycles/launch，共 104000 wait。代码复核发现 `divide_result` 已在 start 边沿完整锁入 `pending_result`，后续 LATENCY 只延迟 `busy/done`，因此“只缩短 resident counter”是一个不改变 divider datapath 的低主频风险例外；该例外由 A7.5.4 单独验证。
+- `wait_dual=652464` 已完全由 MEXT 136000、BRANCH_RETURN LSU 239984 和 MEMORY LSU 276480 构成。后两项保持每次完整四拍；要隐藏它们只能引入并行 resident、绕行或更接近越序的调度，超出当前固定四拍单 outstanding 边界。
+
+验证与日志：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:      F:\Tools\Temp\a753_bottleneck_run_all.log
+profile compile:  F:\Tools\Temp\a753_bottleneck_perf_compile_final.log
+profile log:      F:\Tools\Temp\a753_bottleneck_audit_profile_signed.log
+profile result:   PERF_BENCHMARK_PASSED; all new identities passed
+protected HEX:    C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3 before/after
+frozen hashes:    test/tb_top.sv, benchmark source/build files and inst/data HEX unchanged
+```
+
+RAW 和并行 resident 的风险边界已经到达，但 divider 审计识别出一个 counter-only 例外：
+
+1. **Divider resident counter**：数据结果已在 start 边沿注册，缩短 LATENCY 不增加组合除法深度；A7.5.4 先执行该低风险 A/B。
+2. **同拍 RAW bypass**：理论候选最多，首先可限定 simple→simple；代价是明确的 ALU0→ALU1 组合级联，最可能伤害主频。
+3. **进入 A7.6 时序收敛**：在 counter-only 收益签核后取得真实 Fmax/关键路径，再决定是否试验 RAW。
+
+根据用户约束，A7.5.3 本身不改 RTL；A7.5.4 只验证不改变数据路径的第一项，仍不实施 RAW 或并行 resident。
+
+#### 17.10.9 A7.5.4 已注册 Divider 结果的提前释放签核
+
+```text
+baseline:              4c4da85 (A7.5.3 measurement probe committed; RTL unchanged)
+implementation commit: 0c3803d
+status:                SIGNED_OFF
+scope:                 divider resident busy/done counter only
+hard invariant:        divide datapath, start-edge pending_result capture,
+                       architectural corner cases and all LSU behavior unchanged
+out of scope:          divider datapath/pipelining, multiplier latency,
+                       RAW bypass, parallel resident or timing constraints
+rollback gate:         any DIV/REM mismatch, start/done/kill failure,
+                       regression failure or no overall cycle reduction
+next:                  explicit user decision on RAW versus A7.6 timing
+```
+
+实现前后的 divider 数据时序完全相同：
+
+1. 普通 DIV/REM 在 `start && !busy` 边沿执行同一个 `divide_result(...)` 组合函数，并写入同一个 `pending_result` 寄存器。
+2. `LATENCY` 从 `12` 改为 `1`，只改变 `cycles_left` 的装载常量；`cycles_left > 1` 比较、`busy/done` 状态、result 寄存器和所有输入均未改。
+3. 除零和有符号溢出仍沿原有 immediate-done 分支，不经过 resident counter；结果和脉冲语义不变。
+4. dual 与 legacy 两个 divider 实例共享该模块，因此一致缩短已经注册的结果等待；没有增加旁路、组合反馈或 outstanding state。
+5. `lsu_exec_unit`、四拍 E0-E3、single outstanding、data-port arbitration 和 DRAM 接口完全未修改。
+
+该变化不会缩短或加深组合除法本身；输入到 `pending_result` 的关键路径在 A7.5.3 已经存在。计数器位宽、递减器和终止比较也未改变，只有装载常量变小，因此预估不构成显著 Fmax 风险。本阶段未代替用户运行综合，真实 Fmax 仍由 A7.6 确认。
+
+定向与完整回归：
+
+```text
+tb_a4_execute_units:     PASS (start/done, forwarded operands, overflow, kill)
+tb_a6_muldiv_pair:       PASS (all MUL/DIV pair orders, special values, atomic retire)
+tb_a6_muldiv_perf_probe: PERF_BENCHMARK_PASSED; 0 errors / 0 warnings
+
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+UM coverage:       mul, mulh, mulhu, mulhsu, div, divu, rem, remu all pass
+run_all log:       F:\Tools\Temp\a754_div_latency_run_all.log
+protected HEX:     C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3 before/after
+```
+
+冻结九窗口 A/B：
+
+| Window | A7.5.3 cycles | A7.5.4 cycles | Delta | A7.5.3 IPC x1000 | A7.5.4 IPC x1000 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ALU | 144030 | 144030 | 0 | 1499 | 1499 |
+| MEXT | 166041 | 78041 | -88000 | 325 | 692 |
+| BRANCH_RANDOM | 201056 | 201056 | 0 | 1223 | 1223 |
+| BRANCH_REGULAR | 57047 | 57047 | 0 | 1683 | 1683 |
+| BRANCH_SHORT | 66049 | 66049 | 0 | 1408 | 1408 |
+| BRANCH_CALL | 108405 | 108405 | 0 | 1328 | 1328 |
+| BRANCH_CAPACITY | 72216 | 72216 | 0 | 957 | 957 |
+| BRANCH_RETURN | 656147 | 656147 | 0 | 1158 | 1158 |
+| MEMORY | 694225 | 694225 | 0 | 866 | 866 |
+| **Overall** | **2165216** | **2077216** | **-88000** | **1052** | **1097** |
+
+```text
+result:       PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+overall:      cycles=2077216, instret=2279454, ipc_x1000=1097
+exact IPC:    1.0973601204689354
+sink:         0x9D3BF787
+branch:       396041
+brmisp:       19405
+direct log:   F:\Tools\Temp\a754_div_latency_perf_direct.log
+profile log:  F:\Tools\Temp\a754_div_latency_profile_experiment.log
+comparison:   direct/profile header, all nine reports, overall and PASS have zero differences
+frozen hashes:test/tb_top.sv, benchmark source/build files, inst/data HEX and protected ISA HEX all unchanged
+```
+
+A7.5.3→A7.5.4 的 overall cycles 减少 `88000`（`-4.064%`），精确 IPC 提升 `4.236%`。MEXT cycles 减少 `52.999%`，精确 IPC 从 `0.325317` 提升到 `0.692149`；其余八个窗口逐周期不变。DIV/REM 的 resident wait 从 `104000` 降到 `16000`，即从 13 降到 2 cycles/launch，差值恰好是 8000 次 launch 各减少 11 cycles；MUL 仍保持 `MUL_CYCLE=4` 和 `32000` wait。
+
+profile 守恒继续成立：dual launch/retire class、RAW/WAW 分类和架构 counters 均未改变；`wait_dual` 仅从 `652464` 降到 `564464`，zero-retire 从 `748490` 降到 `660490`，两者都精确减少 `88000`。A7.5.4 签核后，剩余有规模的 IPC 选择是主频敏感的 RAW 路径，或进入 A7.6 先取得真实时序余量。
