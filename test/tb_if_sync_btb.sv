@@ -218,6 +218,30 @@ module tb_if_sync_btb;
         end
     endtask
 
+    task automatic expect_continuous_sequential_packet(
+        input logic [31:0] expected_pc
+    );
+        integer wait_count;
+        begin
+            wait_count = 0;
+            #1;
+            while ((fetch_push_count == 0) && (wait_count < 30)) begin
+                @(negedge clk);
+                wait_count = wait_count + 1;
+            end
+            if (fetch_push_count == 0) begin
+                $fatal(1, "timeout waiting for continuous packet pc=%08h",
+                       expected_pc);
+            end
+            if (!inst_ren || (pc_out !== (expected_pc + 32'd8))) begin
+                $fatal(1,
+                       "response did not launch same-edge sequential request packet=%08h request_en=%0d request_pc=%08h",
+                       expected_pc, inst_ren, pc_out);
+            end
+            expect_packet(expected_pc, 2, 1'b0, 0, 1'b0, 0);
+        end
+    endtask
+
     initial begin
         clk = 1'b0;
         rst_n = 1'b0;
@@ -240,8 +264,19 @@ module tb_if_sync_btb;
 
         expect_packet(`PC_START, 2, 1'b0, 0, 1'b0, 0);
 
+        // A one-cycle response must directly push and launch the next request
+        // on the same edge for three consecutive sequential packets.
+        redirect_to(32'h0000_0D00);
+        expect_continuous_sequential_packet(32'h0000_0D00);
+        expect_continuous_sequential_packet(32'h0000_0D08);
+        expect_continuous_sequential_packet(32'h0000_0D10);
+
         train_entry(32'h0000_0100, 1'b1, 32'h0000_0200, `BP_TYPE_JAL);
         redirect_to(32'h0000_0100);
+        wait (fetch_push_count != 0);
+        if (!inst_ren || (pc_out !== 32'h0000_0200)) begin
+            $fatal(1, "slot0 taken response did not request predicted target");
+        end
         expect_packet(32'h0000_0100, 1, 1'b1, 32'h0000_0200, 1'b0, 0);
         expect_packet(32'h0000_0200, 2, 1'b0, 0, 1'b0, 0);
 
@@ -281,13 +316,20 @@ module tb_if_sync_btb;
         repeat (4) begin
             @(negedge clk);
             if ((fetch_push_count != 0) || !dut.packet_valid ||
+                inst_ren || dut.req_valid ||
                 (fetch_push_uop0 !== held_uop0) ||
                 (fetch_push_uop1 !== held_uop1)) begin
-                $fatal(1, "IF1 packet changed or partially pushed under backpressure");
+                $fatal(1,
+                       "IF skid changed, partially pushed, or launched under backpressure");
             end
         end
         fetch_free_count = 4'd8;
+        #1;
+        if (!inst_ren || (pc_out !== 32'h0000_0A08)) begin
+            $fatal(1, "skid release did not launch saved next PC");
+        end
         expect_packet(32'h0000_0A00, 2, 1'b0, 0, 1'b0, 0);
+        expect_packet(32'h0000_0A08, 2, 1'b0, 0, 1'b0, 0);
 
         // A fetched call updates speculative RAS, and the simultaneous next
         // request must capture the post-push top.  Redirect restores committed.

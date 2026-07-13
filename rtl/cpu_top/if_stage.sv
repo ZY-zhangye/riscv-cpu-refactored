@@ -62,6 +62,29 @@ module if_stage (
     logic packet_btb_hit1;
     logic packet_ras_valid;
     logic [`ADDR_WIDTH-1:0] packet_ras_target;
+    logic [`ADDR_WIDTH-1:0] packet_next_pc;
+
+    logic response_valid;
+    logic [1:0] response_count;
+    logic response_fire;
+    logic response_hold;
+    logic output_packet_valid;
+    logic [1:0] output_packet_count;
+    logic [`FETCH_EPOCH_WIDTH-1:0] output_packet_epoch;
+    logic [`ADDR_WIDTH-1:0] output_packet_pc;
+    logic [`DATA_WIDTH-1:0] output_packet_inst0;
+    logic [`DATA_WIDTH-1:0] output_packet_inst1;
+    logic output_packet_pred_taken0;
+    logic output_packet_pred_taken1;
+    logic [`ADDR_WIDTH-1:0] output_packet_pred_target0;
+    logic [`ADDR_WIDTH-1:0] output_packet_pred_target1;
+    logic [`BP_TYPE_WIDTH-1:0] output_packet_pred_type0;
+    logic [`BP_TYPE_WIDTH-1:0] output_packet_pred_type1;
+    logic output_packet_btb_hit0;
+    logic output_packet_btb_hit1;
+    logic output_packet_ras_valid;
+    logic [`ADDR_WIDTH-1:0] output_packet_ras_target;
+    logic [`ADDR_WIDTH-1:0] output_packet_next_pc;
 
     logic [BTB_ENTRIES-1:0] btb_valid0;
     logic [BTB_ENTRIES-1:0] btb_valid1;
@@ -94,6 +117,7 @@ module if_stage (
 
     logic redirect_event;
     logic [`ADDR_WIDTH-1:0] redirect_pc;
+    logic [`ADDR_WIDTH-1:0] request_pc;
     logic request_fire;
     logic packet_fire;
 
@@ -163,16 +187,26 @@ module if_stage (
     assign redirect_event = exception_flag || (br_taken && bp_update_valid);
     assign redirect_pc = exception_flag ? exception_addr : br_target;
 
-    assign inst_ren = rst_n && if_active && !redirect_event &&
-                      !req_valid && (!packet_valid || packet_fire);
-    assign request_fire = inst_ren;
-    assign pc_out = if0_pc;
-    assign pc_out1 = if0_pc + 32'd4;
+    // A live one-cycle IROM response normally bypasses the skid packet and is
+    // pushed directly into the Fetch FIFO.  Its predicted next PC may launch a
+    // new request on the same edge.  If the response cannot push, it occupies
+    // packet_valid and request issue stops until that complete packet releases.
+    assign response_valid = req_valid && (req_epoch == if_epoch);
+    assign response_count = pred_taken0 ? 2'd1 : 2'd2;
+    assign response_fire = !packet_valid && response_valid && packet_fire;
+    assign response_hold = response_valid && !response_fire;
+    assign request_pc = packet_fire ? output_packet_next_pc : if0_pc;
+    assign request_fire = rst_n && if_active && !redirect_event &&
+                          ((req_valid && response_fire) ||
+                           (!req_valid && (!packet_valid || packet_fire)));
+    assign inst_ren = request_fire;
+    assign pc_out = request_pc;
+    assign pc_out1 = request_pc + 32'd4;
     assign frontend_redirect = redirect_event;
 
-    assign request_pc1 = if0_pc + 32'd4;
+    assign request_pc1 = request_pc + 32'd4;
     assign req_pc1 = req_pc + 32'd4;
-    assign request_index0 = if0_pc[BTB_INDEX_WIDTH+1:2];
+    assign request_index0 = request_pc[BTB_INDEX_WIDTH+1:2];
     assign request_index1 = request_pc1[BTB_INDEX_WIDTH+1:2];
     assign update_index = bp_update_pc[BTB_INDEX_WIDTH+1:2];
     assign update_tag = bp_update_pc[`ADDR_WIDTH-1:BTB_INDEX_WIDTH+2];
@@ -260,18 +294,19 @@ module if_stage (
     assign ras_top_value = ras_stack[ras_top_index];
     assign ras_after_pop_index = ras_sp - 2'd2;
     assign ras_after_pop_value = ras_stack[ras_after_pop_index];
-    assign packet_lane0_call = instruction_is_call(packet_inst0);
-    assign packet_lane0_return = instruction_is_return(packet_inst0);
-    assign packet_lane1_call = (packet_count == 2) &&
-                               instruction_is_call(packet_inst1);
-    assign packet_lane1_return = (packet_count == 2) &&
-                                 instruction_is_return(packet_inst1);
+    assign packet_lane0_call = instruction_is_call(output_packet_inst0);
+    assign packet_lane0_return = instruction_is_return(output_packet_inst0);
+    assign packet_lane1_call = (output_packet_count == 2) &&
+                               instruction_is_call(output_packet_inst1);
+    assign packet_lane1_return = (output_packet_count == 2) &&
+                                 instruction_is_return(output_packet_inst1);
     assign packet_ras_call = packet_lane0_call ||
                              (!packet_lane0_return && packet_lane1_call);
     assign packet_ras_return = packet_lane0_return ||
                                (!packet_lane0_call && packet_lane1_return);
     assign packet_ras_return_pc = (packet_lane0_call || packet_lane0_return) ?
-                                  packet_pc + 32'd4 : packet_pc + 32'd8;
+                                  output_packet_pc + 32'd4 :
+                                  output_packet_pc + 32'd8;
     assign packet_contains_ras_op = packet_ras_call || packet_ras_return;
 
     // The committed RAS is updated exactly once at branch_resolve_fire.  The
@@ -354,8 +389,37 @@ module if_stage (
     assign pred_target1 = ((btb_q_type1 == `BP_TYPE_RETURN) && req_ras_valid) ?
                           req_ras_target : btb_q_target1;
     assign predicted_packet_next_pc = pred_taken0 ? pred_target0 :
-                                      pred_taken1 ? pred_target1 :
-                                      req_pc + 32'd8;
+                                       pred_taken1 ? pred_target1 :
+                                       req_pc + 32'd8;
+
+    // packet_valid is a skid entry used only under backpressure.  In the
+    // steady state the synchronous response drives the Fetch FIFO directly.
+    assign output_packet_valid = packet_valid || response_valid;
+    assign output_packet_count = packet_valid ? packet_count : response_count;
+    assign output_packet_epoch = packet_valid ? packet_epoch : req_epoch;
+    assign output_packet_pc = packet_valid ? packet_pc : req_pc;
+    assign output_packet_inst0 = packet_valid ? packet_inst0 : inst_in;
+    assign output_packet_inst1 = packet_valid ? packet_inst1 : inst_in1;
+    assign output_packet_pred_taken0 = packet_valid ?
+                                           packet_pred_taken0 : pred_taken0;
+    assign output_packet_pred_taken1 = packet_valid ?
+                                           packet_pred_taken1 : pred_taken1;
+    assign output_packet_pred_target0 = packet_valid ?
+                                            packet_pred_target0 : pred_target0;
+    assign output_packet_pred_target1 = packet_valid ?
+                                            packet_pred_target1 : pred_target1;
+    assign output_packet_pred_type0 = packet_valid ?
+                                          packet_pred_type0 : btb_q_type0;
+    assign output_packet_pred_type1 = packet_valid ?
+                                          packet_pred_type1 : btb_q_type1;
+    assign output_packet_btb_hit0 = packet_valid ? packet_btb_hit0 : btb_hit0;
+    assign output_packet_btb_hit1 = packet_valid ? packet_btb_hit1 : btb_hit1;
+    assign output_packet_ras_valid = packet_valid ?
+                                         packet_ras_valid : req_ras_valid;
+    assign output_packet_ras_target = packet_valid ?
+                                          packet_ras_target : req_ras_target;
+    assign output_packet_next_pc = packet_valid ?
+                                      packet_next_pc : predicted_packet_next_pc;
 
     // Keep IF0 idle for one complete clock after reset release.  Besides being
     // a clean hardware reset boundary, this prevents a request/RAM disagreement
@@ -394,6 +458,7 @@ module if_stage (
             packet_btb_hit1 <= 1'b0;
             packet_ras_valid <= 1'b0;
             packet_ras_target <= '0;
+            packet_next_pc <= `PC_START;
         end else if (redirect_event) begin
             if_epoch <= if_epoch + 1'b1;
             if0_pc <= redirect_pc;
@@ -401,10 +466,13 @@ module if_stage (
             packet_valid <= 1'b0;
             packet_count <= 2'd0;
         end else begin
+            // Every request owns exactly the next synchronous response.  A
+            // same-edge response bypass may replace it with a new request;
+            // otherwise req_valid clears while a blocked response enters skid.
+            req_valid <= request_fire;
             if (request_fire) begin
-                req_valid <= 1'b1;
                 req_epoch <= if_epoch;
-                req_pc <= if0_pc;
+                req_pc <= request_pc;
                 if (packet_fire && packet_ras_call) begin
                     req_ras_valid <= 1'b1;
                     req_ras_target <= packet_ras_return_pc;
@@ -418,64 +486,82 @@ module if_stage (
             end
 
             if (packet_fire) begin
-                packet_valid <= 1'b0;
-                packet_count <= 2'd0;
-                age_counter <= age_counter + packet_count;
+                if0_pc <= output_packet_next_pc;
+                age_counter <= age_counter + output_packet_count;
+                if (packet_valid) begin
+                    packet_valid <= 1'b0;
+                    packet_count <= 2'd0;
+                end
             end
 
-            if (req_valid) begin
-                req_valid <= 1'b0;
-                if (req_epoch == if_epoch) begin
-                    if0_pc <= predicted_packet_next_pc;
-                    packet_valid <= 1'b1;
-                    packet_count <= pred_taken0 ? 2'd1 : 2'd2;
-                    packet_epoch <= req_epoch;
-                    packet_pc <= req_pc;
-                    packet_inst0 <= inst_in;
-                    packet_inst1 <= inst_in1;
-                    packet_pred_taken0 <= pred_taken0;
-                    packet_pred_taken1 <= pred_taken1;
-                    packet_pred_target0 <= pred_target0;
-                    packet_pred_target1 <= pred_target1;
-                    packet_pred_type0 <= btb_q_type0;
-                    packet_pred_type1 <= btb_q_type1;
-                    packet_btb_hit0 <= btb_hit0;
-                    packet_btb_hit1 <= btb_hit1;
-                    packet_ras_valid <= req_ras_valid;
-                    packet_ras_target <= req_ras_target;
-                end
+            if (response_hold) begin
+                packet_valid <= 1'b1;
+                packet_count <= response_count;
+                packet_epoch <= req_epoch;
+                packet_pc <= req_pc;
+                packet_inst0 <= inst_in;
+                packet_inst1 <= inst_in1;
+                packet_pred_taken0 <= pred_taken0;
+                packet_pred_taken1 <= pred_taken1;
+                packet_pred_target0 <= pred_target0;
+                packet_pred_target1 <= pred_target1;
+                packet_pred_type0 <= btb_q_type0;
+                packet_pred_type1 <= btb_q_type1;
+                packet_btb_hit0 <= btb_hit0;
+                packet_btb_hit1 <= btb_hit1;
+                packet_ras_valid <= req_ras_valid;
+                packet_ras_target <= req_ras_target;
+                packet_next_pc <= predicted_packet_next_pc;
             end
         end
     end
 
-    assign fetch_push_count = (!redirect_event && packet_valid &&
-                               (fetch_free_count >= packet_count)) ?
-                              packet_count : 2'd0;
+    assign fetch_push_count = (!redirect_event && output_packet_valid &&
+                               (fetch_free_count >= output_packet_count)) ?
+                              output_packet_count : 2'd0;
     assign packet_fire = (fetch_push_count != 0);
     assign fetch_push_uop0 = {
-        packet_epoch,
+        output_packet_epoch,
         age_counter,
-        packet_inst0,
-        packet_pc,
-        packet_pred_taken0,
-        packet_pred_target0,
-        packet_pred_type0,
-        packet_btb_hit0,
-        packet_ras_valid,
-        packet_ras_target
+        output_packet_inst0,
+        output_packet_pc,
+        output_packet_pred_taken0,
+        output_packet_pred_target0,
+        output_packet_pred_type0,
+        output_packet_btb_hit0,
+        output_packet_ras_valid,
+        output_packet_ras_target
     };
     assign fetch_push_uop1 = {
-        packet_epoch,
+        output_packet_epoch,
         age_counter + 1'b1,
-        packet_inst1,
-        packet_pc + 32'd4,
-        packet_pred_taken1,
-        packet_pred_target1,
-        packet_pred_type1,
-        packet_btb_hit1,
-        packet_ras_valid,
-        packet_ras_target
+        output_packet_inst1,
+        output_packet_pc + 32'd4,
+        output_packet_pred_taken1,
+        output_packet_pred_target1,
+        output_packet_pred_type1,
+        output_packet_btb_hit1,
+        output_packet_ras_valid,
+        output_packet_ras_target
     };
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && !redirect_event) begin
+            if (packet_valid && req_valid) begin
+                $fatal(1, "IF skid packet overlapped an in-flight response");
+            end
+            if (request_fire && req_valid && !response_fire) begin
+                $fatal(1, "IF replaced an unconsumed synchronous response");
+            end
+            if (packet_fire &&
+                ((output_packet_count == 0) || (output_packet_count > 2))) begin
+                $fatal(1, "IF pushed an invalid packet count=%0d",
+                       output_packet_count);
+            end
+        end
+    end
+`endif
 
     assign fs_exc_bus = {7'b0, {`MTVAL_WIDTH{1'b0}}};
 
