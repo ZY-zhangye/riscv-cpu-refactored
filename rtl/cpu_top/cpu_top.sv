@@ -4,7 +4,9 @@ module cpu_top (
     input logic rst_n,
     //指令存储器接口
     input logic [31:0] imem_rdata,
+    input logic [31:0] imem_rdata1,
     output logic [31:0] imem_addr,
+    output logic [31:0] imem_addr1,
     output logic imem_en,
     //数据存储器接口
     input logic [31:0] dmem_rdata,
@@ -48,7 +50,7 @@ module cpu_top (
     logic [31:0] bp_update_pc;
     logic bp_update_taken;
     logic [31:0] bp_update_target;
-    logic bp_update_is_jalr;
+    logic [`BP_TYPE_WIDTH-1:0] bp_update_type;
     logic [`EXC_WIDTH-1:0] fs_exc_bus;
     logic exception_flag;
     logic [31:0] exception_addr;
@@ -123,8 +125,10 @@ module cpu_top (
         .clk(clk),
         .rst_n(rst_n),
         .pc_out(imem_addr),
+        .pc_out1(imem_addr1),
         .inst_ren(imem_en),
         .inst_in(imem_rdata),
+        .inst_in1(imem_rdata1),
         .ds_allowin(ds_allowin),
         .fs_to_ds_valid(fs_to_ds_valid),
         .fs_to_ds_bus(fs_to_ds_bus),
@@ -134,7 +138,7 @@ module cpu_top (
         .bp_update_pc(bp_update_pc),
         .bp_update_taken(bp_update_taken),
         .bp_update_target(bp_update_target),
-        .bp_update_is_jalr(bp_update_is_jalr),
+        .bp_update_type(bp_update_type),
         .fs_exc_bus(fs_exc_bus),
         .exception_flag(exception_flag),
         .exception_addr(exception_addr)
@@ -218,7 +222,7 @@ module cpu_top (
         .bp_update_pc(bp_update_pc),
         .bp_update_taken(bp_update_taken),
         .bp_update_target(bp_update_target),
-        .bp_update_is_jalr(bp_update_is_jalr),
+        .bp_update_type(bp_update_type),
         .branch_event(branch_event),
         .branch_mispredict_event(branch_mispredict_event),
         .execute_stall_event(execute_stall_event),

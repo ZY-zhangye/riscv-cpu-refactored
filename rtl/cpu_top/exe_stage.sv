@@ -44,7 +44,7 @@ module exe_stage(
     output logic [31:0] bp_update_pc,
     output logic bp_update_taken,
     output logic [31:0] bp_update_target,
-    output logic bp_update_is_jalr,
+    output logic [`BP_TYPE_WIDTH-1:0] bp_update_type,
     //性能计数事件
     output logic branch_event,
     output logic branch_mispredict_event,
@@ -506,6 +506,7 @@ module exe_stage(
     // 3. 优化 br_taken 的判定路径
     // 将 br_jmp_opcode 是否有效的判断与 br_cond 合并
     logic is_branch;
+    logic branch_resolve_fire;
     assign is_branch = |br_jmp_opcode;
 
     assign br_taken = es_flush ? 1'b0 : (is_jal | is_jalr | (is_branch & br_cond_raw));
@@ -518,17 +519,42 @@ module exe_stage(
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
-    assign br_redirect = !es_flush && is_br_jmp &&
+    assign branch_resolve_fire = es_to_ms_valid && ms_allowin &&
+                                 !es_flush && is_br_jmp;
+    assign br_redirect = branch_resolve_fire &&
                          ((br_taken != bp_pred_taken) ||
                           (br_taken && (br_target != bp_pred_target)));
     assign br_redirect_target = br_taken ? br_target : exe_pc + 32'd4;
 
-    assign bp_update_valid = es_valid && !es_flush && is_br_jmp;
+    assign bp_update_valid = branch_resolve_fire;
     assign bp_update_pc = exe_pc;
     assign bp_update_taken = br_taken;
     assign bp_update_target = br_target;
-    assign bp_update_is_jalr = is_jalr;
-    assign branch_event = es_to_ms_valid && ms_allowin && !es_flush && is_br_jmp;
+    logic bp_update_is_call;
+    logic bp_update_is_return;
+    assign bp_update_is_call = (is_jal || is_jalr) &&
+                               ((exe_inst[11:7] == 5'd1) ||
+                                (exe_inst[11:7] == 5'd5));
+    assign bp_update_is_return = is_jalr &&
+                                 (exe_inst[11:7] == 5'd0) &&
+                                 ((exe_inst[19:15] == 5'd1) ||
+                                  (exe_inst[19:15] == 5'd5)) &&
+                                 (exe_inst[31:20] == 12'd0);
+
+    always_comb begin
+        if (bp_update_is_return) begin
+            bp_update_type = `BP_TYPE_RETURN;
+        end else if (bp_update_is_call) begin
+            bp_update_type = `BP_TYPE_CALL;
+        end else if (is_jalr) begin
+            bp_update_type = `BP_TYPE_JALR;
+        end else if (is_jal) begin
+            bp_update_type = `BP_TYPE_JAL;
+        end else begin
+            bp_update_type = `BP_TYPE_BRANCH;
+        end
+    end
+    assign branch_event = branch_resolve_fire;
     assign branch_mispredict_event = branch_event && br_redirect;
     //结果选择
     always_comb begin

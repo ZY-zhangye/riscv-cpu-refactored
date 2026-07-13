@@ -33,7 +33,9 @@ module my_cpu (
 );
 
     logic [31:0] imem_rdata;
+    logic [31:0] imem_rdata1;
     logic [31:0] imem_addr;
+    logic [31:0] imem_addr1;
     logic        imem_en;
 
     logic [31:0] cpu_dmem_rdata;
@@ -71,7 +73,9 @@ module my_cpu (
         .clk(clk),
         .rst_n(rst_n),
         .imem_rdata(imem_rdata),
+        .imem_rdata1(imem_rdata1),
         .imem_addr(imem_addr),
+        .imem_addr1(imem_addr1),
         .imem_en(imem_en),
         .dmem_rdata(cpu_dmem_rdata),
         .dmem_addr(cpu_dmem_addr),
@@ -107,8 +111,10 @@ module my_cpu (
     soc_inst_ram u_inst_ram (
         .clk(clk),
         .addr(imem_addr),
+        .addr1(imem_addr1),
         .en(imem_en),
-        .rdata(imem_rdata)
+        .rdata(imem_rdata),
+        .rdata1(imem_rdata1)
     );
 
     soc_data_ram u_data_ram (
@@ -183,8 +189,10 @@ module soc_inst_ram #(
 ) (
     input  logic        clk,
     input  logic [31:0] addr,
+    input  logic [31:0] addr1,
     input  logic        en,
-    output logic [31:0] rdata
+    output logic [31:0] rdata,
+    output logic [31:0] rdata1
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
@@ -193,6 +201,7 @@ module soc_inst_ram #(
     always_ff @(posedge clk) begin
         if (en) begin
             rdata <= mem[addr[INDEX_WIDTH+1:2]];
+            rdata1 <= mem[addr1[INDEX_WIDTH+1:2]];
         end
     end
 `else

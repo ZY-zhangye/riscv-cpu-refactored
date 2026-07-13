@@ -10,6 +10,12 @@
 `define ADDR_WIDTH 32
 `define MTVAL_WIDTH 32
 `define BP_PACKET_WIDTH (1+32)
+`define BP_TYPE_WIDTH 3
+`define BP_TYPE_BRANCH 3'd0
+`define BP_TYPE_JAL 3'd1
+`define BP_TYPE_JALR 3'd2
+`define BP_TYPE_CALL 3'd3
+`define BP_TYPE_RETURN 3'd4
 `define FS_DS_WIDTH (32+32+`BP_PACKET_WIDTH)
 `define EXC_WIDTH (7+32)
 
