@@ -806,7 +806,8 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - every substage has a separate commit, directed tests, run_all.bat all and frozen nine-window run
               - A6.1 SIGNED_OFF in 40eb13a: unified simple predecode; 78/78 and nine-window PASS
               - A6.2 SIGNED_OFF in 7f063ba: lane0 simple + lane1 control; precise redirect/IAM; 78/78 and nine-window PASS
-              - current: A6.3 simple + LSU / LSU + simple
+              - A6.3 SIGNED_OFF in 8fa3608: one LSU per pair, registered MEM/precise Store and LAM/SAM; 78/78 and nine-window PASS
+              - current: A6.4 simple + MULDIV / MULDIV + simple
 ```
 
 ### 17.3 A0 签核记录
@@ -1343,7 +1344,7 @@ A6 开始基线：
 start commit:       d5a097369b0c3c6aa9a37385f690ebd652ced3b4
 protected HEX SHA:  C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
 status:              IN_PROGRESS
-current substage:    A6.3 simple + LSU / LSU + simple
+current substage:    A6.4 simple + MULDIV / MULDIV + simple
 ```
 
 统一年龄与提交规则：
@@ -1470,3 +1471,78 @@ protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA
 | MEMORY | 787465 | 601238 | 763 | 92787 | 416401 | 0 | 185 | 0 |
 
 A6.1→A6.2 的 overall cycles 减少 `5048`（`-0.170%`），精确 IPC 从 `0.758653` 升至 `0.759930`；真实退休数、sink、exceptions 和 branch mispredict 总数保持不变。BRANCH_RANDOM 与 BRANCH_RETURN 分别减少 `5145` 和 `8000` cycles；BRANCH_CALL 因 control pair 后的 LSU/stack 序列仍切回 legacy 而增加 `8104` cycles。该局部回退如实保留，A6.3 必须用统一 LSU resident 和单端口精确提交解决，不能关闭已验证的 JAL/JALR pairing 来隐藏。
+
+#### 17.9.3 A6.3 `simple + LSU` / `LSU + simple` 签核
+
+实现提交：
+
+```text
+commit:  8fa360882fb0ed4af96ec68ab75e6cb802507752
+subject: backend: pair simple with LSU
+status:  SIGNED_OFF
+```
+
+Issue 现在接受 `PAIR_SIMPLE_LSU` 与 `PAIR_LSU_SIMPLE`，仍然禁止包内 RAW/WAW、两个 LSU 共用单端口以及所有尚未开放的 MULDIV/bitman 类别。`reject_lsu_conflict` 与 `CSR_PERF_LSU_CONFLICT=0x7D1` 记录双 LSU 结构冲突；`CSR_PERF_LSU_PAIR=0x7CF` 只统计真正进入 dual resident 的 LSU pair，而不是随后由 legacy adapter 串行执行的双 uop bundle。
+
+dual resident 每包恰好一个 LSU，并复用 A5 的 `lsu_exec_unit`：同步 RF 数据到达后只产生一次 `start`；Load 只产生一次 request 并等待 `dmem_rvalid`，Store 在 EX 不产生物理写。LSU 完成后，两个 lane 的年龄/epoch、指令、PC、目的寄存器、simple 结果、地址、mask、Store data、Load metadata/response 一起进入注册 MEM resident。`mem_store_commit` 只在该 resident 的正常提交边界产生一次 Store 写脉冲；debug Store 事件也统一选择 legacy/dual 的真实提交事件。
+
+错位 LSU 在 MEM 形成精确同步异常：lane0 LAM/SAM 时退休 `0` 条并抑制 lane1；lane1 LAM/SAM 时只退休更老的 lane0。外部 redirect 会杀死两个 lane；若 Load request 已在途，则保持 `stale_response_pending`，在吞掉迟到 response 前同时阻塞 dual launch 与 legacy fallback，避免无 tag 单端口把旧 response 交给新 resident。正常 MEM resident 在提交同拍允许下一 dual bundle 同步读，或允许下一 legacy bundle 进入 adapter；2W→4R WB bypass 覆盖对刚退休 lane 的同拍依赖。
+
+分裂 dual/legacy 后端对长 resident 有实际切换成本，因此 Dispatch 使用可复现的成本门限：control pair 仍可直接进入 idle dual 域；孤立 LSU pair 走 legacy；只有已经处于 dual mode 且下一 bundle 是 simple+simple 时，LSU pair 才进入 dual resident。该策略不改变安全白名单，也不以关闭 A6.2 control pairing 隐藏回退；两种 LSU lane 顺序均由硬件与定向测试覆盖。
+
+定向与受影响回归：
+
+```text
+tests:   tb_perf_counters
+         tb_fetch_fifo_2wide
+         tb_issue_bundle_fifo
+         tb_if_sync_btb
+         tb_regfiles_4r2w
+         tb_a3_dual_backend
+         tb_a4_execute_units
+         tb_a6_simple_control
+         tb_a6_lsu_pair
+         tb_lsu_four_beat_load
+         tb_lsu_store_commit
+         tb_lsu_store_load_order
+         tb_lsu_exception_age
+result:  13/13 passed; compile/simulation 0 errors / 0 warnings
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-3-*-directed-final.log
+compile: F:\Tools\temp\riscv-dual-rebuild-a6-3-compile-final.log
+
+ISA:     rv32ui-p-{lw,lh,lhu,lb,lbu,sw,sh,sb}
+result:  8/8 passed
+logs:    F:\Tools\temp\riscv-dual-rebuild-a6-3-ui-*-final.log
+```
+
+`tb_a6_lsu_pair` 覆盖两种 lane 顺序的 Load/Store、四拍 Load hold、端口占用后重试、EX 无 Store 副作用、注册 MEM 单次 Store、同拍 MEM release/WB bypass、lane0 LAM、lane1 SAM、外部 kill 与 stale response quarantine。Issue/Dispatch 测试另外覆盖 LSU RAW、双 LSU 冲突、孤立 legacy fallback 和已建立 dual run 的 LSU admission。
+
+官方回归与九窗口：
+
+```text
+run_all.bat all: 78 passed / 0 failed; compile 0 errors / 0 warnings
+run_all log:     F:\Tools\temp\riscv-dual-rebuild-a6-3-run_all_all-final.log
+sink:            0x9D3BF787
+overall:         cycles=3007198, instret=2279454, ipc_x1000=757
+exact IPC:       0.757999306996081
+result:          PERF_BENCHMARK_PASSED; nine reports; exceptions=0
+compile log:     F:\Tools\temp\riscv-dual-rebuild-a6-3-nine-window-compile-final.log
+run log:         F:\Tools\temp\riscv-dual-rebuild-a6-3-nine-window-final.log
+protected HEX:   C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+| Window | Cycles | Instret | IPC x1000 | Dual | Single | LSU pair | Lane1 control | LSU conflict | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216028 | 216013 | 999 | 60001 | 96013 | 0 | 11999 | 0 | 0 |
+| MEXT | 190046 | 54016 | 284 | 10009 | 34016 | 0 | 0 | 0 | 0 |
+| BRANCH_RANDOM | 319213 | 245975 | 770 | 60481 | 148861 | 0 | 5793 | 0 | 0 |
+| BRANCH_REGULAR | 111050 | 96017 | 864 | 37512 | 27011 | 0 | 10501 | 0 | 0 |
+| BRANCH_SHORT | 117048 | 93015 | 794 | 42007 | 15013 | 0 | 3000 | 1 | 0 |
+| BRANCH_CALL | 204567 | 144022 | 704 | 36011 | 92292 | 0 | 11999 | 5 | 0 |
+| BRANCH_CAPACITY | 141971 | 69133 | 486 | 1032 | 70402 | 0 | 0 | 0 | 0 |
+| BRANCH_RETURN | 920166 | 760025 | 825 | 304009 | 152084 | 7998 | 55990 | 6 | 0 |
+| MEMORY | 787109 | 601238 | 763 | 184410 | 233334 | 0 | 0 | 3 | 0 |
+
+A6.2→A6.3 的真实退休数、sink、exceptions 和九窗口完成次数不变。overall cycles 增加 `7640`（`+0.255%`），精确 IPC 从 `0.759930` 降至 `0.757999`；其中 BRANCH_RETURN 的 `7998` 个真实 LSU pair 对应 cycles 增加 `7996`，MEMORY 则减少 `356` cycles。BRANCH_CALL 没有满足 RAW/WAW、单 LSU 和成本门限的 simple/LSU bundle，因此保持 A6.2 的 `204567` cycles；不能通过强行配对相关栈访问或关闭已签核 control pairing 来制造改善。该小幅成本来自 A6.3 原子 bundle 边界与分裂后端，已与最初无门限调度造成的结构性长驻留回退区分，并如实保留给后续统一调度阶段处理。
+
+签核时重新核对 protected HEX、六项冻结 benchmark 软件/HEX 与 A0 适配后的 `test/tb_top.sv`：全部 SHA256 与 12.2/17.3 相同，未重建软件、未修改 golden。下一子阶段是 A6.4 `simple + MULDIV` / `MULDIV + simple`。
