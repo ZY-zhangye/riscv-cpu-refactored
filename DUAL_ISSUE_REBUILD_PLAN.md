@@ -719,7 +719,7 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
 | A0 | SIGNED_OFF | 单发基线、完整 RTL 回归、九窗口夹具适配与 golden/sink 复现 | `run_all.bat all` 全通过；编译 0 error/0 warning；夹具 SHA256 不变；记录九窗口单发 cycles/instret/IPC；exceptions=0；不修改 golden |
 | A1 | SIGNED_OFF | IF0/IF1、同步双路 IROM、128 项同步双查询 BTB | PC/指令/预测 tag 对齐；lane0/lane1 taken、BTB 同址读写、JAL/JALR/return 定向测试通过；redirect/epoch 无旧路径执行 |
 | A2 | SIGNED_OFF | 2 push/2 pop Fetch FIFO、原子 Bundle FIFO、pairing-only Issue | full/empty/wrap、同拍 push/pop、redirect epoch、pop1 全覆盖；bundle 不拆分；RAW/WAW 与结构冲突规则正确 |
-| A3 | IN_PROGRESS | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
+| A3 | SIGNED_OFF | 同步 4R2W GPR、双 lane 数据通路、scoreboard 与 forwarding | x0、双写回、WB bypass、跨 bundle hazard、pending、hold/kill tag 对齐定向测试通过；双 ALU 回归通过 |
 | A4 | PENDING | 模块化 ALU/Branch/LSU/MUL/DIV 与局部 resident hold | 同一 uop 只 start/done 一次；hold 不覆盖 resident；kill 不启动或等待单元；branch/forwarding/MULDIV 定向测试通过 |
 | A5 | PENDING | 四拍 Load、两拍 Store、固定 EX/MEM、精确 MEM/commit | Load 请求/响应及 metadata 对齐；Store 只在 commit 写一次；异常年龄和 lane1 抑制正确；四项 LSU 定向测试通过 |
 | A6 | PENDING | 依次开放 simple、control、LSU、MULDIV 配对 | 每种配对独立提交并跑完整回归与九窗口；sink/exceptions 不变；lane1 不越过 lane0；记录双发率和拒绝原因 |
@@ -766,11 +766,15 @@ ROLLED_BACK  阶段失败并已回退到上一稳定提交
               - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.821, PASS
               - A2 IPC is an expected interim regression while the old Decode remains single-lane
               - next: A3 synchronous 4R2W GPR, dual-lane datapath and scoreboard
-2026-07-13  A3 IN_PROGRESS
+2026-07-13  A3 SIGNED_OFF
               - preserve the legacy backend for single/control/LSU/MULDIV while A4/A5 are pending
-              - add a drained-domain fast path for supported independent dual integer ALU bundles
+              - added a dual path for supported independent two-lane integer ALU bundles
               - implement synchronous 4R2W, 2W commit, WB read bypass and explicit stage scoreboard
-              - prohibit switching domains until adapter/ID/EX/MEM/WB or the dual ID/EX resident drains
+              - final legacy WB overlaps dual RF launch through same-edge bypass; dual commit may overlap younger legacy Decode intake
+              - scoreboard, dispatch and 4R2W directed tests passed; run_all.bat all passed 78/78
+              - nine-window: sink=0x9D3BF787, exceptions=0, IPC=0.815, PASS
+              - A3 remains an interim performance regression until the legacy backend is replaced in A4/A5
+              - next: A4 modular ALU/Branch/LSU/MUL/DIV and local resident hold
 ```
 
 ### 17.3 A0 签核记录
@@ -989,3 +993,99 @@ run log:     F:\Tools\temp\riscv-dual-rebuild-a2-nine-window-final.log
 A2 的真实退休数、sink、exceptions 和 branch mispredict 总数均与 A1 一致，新增 issue 计数器也在九窗口报告中产生非零值。IPC 从 `0.832` 降到 `0.821`，主要是 Fetch/Bundle 阶段边界和单 lane Decode adapter 仍需串行消费 bundle；该回退被如实保留，A3 完成真实双 lane Decode/执行后再判断前端 FIFO 的性能收益，不能把 A2 的 pairing 计数误称为双退休性能。
 
 签核时重新核对冻结夹具：`benchmark.c`、`startup.S`、`linker.ld`、`Makefile`、`out/inst.hex`、`out/data.hex` 六项 SHA256 均与 12.2 相同；A0 适配后的 `test/tb_top.sv` 保持 `77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701`。
+
+### 17.6 A3 签核记录
+
+实现提交：
+
+```text
+commit:  fb67141c70c48f53dac33d44073ad719ee49bea3
+subject: backend: add synchronous dual ALU path
+```
+
+实现边界：
+
+- GPR 增加两个架构写口和四个同步读口；A3 双 lane 在 bundle launch 边沿同时发起四读，下一拍 ID/EX resident 与四路数据严格对齐。
+- 两写口同地址时显式规定年轻的 write1 优先；正常 pairing 已禁止 WAW。两个写口都忽略 `x0`，同步读 `x0` 恒为 0。
+- 同拍 WB→同步读采用 write1、write0、array 的固定优先级。相邻 dual bundle 的 ready ALU producer 通过该旁路直接供下一 bundle，避免读取旧 GPR 值。
+- `dual_scoreboard` 提供六个从年轻到年老的 EX1/EX0/MEM1/MEM0/WB1/WB0 producer 槽；匹配最年轻 producer，`pending` 或 `!result_valid` 时阻塞，ready 时给出 forwarding select，kill producer 不参与依赖。
+- A3 快速路径仅接受真正的双 lane、independent、受支持基础整数 ALU bundle：LUI、AUIPC、标准 OP-IMM，以及非 M、非 bitman 的标准 OP。单条 simple、控制流、LSU、MULDIV、CSR/FPU 和 bitman 继续走 legacy backend。
+- 双 ALU 支持 ADD/SUB、逻辑、比较、立即数和移位；SRA/SRAI 使用显式有符号分支，避免有符号/无符号三元表达式改变算术右移语义。
+- Bundle FIFO 增加一个 lookahead。尚未进入 dual mode 时只有连续两个可支持双 bundle 才切换；进入后跨短暂 FIFO 空档保持 mode。长延迟 legacy producer 会启动四 bundle cooldown，避免在 MULDIV/LSU 周围为孤立 ALU 片段反复排空切换。
+- legacy adapter/ID/EX/MEM 排空后允许 final legacy WB 与 dual 同拍 RF launch，依靠 WB bypass 对齐；dual resident 本拍提交时允许下一条 legacy uop 同边沿进入 Decode，但两域禁止同拍退休，且同一 bundle 禁止被两域同时选择。
+- dual commit 把 `retire_count=2` 送入标准/perf `instret`；新增 `CSR_PERF_RESULT_DEP=0x7D5` 记录已识别的跨 bundle result dependency。
+
+定向测试：
+
+```text
+test:    tb_regfiles_4r2w
+result:  REGFILES 4R2W TEST PASSED
+test:    tb_a3_dual_backend
+result:  A3 DUAL BACKEND TEST PASSED
+test:    tb_perf_counters
+result:  PERF COUNTER TEST PASSED
+test:    tb_fetch_fifo_2wide
+result:  FETCH FIFO 2WIDE TEST PASSED
+test:    tb_issue_bundle_fifo
+result:  ISSUE BUNDLE FIFO TEST PASSED
+test:    tb_if_sync_btb
+result:  IF SYNC BTB TEST PASSED
+compile: QuestaSim 2024.1, 0 errors / 0 warnings
+sim:     all six tests, 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a3-directed-final.log
+```
+
+覆盖点：
+
+- 4R2W GPR 双写、四路同步读、同拍 WB bypass、`x0`、read hold、write1 WAW 优先；
+- 连续双 ALU bundle、跨 bundle 同时依赖前一 bundle 两个结果、双写回与双退休；
+- LUI/AUIPC、ADD/SUB、负数 SRA/SRAI，以及 PC/inst/age/epoch tag 对齐；
+- redirect 抑制 resident pair 的 GPR 写和退休；
+- scoreboard pending 阻塞、ready forwarding、kill 忽略、最年轻 pending producer 不得被更老 ready producer 绕过；
+- dispatch lookahead、dual-mode 保持、legacy cooldown、single/MUL 回 legacy、旧域未排空时不切入 dual、dual→legacy 同边沿有序交接；
+- assertion：同一 bundle 不得双选两个 backend，legacy/dual 不得同拍退休，双 lane age/epoch 必须一致。
+
+官方回归：
+
+```text
+command: cmd /c "run_all.bat all < nul"
+result:  78 passed / 0 failed
+detail:  1 tb_perf_counters + 77 ISA tests
+compile: 0 errors / 0 warnings
+log:     F:\Tools\temp\riscv-dual-rebuild-a3-run_all_all-final.log
+tightest observed UM test: rv32um-p-mul passed at 9.81 us under the unchanged 10 us timeout
+protected HEX after restore:
+         C38DEA691298129419760AC66F9AED5D54846B182B05E33A817C3B996D280AA3
+```
+
+九窗口签核：
+
+| Window | Cycles | Instret | IPC x1000 | Brmisp | Result dependency | Exceptions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ALU | 216029 | 216013 | 999 | 2 | 12002 | 0 |
+| MEXT | 190041 | 54016 | 284 | 4 | 0 | 0 |
+| BRANCH_RANDOM | 324355 | 245975 | 758 | 9475 | 24000 | 0 |
+| BRANCH_REGULAR | 111046 | 96017 | 864 | 1505 | 1501 | 0 |
+| BRANCH_SHORT | 117046 | 93015 | 794 | 3005 | 23999 | 0 |
+| BRANCH_CALL | 196442 | 144022 | 733 | 4061 | 0 | 0 |
+| BRANCH_CAPACITY | 141968 | 69133 | 486 | 1152 | 0 | 0 |
+| BRANCH_RETURN | 848131 | 760025 | 896 | 16 | 1 | 0 |
+| MEMORY | 649046 | 601238 | 926 | 185 | 2 | 0 |
+| **Overall** | **2794104** | **2279454** | **815** | **19405** | **61505** | **0** |
+
+```text
+command: vlog -sv +define+PERF_BENCH +define+DEBUG_EN ...
+header:      version=5, cpu_freq_hz=125000000, sink=0x9D3BF787
+result:      PERF_BENCHMARK_PASSED
+A2 overall:  cycles=2773439, instret=2279454, ipc_x1000=821
+A3 overall:  cycles=2794104, instret=2279454, ipc_x1000=815
+IPC change:  -6 x1000 (-0.73%)
+compile log: F:\Tools\temp\riscv-dual-rebuild-a3-nine-window-compile-final.log
+run log:     F:\Tools\temp\riscv-dual-rebuild-a3-nine-window-final.log
+```
+
+A3 的真实退休数、sink、exceptions、branch mispredict 总数均与 A2 一致，九窗口产生 `61505` 次 ready result dependency 观测。整体 IPC 从 `0.821` 降到 `0.815`：当前只把可支持的双 ALU pair 送到新路径，而 single/control/LSU/MULDIV/bitman 仍走 legacy，域间排空、lookahead 和 cooldown 的开销尚未被 A4/A5 的统一双 lane 后端抵消。该回退被保留为 A4 的性能基线，不作为关闭顺序保护或扩大不安全配对的理由。
+
+诊断期间曾遗漏 `+define+PERF_BENCH`，从 `0x8000_0000` 启动后使 AUIPC 软件栈落到未映射的 `0xE000_xxxx`，从而复现历史错误 sink `0x4A27AD51`。这不是有效的九窗口签核配置；未修改 golden，最终记录只采用本节明确列出的 PERF_BENCH 编译命令。
+
+签核时再次核对冻结夹具：六项软件/HEX SHA256 与 12.2 相同；`test/tb_top.sv` 保持 A0 适配后的 `77F2DABDCA7F9E0A7B179A8EA0FA9FE7FD031BD2EFBCF68A0F6067C7E0E59701`。
