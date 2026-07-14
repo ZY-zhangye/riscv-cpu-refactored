@@ -1,5 +1,7 @@
 `include "defines.svh"
-module exe_stage(
+module exe_stage #(
+    parameter bit SECONDARY_LANE = 1'b0
+)(
     input logic clk,
     input logic rst_n,
     //握手信号
@@ -163,10 +165,10 @@ module exe_stage(
                     ds_exc_bus_r <= skid_ds_exc_bus;
                     exe_result_reg <= skid_exe_result;
                     exe_result1_reg <= skid_exe_result1;
-                    csr_wdata_reg <= skid_csr_wdata;
+                    csr_wdata_reg <= SECONDARY_LANE ? 32'b0 : skid_csr_wdata;
                     mem_result_reg <= skid_mem_result;
                     mem_result1_reg <= skid_mem_result1;
-                    reg_fpu_data3_reg <= skid_reg_fpu_data3;
+                    reg_fpu_data3_reg <= SECONDARY_LANE ? 32'b0 : skid_reg_fpu_data3;
                 end else begin
                     es_valid <= es_in_fire;
                     if (es_in_fire) begin
@@ -175,10 +177,10 @@ module exe_stage(
                         ds_exc_bus_r <= ds_exc_bus;
                         exe_result_reg <= forward_ex_result0;
                         exe_result1_reg <= forward_ex_result1;
-                        csr_wdata_reg <= csr_wdata;
+                        csr_wdata_reg <= SECONDARY_LANE ? 32'b0 : csr_wdata;
                         mem_result_reg <= forward_mem_result0;
                         mem_result1_reg <= forward_mem_result1;
-                        reg_fpu_data3_reg <= reg_fpu_data3;
+                        reg_fpu_data3_reg <= SECONDARY_LANE ? 32'b0 : reg_fpu_data3;
                     end
                 end
             end else if (es_in_fire && !skid_valid) begin
@@ -187,10 +189,10 @@ module exe_stage(
                 skid_ds_exc_bus <= ds_exc_bus;
                 skid_exe_result <= forward_ex_result0;
                 skid_exe_result1 <= forward_ex_result1;
-                skid_csr_wdata <= csr_wdata;
+                skid_csr_wdata <= SECONDARY_LANE ? 32'b0 : csr_wdata;
                 skid_mem_result <= forward_mem_result0;
                 skid_mem_result1 <= forward_mem_result1;
-                skid_reg_fpu_data3 <= reg_fpu_data3;
+                skid_reg_fpu_data3 <= SECONDARY_LANE ? 32'b0 : reg_fpu_data3;
             end
         end
     end
@@ -443,6 +445,9 @@ module exe_stage(
     mul u_mul (
         .clk(clk),
         .rst_n(rst_n),
+        .op_valid(es_valid && !es_flush),
+        .op_accept(es_valid && es_ready_go && ms_allowin && !es_flush),
+        .op_kill(es_flush),
         .is_mul(is_mul),
         .is_multicycle(is_multicycle),
         .mul_src1(src1),
@@ -466,19 +471,29 @@ module exe_stage(
     assign src3_fpu = (fpu_src3_fwd == 2'b01) ? exe_result_reg :
                       (fpu_src3_fwd == 2'b10) ? mem_result_reg :
                       reg_fpu_data3_reg;
-    fpu u_fpu (
-        .clk(clk),
-        .rst_n(rst_n),
-        .is_fpu(is_fpu),
-        .is_multicycle(is_multicycle),
-        .fpu_op(fpu_op),
-        .rm(rm),
-        .fpu_src1(src1_fpu),
-        .fpu_src2(src2_fpu),
-        .fpu_src3(src3_fpu),
-        .fpu_result(fpu_result),
-        .fpu_stall(fpu_stall)
-    );
+    generate
+        if (SECONDARY_LANE) begin : gen_no_secondary_fpu
+            // Lane1 is valid only for issue pairs; the issue matrix excludes
+            // FPU/CSR operations from that lane. Remove the unreachable FPU
+            // cone so it cannot pull the lane1 forwarding bank across the die.
+            assign fpu_result = 32'b0;
+            assign fpu_stall = 1'b0;
+        end else begin : gen_primary_fpu
+            fpu u_fpu (
+                .clk(clk),
+                .rst_n(rst_n),
+                .is_fpu(is_fpu),
+                .is_multicycle(is_multicycle),
+                .fpu_op(fpu_op),
+                .rm(rm),
+                .fpu_src1(src1_fpu),
+                .fpu_src2(src2_fpu),
+                .fpu_src3(src3_fpu),
+                .fpu_result(fpu_result),
+                .fpu_stall(fpu_stall)
+            );
+        end
+    endgenerate
 
     //MEM访问
     logic inst_lb, inst_sb, inst_lh, inst_sh, inst_lw, inst_sw,inst_lbu, inst_lhu;
@@ -533,8 +548,8 @@ module exe_stage(
     assign inst_csrrwi = csr_op == 3'b100 && csr_imm_sel == 1'b1;
     assign inst_csrrsi = csr_op == 3'b010 && csr_imm_sel == 1'b1;
     assign inst_csrrci = csr_op == 3'b001 && csr_imm_sel == 1'b1;
-    assign exe_csr_wen = es_valid && csr_wen && !es_flush;
-    assign exe_csr_addr = csr_waddr;
+    assign exe_csr_wen = !SECONDARY_LANE && es_valid && csr_wen && !es_flush;
+    assign exe_csr_addr = SECONDARY_LANE ? 12'b0 : csr_waddr;
     assign csr_wdata = inst_csrrw ? src1 :
                        inst_csrrs ? (csr_data | src1) :
                        inst_csrrc ? (csr_data & ~src1) :
@@ -610,26 +625,24 @@ module exe_stage(
     assign branch_mispredict_event = branch_event && br_redirect;
     //结果选择
     always_comb begin
-        exe_result = 32'b0;
-        if (!es_flush) begin
-            unique case (1'b1)
-                is_bitman: exe_result = bitman_result;
-                is_alu: exe_result = alu_result;
-                is_fpu: exe_result = fpu_result;
-                is_mem: exe_result = dmem_addr;
-                is_mul: exe_result = mul_result;
-                is_csr: exe_result = csr_data;
-                default: exe_result = exe_pc + 4; //默认写回PC+4，方便调试和实现JAL/JALR
-            endcase
-        end
+        unique case (1'b1)
+            is_bitman: exe_result = bitman_result;
+            is_alu: exe_result = alu_result;
+            (!SECONDARY_LANE && is_fpu): exe_result = fpu_result;
+            is_mem: exe_result = dmem_addr;
+            is_mul: exe_result = mul_result;
+            (!SECONDARY_LANE && is_csr): exe_result = csr_data;
+            default: exe_result = exe_pc + 4; //默认写回PC+4，方便调试和实现JAL/JALR
+        endcase
     end
 
     //数据前递接口
     assign exe_dest_addr = rd_addr;
     assign exe_regfile_wen = es_valid && regfile_wen && !es_flush;
-    assign exe_reg_fpu_wen = es_valid && reg_fpu_wen && !es_flush;
+    assign exe_reg_fpu_wen = !SECONDARY_LANE && es_valid && reg_fpu_wen && !es_flush;
     assign exe_load_pending = es_valid && !es_flush && exe_result_sel[0] &&
-                              (regfile_wen || reg_fpu_wen);
+                              (regfile_wen ||
+                               (!SECONDARY_LANE && reg_fpu_wen));
     assign exe_result_pending = es_valid && !es_flush && !es_ready_go;
     assign execute_stall_event = exe_result_pending;
 
@@ -653,11 +666,11 @@ module exe_stage(
         dmem_wdata, //32，store写数据，仅随流水线传递
         rd_addr,
         regfile_wen,
-        reg_fpu_wen,
+        SECONDARY_LANE ? 1'b0 : reg_fpu_wen,
         exe_result_sel,
         exe_csr_wen,
         exe_csr_addr,
-        csr_wdata
+        SECONDARY_LANE ? 32'b0 : csr_wdata
     };
 
     //异常接口

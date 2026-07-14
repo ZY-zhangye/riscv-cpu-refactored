@@ -387,9 +387,9 @@ module id_stage (
 
     //系统指令--opcode=1110011
     logic inst_ecall , inst_ebreak , inst_mret , inst_csrrw , inst_csrrs , inst_csrrc , inst_csrrwi , inst_csrrsi , inst_csrrci ;
-    assign inst_ecall  = is_system && f3_000 && id_inst[25:20] == 6'b000000;
-    assign inst_ebreak = is_system && f3_000 && id_inst[25:20] == 6'b000001;
-    assign inst_mret   = is_system && f3_000 && f7_0011000;
+    assign inst_ecall  = (id_inst == 32'h0000_0073);
+    assign inst_ebreak = (id_inst == 32'h0010_0073);
+    assign inst_mret   = (id_inst == 32'h3020_0073);
     assign inst_csrrw  = is_system && f3_001;
     assign inst_csrrs  = is_system && f3_010;
     assign inst_csrrc  = is_system && f3_011;

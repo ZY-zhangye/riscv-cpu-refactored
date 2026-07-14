@@ -29,6 +29,8 @@ echo.
 REM === L0 measurement infrastructure unit test ===
 call :run_unit_test tb_perf_counters perf_counters "PERF COUNTER TEST PASSED"
 if errorlevel 1 goto :fail
+call :run_unit_test tb_if_ras_recovery if_ras_recovery "IF_RAS_RECOVERY_TEST_PASSED"
+if errorlevel 1 goto :fail
 call :run_unit_test tb_issue_stage issue_stage "ISSUE_STAGE_TEST_PASSED"
 if errorlevel 1 goto :fail
 call :run_unit_test tb_mem_commit mem_commit "MEM_COMMIT_TEST_PASSED"

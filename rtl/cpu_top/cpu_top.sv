@@ -628,7 +628,9 @@ module cpu_top (
         end
     end
 
-    exe_stage u_exe_stage0 (
+    exe_stage #(
+        .SECONDARY_LANE(1'b0)
+    ) u_exe_stage0 (
         .clk(clk),
         .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid0),
@@ -689,7 +691,9 @@ module cpu_top (
         `endif
     );
 
-    exe_stage u_exe_stage1 (
+    exe_stage #(
+        .SECONDARY_LANE(1'b1)
+    ) u_exe_stage1 (
         .clk(clk),
         .rst_n(rst_n),
         .ds_to_es_valid(ds_to_es_valid1),

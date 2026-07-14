@@ -53,12 +53,12 @@ module if_stage (
     localparam BP_TAG_WIDTH = `ADDR_WIDTH - BP_INDEX_WIDTH - 2;
     localparam BP_ENTRY_WIDTH = 2 + 1 + BP_TAG_WIDTH + `ADDR_WIDTH;
 
-    // Three 1R1W copies give both fetch lanes and the update logic independent
-    // asynchronous read ports. Unlike the old fully-reset arrays, these infer
-    // distributed RAM instead of thousands of FFs plus 128:1 mux trees.
-    (* ram_style = "distributed" *)
+    // The two fetch copies use synchronous block-RAM reads. Their request
+    // addresses advance with the one-cycle IROM request, so the registered BTB
+    // entries, fs_pc and returned instructions describe the same packet.
+    (* ram_style = "block" *)
     logic [BP_ENTRY_WIDTH-1:0] bp_mem_lookup0 [0:BP_ENTRIES-1];
-    (* ram_style = "distributed" *)
+    (* ram_style = "block" *)
     logic [BP_ENTRY_WIDTH-1:0] bp_mem_lookup1 [0:BP_ENTRIES-1];
     (* ram_style = "distributed" *)
     logic [BP_ENTRY_WIDTH-1:0] bp_mem_update [0:BP_ENTRIES-1];
@@ -66,14 +66,17 @@ module if_stage (
     logic bp_valid_lookup1 [0:BP_ENTRIES-1];
     logic bp_valid_update [0:BP_ENTRIES-1];
 
+    logic [BP_INDEX_WIDTH-1:0] bp_request_index0;
+    logic [BP_INDEX_WIDTH-1:0] bp_request_index1;
     logic [BP_INDEX_WIDTH-1:0] bp_lookup_index0;
-    logic [BP_INDEX_WIDTH-1:0] bp_lookup_index1;
     logic [BP_TAG_WIDTH-1:0] bp_lookup_tag0;
     logic [BP_TAG_WIDTH-1:0] bp_lookup_tag1;
-    logic [BP_INDEX_WIDTH:0] bp_lookup_index1_ext;
+    logic lane1_index_wrap;
     logic [BP_ENTRY_WIDTH-1:0] bp_lookup_entry0;
     logic [BP_ENTRY_WIDTH-1:0] bp_lookup_entry1;
     logic [BP_ENTRY_WIDTH-1:0] bp_update_entry;
+    logic bp_lookup_valid0;
+    logic bp_lookup_valid1;
     logic [1:0] bp_lookup_counter0;
     logic [1:0] bp_lookup_counter1;
     logic [1:0] bp_update_counter;
@@ -134,18 +137,12 @@ module if_stage (
     logic        imem_word_carry1;
     logic [17:0] imem_hi_addr1;
 
+    assign bp_request_index0 = next_pc[BP_INDEX_WIDTH+1:2];
+    assign bp_request_index1 = bp_request_index0 + 1'b1;
     assign bp_lookup_index0 = fs_out_pc[BP_INDEX_WIDTH+1:2];
-    // Lane1 is the next word. Only the index-width increment is needed for
-    // the RAM address; the carry into the tag is handled explicitly below.
-    assign bp_lookup_index1_ext =
-        {1'b0, fs_out_pc[BP_INDEX_WIDTH+1:2]} + 1'b1;
-    assign bp_lookup_index1 = bp_lookup_index1_ext[BP_INDEX_WIDTH-1:0];
+    assign lane1_index_wrap = &bp_lookup_index0;
     assign bp_lookup_tag0 = fs_out_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
-    assign bp_lookup_tag1 =
-        fs_out_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2] +
-        bp_lookup_index1_ext[BP_INDEX_WIDTH];
-    assign bp_lookup_entry0 = bp_mem_lookup0[bp_lookup_index0];
-    assign bp_lookup_entry1 = bp_mem_lookup1[bp_lookup_index1];
+    assign bp_lookup_tag1 = bp_lookup_tag0;
     assign bp_update_entry = bp_mem_update[bp_update_index];
     assign {
         bp_lookup_counter0,
@@ -165,9 +162,10 @@ module if_stage (
         bp_update_entry_tag,
         bp_update_entry_target
     } = bp_update_entry;
-    assign bp_hit0 = bp_valid_lookup0[bp_lookup_index0] &&
+    assign bp_hit0 = bp_lookup_valid0 &&
                      (bp_lookup_entry_tag0 == bp_lookup_tag0);
-    assign bp_hit1 = bp_valid_lookup1[bp_lookup_index1] &&
+    assign bp_hit1 = !lane1_index_wrap &&
+                     bp_lookup_valid1 &&
                      (bp_lookup_entry_tag1 == bp_lookup_tag1);
     assign bp_pred_taken0 = bp_hit0 && bp_lookup_counter0[1];
     assign bp_pred_taken1 = bp_hit1 && bp_lookup_counter1[1];
@@ -270,6 +268,12 @@ module if_stage (
         if (!rst_n) begin
             br_taken_reg <= 1'b0;
             br_target_reg <= 32'b0;
+        end else if (exception_flag) begin
+            // A trap redirect is older than any branch currently leaving EX.
+            // Do not retain that younger branch for replay after the one-cycle
+            // exception pulse has cleared.
+            br_taken_reg <= 1'b0;
+            br_target_reg <= 32'b0;
         end else if (fs_allowin) begin
             br_taken_reg <= br_taken;
             br_target_reg <= br_target;
@@ -318,6 +322,36 @@ module if_stage (
             bp_mem_lookup0[bp_update_index] <= bp_update_entry_next;
             bp_mem_lookup1[bp_update_index] <= bp_update_entry_next;
             bp_mem_update[bp_update_index] <= bp_update_entry_next;
+        end
+    end
+
+    // Explicit write-through defines the read-during-write case independently
+    // of the inferred block-RAM mode. Holding fs_allowin also holds the IROM
+    // response, fs_pc and these BTB response registers together.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            bp_lookup_entry0 <= '0;
+            bp_lookup_entry1 <= '0;
+            bp_lookup_valid0 <= 1'b0;
+            bp_lookup_valid1 <= 1'b0;
+        end else if (fs_allowin) begin
+            if (bp_update_valid_r &&
+                (bp_update_index == bp_request_index0)) begin
+                bp_lookup_entry0 <= bp_update_entry_next;
+                bp_lookup_valid0 <= 1'b1;
+            end else begin
+                bp_lookup_entry0 <= bp_mem_lookup0[bp_request_index0];
+                bp_lookup_valid0 <= bp_valid_lookup0[bp_request_index0];
+            end
+
+            if (bp_update_valid_r &&
+                (bp_update_index == bp_request_index1)) begin
+                bp_lookup_entry1 <= bp_update_entry_next;
+                bp_lookup_valid1 <= 1'b1;
+            end else begin
+                bp_lookup_entry1 <= bp_mem_lookup1[bp_request_index1];
+                bp_lookup_valid1 <= bp_valid_lookup1[bp_request_index1];
+            end
         end
     end
 

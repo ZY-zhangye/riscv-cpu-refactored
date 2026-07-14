@@ -6,6 +6,14 @@ results/
 # Local build and Vivado generated artifacts
 build/
 vivado-project/
+.Xil/
+vivado*.jou
+vivado*.log
+clockInfo.txt
+tight_setup_hold_pins.txt
+
+# Local Questa library mapping
+modelsim.ini
 
 # Claude Code local settings
 .claude/

@@ -36,11 +36,27 @@ module regfile_csr (
 );
 
     logic [31:0] mstatus, misa, mtvec, mepc, mcause, mhartid, mie, mip, mtval, mvendorid, marchid, mimpid, mscratch;
+    logic [1:0] privilege_mode;
     logic mret_flag;
     logic external_irq_flag;
-    logic prev_exception_flag;
+    localparam logic [1:0] PRIV_U = 2'b00;
+    localparam logic [1:0] PRIV_S = 2'b01;
+    localparam logic [1:0] PRIV_M = 2'b11;
     assign mret_flag = exception_code == 7'b100_0000; //仅当异常代码为MRET指令引起的异常时mret_flag才为1
     assign external_irq_flag = exception_code == `PLIC_IRQ_BIT;
+    logic [4:0] architectural_exception_cause;
+    always_comb begin
+        architectural_exception_cause = exception_code[4:0];
+        // id_stage uses cause 11 as the internal ECALL marker. Resolve the
+        // architectural U/S/M cause at trap time from the current privilege.
+        if (!external_irq_flag && (exception_code[4:0] == 5'd11)) begin
+            case (privilege_mode)
+                PRIV_U: architectural_exception_cause = 5'd8;
+                PRIV_S: architectural_exception_cause = 5'd9;
+                default: architectural_exception_cause = 5'd11;
+            endcase
+        end
+    end
     logic [31:0] cycle;
     logic [31:0] instret;
     logic perf_enable;
@@ -211,32 +227,46 @@ module regfile_csr (
             marchid <= 32'b0;
             mimpid <= 32'b0;
             mscratch <= 32'b0;
-        end else if (csr_wen) begin
-            case (csr_waddr)
-                `CSR_MSTATUS: mstatus <= csr_wdata;
-                `CSR_MISA: misa <= csr_wdata;
-                `CSR_MTVEC: mtvec <= csr_wdata;
-                `CSR_MEPC: mepc <= csr_wdata;
-                `CSR_MCAUSE: mcause <= csr_wdata;
-                `CSR_MHARTID: mhartid <= csr_wdata;
-                `CSR_MIE: mie <= csr_wdata;
-                `CSR_MIP: mip <= csr_wdata;
-                `CSR_MTVAL: mtval <= csr_wdata;
-                `CSR_MVENDORID: mvendorid <= csr_wdata;
-                `CSR_MARCHID: marchid <= csr_wdata;
-                `CSR_MIMPID: mimpid <= csr_wdata;
-                `CSR_MSCRATCH: mscratch <= csr_wdata;
-                default: ;
-            endcase
-        end else if (exception_code[5]) begin
-            mepc <= csr_wdata; //当发生异常时将异常发生的指令地址写入mepc寄存器
-            mcause <= external_irq_flag ? {1'b1, 31'd11} : {27'b0, exception_code[4:0]}; //外部中断按RISC-V语义置mcause[31]
-            mtval <= external_irq_flag ? 32'b0 : exception_mtval; //中断不携带mtval
-            mstatus[7] <= mstatus[3]; // trap入口：MPIE保存进入trap前的MIE
-            mstatus[3] <= 1'b0; // trap入口：关闭MIE
-        end else if (mret_flag) begin
-            mstatus [3] <= mstatus[7]; //将mstatus寄存器中的MIE位恢复到MIE位之前的值
-            mstatus [7] <= 1'b1; //将mstatus寄存器中的MIE位设置为1，允许中断
+            privilege_mode <= PRIV_M;
+        end else begin
+            if (csr_wen) begin
+                case (csr_waddr)
+                    `CSR_MSTATUS: mstatus <= csr_wdata;
+                    `CSR_MISA: misa <= csr_wdata;
+                    `CSR_MTVEC: mtvec <= csr_wdata;
+                    `CSR_MEPC: mepc <= csr_wdata;
+                    `CSR_MCAUSE: mcause <= csr_wdata;
+                    `CSR_MHARTID: mhartid <= csr_wdata;
+                    `CSR_MIE: mie <= csr_wdata;
+                    `CSR_MIP: mip <= csr_wdata;
+                    `CSR_MTVAL: mtval <= csr_wdata;
+                    `CSR_MVENDORID: mvendorid <= csr_wdata;
+                    `CSR_MARCHID: marchid <= csr_wdata;
+                    `CSR_MIMPID: mimpid <= csr_wdata;
+                    `CSR_MSCRATCH: mscratch <= csr_wdata;
+                    default: ;
+                endcase
+            end
+
+            if (exception_code[5]) begin
+                mepc <= csr_wdata; //当发生异常时将异常发生的指令地址写入mepc寄存器
+                mcause <= external_irq_flag ? {1'b1, 31'd11} :
+                          {27'b0, architectural_exception_cause};
+                mtval <= external_irq_flag ? 32'b0 : exception_mtval;
+                mstatus[7] <= mstatus[3]; // trap入口：MPIE保存进入trap前的MIE
+                mstatus[3] <= 1'b0; // trap入口：关闭MIE
+                mstatus[12:11] <= privilege_mode; // trap入口保存陷阱前特权级
+                privilege_mode <= PRIV_M;
+            end else if (mret_flag) begin
+                mstatus[3] <= mstatus[7]; //将mstatus寄存器中的MIE位恢复到MIE位之前的值
+                mstatus[7] <= 1'b1; //将mstatus寄存器中的MIE位设置为1，允许中断
+                mstatus[12:11] <= PRIV_U; // MRET后MPP回到最低支持特权级
+                case (mstatus[12:11])
+                    PRIV_U: privilege_mode <= PRIV_U;
+                    PRIV_S: privilege_mode <= PRIV_S;
+                    default: privilege_mode <= PRIV_M;
+                endcase
+            end
         end
     end
 
@@ -290,17 +320,8 @@ module regfile_csr (
     end
 
     //异常标志和异常地址逻辑
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            prev_exception_flag <= 1'b0;
-        end else if (exception_code[5]) begin
-            prev_exception_flag <= 1'b1; //当发生异常时将prev_exception_flag置为1
-        end else if (mret_flag) begin
-            prev_exception_flag <= 1'b0; //当执行MRET指令时将prev_exception_flag清零
-        end
-    end
     logic mret_jmp_flag;
-    assign mret_jmp_flag = mret_flag && prev_exception_flag; //仅当mret_flag为1且之前发生过异常时mret_jmp_flag才为1
+    assign mret_jmp_flag = mret_flag;
     assign external_irq_enable = mstatus[3] && mie[11]; //MIE与MEIE同时有效时才响应PLIC外部中断
 
     // Register the global trap/mret redirect before it fans out to IF and all

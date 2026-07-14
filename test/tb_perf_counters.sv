@@ -283,6 +283,40 @@ module tb_perf_counters;
             $fatal(1, "mret redirect pulse did not clear");
         end
 
+        // MRET with MPP=U enters user mode. The internal ECALL marker must be
+        // converted to architectural cause 8, while EBREAK remains cause 3.
+        drive_cycle(1'b1, `CSR_MSTATUS, 32'h0000_0080,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        drive_cycle(1'b0, 12'b0, 32'b0,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, 7'b100_0000);
+        if (!exception_flag || (exception_addr != 32'h8000_0080)) begin
+            $fatal(1, "standalone mret redirect mismatch");
+        end
+        drive_cycle(1'b0, 12'b0, 32'b0,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, `EXC_NONE);
+        if (exception_flag) begin
+            $fatal(1, "standalone mret redirect pulse did not clear");
+        end
+        drive_cycle(1'b0, 12'b0, 32'h8000_01e0,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, 7'b010_1011);
+        expect_csr(`CSR_MCAUSE,  32'd8, "user_ecall_mcause");
+        expect_csr(`CSR_MEPC,    32'h8000_01e0, "user_ecall_mepc");
+        expect_csr(`CSR_MSTATUS, 32'h0000_0080, "user_ecall_mstatus");
+
+        drive_cycle(1'b0, 12'b0, 32'b0,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, 7'b100_0000);
+        drive_cycle(1'b0, 12'b0, 32'h8000_01a0,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, 7'b010_0011);
+        expect_csr(`CSR_MCAUSE, 32'd3, "user_ebreak_mcause");
+        expect_csr(`CSR_MEPC,   32'h8000_01a0, "user_ebreak_mepc");
+
+        // Trap entry returned the core to M mode. A subsequent ECALL must use
+        // the machine-mode architectural cause.
+        drive_cycle(1'b0, 12'b0, 32'h8000_0204,
+                    2'd0, 1'b0, 1'b0, 1'b0, 1'b0, 7'b010_1011);
+        expect_csr(`CSR_MCAUSE, 32'd11, "machine_ecall_mcause");
+        expect_csr(`CSR_MEPC,   32'h8000_0204, "machine_ecall_mepc");
+
         $display("PERF COUNTER TEST PASSED");
         $finish;
     end
