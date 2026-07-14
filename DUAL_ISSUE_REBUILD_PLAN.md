@@ -2736,3 +2736,62 @@ clean library:        F:\Tools\Temp\questa_perf_a76_clean2\work
 ```
 
 二分前的完整版本还曾完成官方 `78/78`；本轮从 OOC 输入快照恢复后重新完成干净全量编译、九窗口 direct/profile 与 9 项受影响定向测试。`dual_alu_pipeline` 因此关闭为单模块 OOC/功能通过，但 A7.6 整体仍保持 `IN_PROGRESS`，下一步进入 `if_stage`，不得把 `+0.781 ns` 等同于全核实现后余量。
+
+#### 17.10.13 A7.6.2 if_stage 低风险 BTB 物理组织修复
+
+```text
+module:                 if_stage
+status:                 OOC ROUTE PASS WITH LOW MARGIN
+A7.6 overall status:    IN_PROGRESS
+original synth WNS:     -1.021 ns
+current synth WNS:      +0.212 ns
+current routed WNS:     +0.272 ns
+routed data path:       4.700 ns (logic 0.813 ns, route 3.887 ns)
+routed logic levels:    10
+route share:            82.702%
+functional status:      DIRECT/PROFILE/IF-DIRECTED PASS
+```
+
+原始 BTB 的 tag/counter/target/type 两份查询副本全部由带同步 reset 的寄存器数组实现，导致 `9634 LUT / 8836 FF`，没有任何 LUTRAM/BRAM 推断。最差路径为 `req_pc` 经 lane1 完整 `+4` tag 进位、BTB hit、next-PC，再进入下一请求的 BTB 查询寄存器，WNS `-1.021 ns`。
+
+保留的低风险修复不增加取指拍数：
+
+1. 将每项 `{tag, counter, target, type}` 打包为 60-bit payload；两份查询副本使用同步 distributed RAM，一份更新 shadow 使用异步 distributed RAM完成饱和计数器 read/modify/write。只有 valid bitmap 保持可同步清零的 FF 状态，payload 在 invalid 时为 don't-care。
+2. 查询 payload 寄存器每拍更新，`req_valid/q_valid` 决定该数据是否属于有效 IROM response，去掉宽 payload 的保持 CE；同地址 predictor update 继续显式 write-through。
+3. lane1 BTB tag 不再计算完整 `req_pc+4`。当 128-entry index 回绕时只抑制该次 lane1 BTB hit，顺序取指仍正常；因此每 128 个 word 最多放弃一次可选 lane1 预测机会，不改变架构正确性。
+4. instruction interface、连续同拍 response/request bypass、Fetch FIFO packet、RAS、redirect、LSU 四拍和后端均未修改。
+
+资源结果：
+
+| Resource | Original | Current | Delta |
+| --- | ---: | ---: | ---: |
+| Slice LUT | 9634 | 约 2121 | -7513 |
+| Slice FF | 8836 | 1155 | -7681 |
+| LUTRAM LUT | 0 | 370 | +370 |
+| CARRY4 | 70 | 62 | -8 |
+
+曾评估但未保留的方案：
+
+- valid RAM 后台 128-cycle clear 会改变复位后早期 predictor training，`tb_if_sync_btb` 立即失败，已回退。
+- 两份 lookup 强制 Block RAM 虽降至 `2 RAMB36 + 50 LUTRAM LUT`，但 1.8 ns BRAM clock-to-out 进入连续预测环，WNS 恶化到 `-2.397 ns`，已回退。
+- 单独重写 7-bit next lookup index 被综合成高扇出局部网络，WNS 从 `+0.212 ns` 降至 `+0.182 ns`，已回退。
+
+功能与性能签核：
+
+```text
+compile:              0 errors / 0 warnings
+tb_if_sync_btb:       PASS
+direct benchmark:     PERF_BENCHMARK_PASSED
+profile wrapper:      PERF_BENCHMARK_PASSED
+direct/profile:       all nine reports, overall, sink and PASS identical
+overall:              cycles=2077216, instret=2279454, ipc_x1000=1097
+exact IPC:            1.0973601204689354
+sink:                 0x9D3BF787
+exceptions:           0
+synth report:         F:\RISCV_CPU_Vivado_20260703\quick_synth_dual_modules_200m\if_stage
+routed probe:         F:\RISCV_CPU_Vivado_20260703\quick_synth_dual_modules_200m\if_stage_placed_probe
+```
+
+路由后的最差路径仍是 `btb_q_entry0 tag -> lane0 hit -> predicted next PC -> next lane1 BTB lookup entry`。这说明剩余瓶颈是连续预测的真实循环，而非 IROM instruction data decode；当前 `inst_in/inst_in1` 不参与 next-PC 选择。整体 SoC 仍必须检查 `if_stage/pc_out -> IROM BRAM address` 跨模块路径：IROM 应直接用 BRAM 地址寄存器作为本拍终点、只消费实际 word-index 位，并与 IF 区域相邻；SoC 不得额外增加地址或数据拍，否则会破坏固定一拍 instruction response。
+
+当前 routed WNS `+0.272 ns` 已通过 200 MHz，但明显低于期望的约 `0.8 ns` 裸模块护栏，因此不标记为完全关闭。若继续提升且保持 IPC，需要评估多候选 BTB 预读副本，把 tag-hit 只用于下一拍 candidate select；若接受 taken-branch penalty，则可增加 predictor pipeline。两者均属于下一项架构决策，不再是低风险表达式重构。

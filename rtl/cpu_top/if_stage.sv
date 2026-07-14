@@ -33,6 +33,8 @@ module if_stage (
     localparam integer BTB_INDEX_WIDTH = 7;
     localparam integer BTB_ENTRIES = 1 << BTB_INDEX_WIDTH;
     localparam integer BTB_TAG_WIDTH = `ADDR_WIDTH - BTB_INDEX_WIDTH - 2;
+    localparam integer BTB_ENTRY_WIDTH = BTB_TAG_WIDTH + 2 +
+                                         `ADDR_WIDTH + `BP_TYPE_WIDTH;
     localparam integer RAS_DEPTH = 8;
 
     logic [`FETCH_EPOCH_WIDTH-1:0] if_epoch;
@@ -88,17 +90,22 @@ module if_stage (
 
     logic [BTB_ENTRIES-1:0] btb_valid0;
     logic [BTB_ENTRIES-1:0] btb_valid1;
-    logic [BTB_TAG_WIDTH-1:0] btb_tag0 [0:BTB_ENTRIES-1];
-    logic [BTB_TAG_WIDTH-1:0] btb_tag1 [0:BTB_ENTRIES-1];
-    logic [1:0] btb_counter0 [0:BTB_ENTRIES-1];
-    logic [1:0] btb_counter1 [0:BTB_ENTRIES-1];
-    logic [`ADDR_WIDTH-1:0] btb_target0 [0:BTB_ENTRIES-1];
-    logic [`ADDR_WIDTH-1:0] btb_target1 [0:BTB_ENTRIES-1];
-    logic [`BP_TYPE_WIDTH-1:0] btb_type0 [0:BTB_ENTRIES-1];
-    logic [`BP_TYPE_WIDTH-1:0] btb_type1 [0:BTB_ENTRIES-1];
+    logic [BTB_ENTRIES-1:0] btb_valid_update;
+    // The lookup copies have one synchronous read and one update write each.
+    // The small distributed shadow supplies the asynchronous read needed by
+    // the saturating-counter read/modify/write path.  Payload RAMs are not
+    // reset; validity is the architectural reset state.
+    (* ram_style = "distributed" *)
+    logic [BTB_ENTRY_WIDTH-1:0] btb_lookup_mem0 [0:BTB_ENTRIES-1];
+    (* ram_style = "distributed" *)
+    logic [BTB_ENTRY_WIDTH-1:0] btb_lookup_mem1 [0:BTB_ENTRIES-1];
+    (* ram_style = "distributed" *)
+    logic [BTB_ENTRY_WIDTH-1:0] btb_update_mem [0:BTB_ENTRIES-1];
 
     logic btb_q_valid0;
     logic btb_q_valid1;
+    logic [BTB_ENTRY_WIDTH-1:0] btb_q_entry0;
+    logic [BTB_ENTRY_WIDTH-1:0] btb_q_entry1;
     logic [BTB_TAG_WIDTH-1:0] btb_q_tag0;
     logic [BTB_TAG_WIDTH-1:0] btb_q_tag1;
     logic [1:0] btb_q_counter0;
@@ -124,9 +131,13 @@ module if_stage (
     logic [BTB_INDEX_WIDTH-1:0] request_index0;
     logic [BTB_INDEX_WIDTH-1:0] request_index1;
     logic [`ADDR_WIDTH-1:0] request_pc1;
-    logic [`ADDR_WIDTH-1:0] req_pc1;
+    logic lane1_index_wrap;
     logic [BTB_INDEX_WIDTH-1:0] update_index;
     logic [BTB_TAG_WIDTH-1:0] update_tag;
+    logic [BTB_ENTRY_WIDTH-1:0] update_entry;
+    logic [BTB_ENTRY_WIDTH-1:0] update_entry_next;
+    logic [BTB_TAG_WIDTH-1:0] update_entry_tag;
+    logic [1:0] update_entry_counter;
     logic update_tag_match;
     logic [1:0] update_counter_next;
 
@@ -205,88 +216,102 @@ module if_stage (
     assign frontend_redirect = redirect_event;
 
     assign request_pc1 = request_pc + 32'd4;
-    assign req_pc1 = req_pc + 32'd4;
     assign request_index0 = request_pc[BTB_INDEX_WIDTH+1:2];
     assign request_index1 = request_pc1[BTB_INDEX_WIDTH+1:2];
+    assign lane1_index_wrap = &req_pc[BTB_INDEX_WIDTH+1:2];
     assign update_index = bp_update_pc[BTB_INDEX_WIDTH+1:2];
     assign update_tag = bp_update_pc[`ADDR_WIDTH-1:BTB_INDEX_WIDTH+2];
-    assign update_tag_match = btb_valid0[update_index] &&
-                              (btb_tag0[update_index] == update_tag);
+    assign update_entry = btb_update_mem[update_index];
+    assign {update_entry_tag, update_entry_counter} =
+        update_entry[BTB_ENTRY_WIDTH-1 -: BTB_TAG_WIDTH+2];
+    assign update_tag_match = btb_valid_update[update_index] &&
+                              (update_entry_tag == update_tag);
     assign update_counter_next = update_tag_match ?
-                                 counter_update(btb_counter0[update_index],
+                                 counter_update(update_entry_counter,
                                                 bp_update_taken) :
                                  (bp_update_taken ? 2'b10 : 2'b01);
+    assign update_entry_next = {
+        update_tag,
+        update_counter_next,
+        bp_update_target,
+        bp_update_type
+    };
+
+    assign {
+        btb_q_tag0,
+        btb_q_counter0,
+        btb_q_target0,
+        btb_q_type0
+    } = btb_q_entry0;
+    assign {
+        btb_q_tag1,
+        btb_q_counter1,
+        btb_q_target1,
+        btb_q_type1
+    } = btb_q_entry1;
 
     // Both BTB copies are updated together.  A query colliding with an update
     // to the same index observes the new entry (explicit write-through).
-    always_ff @(posedge clk) begin : btb_state
-        integer i;
+    always_ff @(posedge clk) begin : btb_valid_state
         if (!rst_n) begin
             btb_valid0 <= '0;
             btb_valid1 <= '0;
+            btb_valid_update <= '0;
+        end else if (bp_update_valid) begin
+            btb_valid0[update_index] <= 1'b1;
+            btb_valid1[update_index] <= 1'b1;
+            btb_valid_update[update_index] <= 1'b1;
+        end
+    end
+
+    // Query payload registers update every cycle.  req_valid/q_valid determine
+    // whether the data belongs to a live IROM response, so holding stale query
+    // metadata is unnecessary and would add a wide CE mux to this path.
+    always_ff @(posedge clk) begin : btb_lookup_ram0
+        if (bp_update_valid) begin
+            btb_lookup_mem0[update_index] <= update_entry_next;
+        end
+        if (!rst_n) begin
+            btb_q_entry0 <= '0;
+        end else if (bp_update_valid &&
+                     (update_index == request_index0)) begin
+            btb_q_entry0 <= update_entry_next;
+        end else begin
+            btb_q_entry0 <= btb_lookup_mem0[request_index0];
+        end
+    end
+
+    always_ff @(posedge clk) begin : btb_lookup_ram1
+        if (bp_update_valid) begin
+            btb_lookup_mem1[update_index] <= update_entry_next;
+        end
+        if (!rst_n) begin
+            btb_q_entry1 <= '0;
+        end else if (bp_update_valid &&
+                     (update_index == request_index1)) begin
+            btb_q_entry1 <= update_entry_next;
+        end else begin
+            btb_q_entry1 <= btb_lookup_mem1[request_index1];
+        end
+    end
+
+    always_ff @(posedge clk) begin : btb_update_shadow_write
+        if (bp_update_valid) begin
+            btb_update_mem[update_index] <= update_entry_next;
+        end
+    end
+
+    always_ff @(posedge clk) begin : btb_lookup_state
+        if (!rst_n) begin
             btb_q_valid0 <= 1'b0;
             btb_q_valid1 <= 1'b0;
-            btb_q_tag0 <= '0;
-            btb_q_tag1 <= '0;
-            btb_q_counter0 <= 2'b01;
-            btb_q_counter1 <= 2'b01;
-            btb_q_target0 <= '0;
-            btb_q_target1 <= '0;
-            btb_q_type0 <= `BP_TYPE_BRANCH;
-            btb_q_type1 <= `BP_TYPE_BRANCH;
-            for (i = 0; i < BTB_ENTRIES; i = i + 1) begin
-                btb_tag0[i] <= '0;
-                btb_tag1[i] <= '0;
-                btb_counter0[i] <= 2'b01;
-                btb_counter1[i] <= 2'b01;
-                btb_target0[i] <= '0;
-                btb_target1[i] <= '0;
-                btb_type0[i] <= `BP_TYPE_BRANCH;
-                btb_type1[i] <= `BP_TYPE_BRANCH;
-            end
         end else begin
-            if (bp_update_valid) begin
-                btb_valid0[update_index] <= 1'b1;
-                btb_valid1[update_index] <= 1'b1;
-                btb_tag0[update_index] <= update_tag;
-                btb_tag1[update_index] <= update_tag;
-                btb_counter0[update_index] <= update_counter_next;
-                btb_counter1[update_index] <= update_counter_next;
-                btb_target0[update_index] <= bp_update_target;
-                btb_target1[update_index] <= bp_update_target;
-                btb_type0[update_index] <= bp_update_type;
-                btb_type1[update_index] <= bp_update_type;
-            end
-
-            if (request_fire) begin
-                if (bp_update_valid && (update_index == request_index0)) begin
-                    btb_q_valid0 <= 1'b1;
-                    btb_q_tag0 <= update_tag;
-                    btb_q_counter0 <= update_counter_next;
-                    btb_q_target0 <= bp_update_target;
-                    btb_q_type0 <= bp_update_type;
-                end else begin
-                    btb_q_valid0 <= btb_valid0[request_index0];
-                    btb_q_tag0 <= btb_tag0[request_index0];
-                    btb_q_counter0 <= btb_counter0[request_index0];
-                    btb_q_target0 <= btb_target0[request_index0];
-                    btb_q_type0 <= btb_type0[request_index0];
-                end
-
-                if (bp_update_valid && (update_index == request_index1)) begin
-                    btb_q_valid1 <= 1'b1;
-                    btb_q_tag1 <= update_tag;
-                    btb_q_counter1 <= update_counter_next;
-                    btb_q_target1 <= bp_update_target;
-                    btb_q_type1 <= bp_update_type;
-                end else begin
-                    btb_q_valid1 <= btb_valid1[request_index1];
-                    btb_q_tag1 <= btb_tag1[request_index1];
-                    btb_q_counter1 <= btb_counter1[request_index1];
-                    btb_q_target1 <= btb_target1[request_index1];
-                    btb_q_type1 <= btb_type1[request_index1];
-                end
-            end
+            btb_q_valid0 <= request_fire &&
+                ((bp_update_valid && (update_index == request_index0)) ||
+                 btb_valid0[request_index0]);
+            btb_q_valid1 <= request_fire &&
+                ((bp_update_valid && (update_index == request_index1)) ||
+                 btb_valid1[request_index1]);
         end
     end
 
@@ -376,8 +401,12 @@ module if_stage (
 
     assign btb_hit0 = btb_q_valid0 &&
                       (btb_q_tag0 == req_pc[`ADDR_WIDTH-1:BTB_INDEX_WIDTH+2]);
-    assign btb_hit1 = btb_q_valid1 &&
-                      (btb_q_tag1 == req_pc1[`ADDR_WIDTH-1:BTB_INDEX_WIDTH+2]);
+    // At the single 128-word boundary, suppress lane1 prediction instead of
+    // carrying +4 through the full PC tag.  Sequential fetch remains correct;
+    // only that boundary's optional lane1 prediction opportunity is skipped.
+    assign btb_hit1 = !lane1_index_wrap && btb_q_valid1 &&
+                      (btb_q_tag1 ==
+                       req_pc[`ADDR_WIDTH-1:BTB_INDEX_WIDTH+2]);
     assign pred_taken0 = btb_hit0 &&
                          ((btb_q_type0 != `BP_TYPE_BRANCH) ||
                           btb_q_counter0[1]);
