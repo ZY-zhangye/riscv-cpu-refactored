@@ -8,6 +8,13 @@
  */
 #define CLK_FREQ_HZ      50000000u
 
+#ifndef BENCH_UART_OUTPUT
+#define BENCH_UART_OUTPUT 0
+#endif
+
+#define PERF_RESULT_MAGIC   0x50455246u /* "PERF" */
+#define PERF_RESULT_VERSION 1u
+
 /*
  * ===================== UART 地址映射与寄存器定义 =====================
  * UART 模块在 AXI 总线上的基地址为 0x80010000。下面定义的是相对于基地址的寄存器偏移。
@@ -98,6 +105,23 @@
  */
 static volatile uint32_t g_sink;
 static uint32_t g_mem[MEM_WORDS];
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t alu_cycles;
+    uint32_t alu_instret;
+    uint32_t branch_cycles;
+    uint32_t branch_instret;
+    uint32_t memory_cycles;
+    uint32_t memory_instret;
+    uint32_t total_cycles;
+    uint32_t total_instret;
+    uint32_t sink;
+} perf_result_t;
+
+static volatile perf_result_t g_perf_result
+    __attribute__((section(".perf_results"), used));
 
 static inline void mmio_write(uint32_t addr, uint32_t value) {
     *((volatile uint32_t *)addr) = value;
@@ -292,13 +316,17 @@ int main(void) {
     uint32_t branch_cycles = 0, branch_instret = 0;
     uint32_t memory_cycles = 0, memory_instret = 0;
 
-    uart_init(115200u);
-    uart_puts("\n=== RISC-V Simulation Performance Benchmark (Independent) ===\n");
-    uart_puts("Clock(Hz): ");
-    uart_put_u32(CLK_FREQ_HZ);
-    uart_puts("\nScale: ");
-    uart_put_u32(BENCH_SCALE);
-    uart_puts("\n\n");
+    g_perf_result.magic = 0u;
+
+    if (BENCH_UART_OUTPUT) {
+        uart_init(115200u);
+        uart_puts("\n=== RISC-V Simulation Performance Benchmark (Independent) ===\n");
+        uart_puts("Clock(Hz): ");
+        uart_put_u32(CLK_FREQ_HZ);
+        uart_puts("\nScale: ");
+        uart_put_u32(BENCH_SCALE);
+        uart_puts("\n\n");
+    }
 
     c0 = read_cycle();
     i0 = read_instret();
@@ -307,7 +335,9 @@ int main(void) {
     i1 = read_instret();
     alu_cycles = c1 - c0;
     alu_instret = i1 - i0;
-    print_metric("ALU", alu_cycles, alu_instret);
+    if (BENCH_UART_OUTPUT) {
+        print_metric("ALU", alu_cycles, alu_instret);
+    }
 
     c0 = read_cycle();
     i0 = read_instret();
@@ -316,7 +346,9 @@ int main(void) {
     i1 = read_instret();
     branch_cycles = c1 - c0;
     branch_instret = i1 - i0;
-    print_metric("BRANCH", branch_cycles, branch_instret);
+    if (BENCH_UART_OUTPUT) {
+        print_metric("BRANCH", branch_cycles, branch_instret);
+    }
 
     c0 = read_cycle();
     i0 = read_instret();
@@ -325,20 +357,24 @@ int main(void) {
     i1 = read_instret();
     memory_cycles = c1 - c0;
     memory_instret = i1 - i0;
-    print_metric("MEMORY", memory_cycles, memory_instret);
+    if (BENCH_UART_OUTPUT) {
+        print_metric("MEMORY", memory_cycles, memory_instret);
+    }
     
     /* 累加总体指标 */
     total_cycles = alu_cycles + branch_cycles + memory_cycles;
     total_instret = alu_instret + branch_instret + memory_instret;
 
     /* 计算总体性能指标和评分 */
-    uart_puts("\n==== Overall Performance Summary ====\n");
-    uart_puts("Total cycles: ");
-    uart_put_u32(total_cycles);
-    uart_puts(", Total instret: ");
-    uart_put_u32(total_instret);
-    uart_puts("\n");
-    print_metric("OVERALL", total_cycles, total_instret);
+    if (BENCH_UART_OUTPUT) {
+        uart_puts("\n==== Overall Performance Summary ====\n");
+        uart_puts("Total cycles: ");
+        uart_put_u32(total_cycles);
+        uart_puts(", Total instret: ");
+        uart_put_u32(total_instret);
+        uart_puts("\n");
+        print_metric("OVERALL", total_cycles, total_instret);
+    }
     
     /* CoreMark-style 评分计算 */
     /* Score = (instret / cycles) * clock_freq * 100 */
@@ -353,13 +389,27 @@ int main(void) {
         /* Score = 100000 / overall_cpi_x1000 */
         coremark_like_score = 100000u / overall_cpi_x1000;
     }
-    uart_puts("\nPerformance Score (CoreMark-like): ");
-    uart_put_u32(coremark_like_score);
-    uart_puts("\n");
-    
-    uart_puts("sink=");
-    uart_put_hex32(g_sink);
-    uart_puts("\nDone.\n");
+    if (BENCH_UART_OUTPUT) {
+        uart_puts("\nPerformance Score (CoreMark-like): ");
+        uart_put_u32(coremark_like_score);
+        uart_puts("\n");
+        uart_puts("sink=");
+        uart_put_hex32(g_sink);
+        uart_puts("\nDone.\n");
+    }
+
+    g_perf_result.version = PERF_RESULT_VERSION;
+    g_perf_result.alu_cycles = alu_cycles;
+    g_perf_result.alu_instret = alu_instret;
+    g_perf_result.branch_cycles = branch_cycles;
+    g_perf_result.branch_instret = branch_instret;
+    g_perf_result.memory_cycles = memory_cycles;
+    g_perf_result.memory_instret = memory_instret;
+    g_perf_result.total_cycles = total_cycles;
+    g_perf_result.total_instret = total_instret;
+    g_perf_result.sink = g_sink;
+    __asm__ volatile ("fence rw, rw" ::: "memory");
+    g_perf_result.magic = PERF_RESULT_MAGIC;
 
     /* 测试结束后停机等待，避免程序跑飞影响仿真观察 */
     while (1) {

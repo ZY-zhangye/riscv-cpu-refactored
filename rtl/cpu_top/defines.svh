@@ -5,6 +5,8 @@
 `define MUL_MULTICYCLE_ENABLE 1'b1   //是否采用多周期乘法运算，1为多周期，0为单周期
 `define MULTICYCLE_ENABLE 1'b1   //是否采用多周期运算（如除法），1为多周期，0为单周期
 `define Z_BITMAIN_ENABLE 1'b1   //是否启用Z-bitman指令集扩展，1为启用，0为不启用
+// 实验性LW live旁路默认关闭。仅在固定一拍存储器且MEM/WB无反压时，
+// 通过编译选项+define+LW_LIVE_BYPASS_ENABLE显式开启。
 //定义位宽
 `define DATA_WIDTH 32
 `define ADDR_WIDTH 32
@@ -74,7 +76,7 @@
 `define CSR_CYCLE 12'hC00
 `define CSR_INSTRET 12'hC02
 
-`define MUL_CYCLE 4 // 乘法运算的周期数，设置为4周期
+`define MUL_HIGH_CYCLE 3 // MUL固定2拍，高位乘法流水级数可设为2或3
 
 //MIMO外设地址
 `define SW_LOW_ADDR  32'h8020_0000

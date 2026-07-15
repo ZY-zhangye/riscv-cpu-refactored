@@ -15,6 +15,8 @@ module exe_stage(
     output logic es_flush,
     //mem阶段数据前递接口
     input logic [31:0] mem_result,
+    input logic mem_lw_live_valid,
+    input logic [31:0] mem_lw_live_data,
     //reg_fpu数据3接口，仅在部分情况使用
     input logic [31:0] reg_fpu_data3,
     //DMEM接口
@@ -29,6 +31,7 @@ module exe_stage(
     output logic [11:0] exe_csr_addr,
     output logic exe_csr_wen,
     output logic exe_load_pending,
+    output logic exe_lw_live_ok,
     output logic exe_result_pending,
     output logic es_valid,
     //异常接口
@@ -224,32 +227,31 @@ module exe_stage(
     logic [1:0] src2_fwd;
     assign {reg_src1, reg_src2, src1_fwd, src2_fwd} = src_packet;
 
-    //操作数选择（除FPU，其它都在这里完成）
-    logic [31:0] src1, src2;
+    //普通前递值保持与live LW数据隔离；live数据只进入整数ALU。
+    logic [31:0] src1_base, src2_base;
+    logic [31:0] alu_src1, alu_src2;
     logic [31:0] csr_data;
     always_comb begin
-        src1 = 32'b0;
-        unique case (1'b1)
-            src1_fwd[0]: src1 = exe_result_reg;
-            src1_fwd[1]: src1 = mem_result_reg;
-            default: src1 = reg_src1;
+        unique case (src1_fwd)
+            2'b01: src1_base = exe_result_reg;
+            2'b10: src1_base = mem_result_reg;
+            default: src1_base = reg_src1;
         endcase
     end
     always_comb begin
-        src2 = 32'b0;
-        unique case (1'b1)
-            src2_fwd[0]: src2 = exe_result_reg;
-            src2_fwd[1]: src2 = mem_result_reg;
-            default: src2 = reg_src2;
+        unique case (src2_fwd)
+            2'b01: src2_base = exe_result_reg;
+            2'b10: src2_base = mem_result_reg;
+            default: src2_base = reg_src2;
         endcase
     end
-    /*
-    assign src1 = (src1_fwd == 2'b01) ? exe_result_reg :
-                  (src1_fwd == 2'b10) ? mem_result_reg :
-                  reg_src1;
-    assign src2 = (src2_fwd == 2'b01) ? exe_result_reg :
-                  (src2_fwd == 2'b10) ? mem_result_reg :
-                  reg_src2;*/
+    `ifdef LW_LIVE_BYPASS_ENABLE
+    assign alu_src1 = (src1_fwd == 2'b11) ? mem_lw_live_data : src1_base;
+    assign alu_src2 = (src2_fwd == 2'b11) ? mem_lw_live_data : src2_base;
+    `else
+    assign alu_src1 = src1_base;
+    assign alu_src2 = src2_base;
+    `endif
     assign csr_data = csr_rdata_fwd ? csr_wdata_reg : csr_rdata;
 
     //BITMAN计算
@@ -274,7 +276,7 @@ module exe_stage(
             bm_bclr, bm_bclri, bm_bext, bm_bexti,
             bm_binv, bm_binvi, bm_bset, bm_bseti
         } = bitman_op;
-        assign bit_idx = src2[4:0];
+        assign bit_idx = src2_base[4:0];
         assign bit_mask = 32'b1 << bit_idx;
 
         function automatic [7:0] reverse8(input logic [7:0] data);
@@ -297,40 +299,40 @@ module exe_stage(
 
         always_comb begin
             unique case (1'b1)
-                bm_sh1add: bitman_result = (src1 << 1) + src2;
-                bm_sh2add: bitman_result = (src1 << 2) + src2;
-                bm_sh3add: bitman_result = (src1 << 3) + src2;
-                bm_andn: bitman_result = src1 & ~src2;
-                bm_orn: bitman_result = src1 | ~src2;
-                bm_xnor: bitman_result = ~(src1 ^ src2);
-                bm_min: bitman_result = ($signed(src1) < $signed(src2)) ? src1 : src2;
-                bm_max: bitman_result = ($signed(src1) < $signed(src2)) ? src2 : src1;
-                bm_minu: bitman_result = (src1 < src2) ? src1 : src2;
-                bm_maxu: bitman_result = (src1 < src2) ? src2 : src1;
-                bm_sextb: bitman_result = {{24{src1[7]}}, src1[7:0]};
-                bm_sexth: bitman_result = {{16{src1[15]}}, src1[15:0]};
-                bm_zexth: bitman_result = {16'b0, src1[15:0]};
+                bm_sh1add: bitman_result = (src1_base << 1) + src2_base;
+                bm_sh2add: bitman_result = (src1_base << 2) + src2_base;
+                bm_sh3add: bitman_result = (src1_base << 3) + src2_base;
+                bm_andn: bitman_result = src1_base & ~src2_base;
+                bm_orn: bitman_result = src1_base | ~src2_base;
+                bm_xnor: bitman_result = ~(src1_base ^ src2_base);
+                bm_min: bitman_result = ($signed(src1_base) < $signed(src2_base)) ? src1_base : src2_base;
+                bm_max: bitman_result = ($signed(src1_base) < $signed(src2_base)) ? src2_base : src1_base;
+                bm_minu: bitman_result = (src1_base < src2_base) ? src1_base : src2_base;
+                bm_maxu: bitman_result = (src1_base < src2_base) ? src2_base : src1_base;
+                bm_sextb: bitman_result = {{24{src1_base[7]}}, src1_base[7:0]};
+                bm_sexth: bitman_result = {{16{src1_base[15]}}, src1_base[15:0]};
+                bm_zexth: bitman_result = {16'b0, src1_base[15:0]};
                 bm_orcb: bitman_result = {
-                    {8{|src1[31:24]}},
-                    {8{|src1[23:16]}},
-                    {8{|src1[15:8]}},
-                    {8{|src1[7:0]}}
+                    {8{|src1_base[31:24]}},
+                    {8{|src1_base[23:16]}},
+                    {8{|src1_base[15:8]}},
+                    {8{|src1_base[7:0]}}
                 };
-                bm_rev8: bitman_result = {src1[7:0], src1[15:8], src1[23:16], src1[31:24]};
+                bm_rev8: bitman_result = {src1_base[7:0], src1_base[15:8], src1_base[23:16], src1_base[31:24]};
                 bm_brev8: bitman_result = {
-                    reverse8(src1[31:24]),
-                    reverse8(src1[23:16]),
-                    reverse8(src1[15:8]),
-                    reverse8(src1[7:0])
+                    reverse8(src1_base[31:24]),
+                    reverse8(src1_base[23:16]),
+                    reverse8(src1_base[15:8]),
+                    reverse8(src1_base[7:0])
                 };
-                bm_pack: bitman_result = {src2[15:0], src1[15:0]};
-                bm_packh: bitman_result = {16'b0, src2[7:0], src1[7:0]};
-                bm_zip: bitman_result = zip32(src1);
-                bm_unzip: bitman_result = unzip32(src1);
-                bm_bclr, bm_bclri: bitman_result = src1 & ~bit_mask;
-                bm_bext, bm_bexti: bitman_result = {31'b0, src1[bit_idx]};
-                bm_binv, bm_binvi: bitman_result = src1 ^ bit_mask;
-                bm_bset, bm_bseti: bitman_result = src1 | bit_mask;
+                bm_pack: bitman_result = {src2_base[15:0], src1_base[15:0]};
+                bm_packh: bitman_result = {16'b0, src2_base[7:0], src1_base[7:0]};
+                bm_zip: bitman_result = zip32(src1_base);
+                bm_unzip: bitman_result = unzip32(src1_base);
+                bm_bclr, bm_bclri: bitman_result = src1_base & ~bit_mask;
+                bm_bext, bm_bexti: bitman_result = {31'b0, src1_base[bit_idx]};
+                bm_binv, bm_binvi: bitman_result = src1_base ^ bit_mask;
+                bm_bset, bm_bseti: bitman_result = src1_base | bit_mask;
                 default: bitman_result = 32'b0;
             endcase
         end
@@ -344,16 +346,16 @@ module exe_stage(
     logic [31:0] alu_result;
     always_comb begin
         unique case (alu_op)
-            `ALU_OP_ADD: alu_result = src1 + src2;
-            `ALU_OP_SUB: alu_result = src1 - src2;
-            `ALU_OP_AND: alu_result = src1 & src2;
-            `ALU_OP_OR:  alu_result = src1 | src2;
-            `ALU_OP_XOR: alu_result = src1 ^ src2;
-            `ALU_OP_SLL: alu_result = src1 << src2[4:0];
-            `ALU_OP_SRL: alu_result = src1 >> src2[4:0];
-            `ALU_OP_SRA: alu_result = $signed(src1) >>> src2[4:0];
-            `ALU_OP_SLT: alu_result = ($signed(src1) < $signed(src2)) ? 32'b1 : 32'b0;
-            `ALU_OP_SLTU: alu_result = (src1 < src2) ? 32'b1 : 32'b0;
+            `ALU_OP_ADD: alu_result = alu_src1 + alu_src2;
+            `ALU_OP_SUB: alu_result = alu_src1 - alu_src2;
+            `ALU_OP_AND: alu_result = alu_src1 & alu_src2;
+            `ALU_OP_OR:  alu_result = alu_src1 | alu_src2;
+            `ALU_OP_XOR: alu_result = alu_src1 ^ alu_src2;
+            `ALU_OP_SLL: alu_result = alu_src1 << alu_src2[4:0];
+            `ALU_OP_SRL: alu_result = alu_src1 >> alu_src2[4:0];
+            `ALU_OP_SRA: alu_result = $signed(alu_src1) >>> alu_src2[4:0];
+            `ALU_OP_SLT: alu_result = ($signed(alu_src1) < $signed(alu_src2)) ? 32'b1 : 32'b0;
+            `ALU_OP_SLTU: alu_result = (alu_src1 < alu_src2) ? 32'b1 : 32'b0;
             default: alu_result = 32'b0;
         endcase
     end
@@ -363,12 +365,14 @@ module exe_stage(
     mul u_mul (
         .clk(clk),
         .rst_n(rst_n),
-        .is_mul(is_mul),
+        .is_mul(es_valid && is_mul && !es_flush),
         .is_multicycle(is_multicycle),
-        .mul_src1(src1),
-        .mul_src2(src2),
+        .mul_src1(src1_base),
+        .mul_src2(src2_base),
         .src1_signed(src1_signed),
         .src2_signed(src2_signed),
+        .result_ready(ms_allowin),
+        .kill(es_flush),
         .mul_op(mul_op),
         .mul_result(mul_result),
         .mul_stall(mul_stall)
@@ -413,10 +417,10 @@ module exe_stage(
     assign inst_sb  = mem_op[4] & is_store;
     assign inst_sh  = mem_op[3] & is_store;
     assign inst_sw  = mem_op[2] & is_store;
-    assign dmem_addr = src1 + mem_imm;
-    assign dmem_wdata = (inst_sb) ? {4{src2[7:0]}} :
-                       (inst_sh) ? {2{src2[15:0]}} :
-                       src2;
+    assign dmem_addr = src1_base + mem_imm;
+    assign dmem_wdata = (inst_sb) ? {4{src2_base[7:0]}} :
+                       (inst_sh) ? {2{src2_base[15:0]}} :
+                       src2_base;
     logic [3:0] sb_wen, sh_wen;
     always_comb begin
         case (dmem_addr[1:0])
@@ -455,9 +459,9 @@ module exe_stage(
     assign inst_csrrci = csr_op == 3'b001 && csr_imm_sel == 1'b1;
     assign exe_csr_wen = es_valid && csr_wen && !es_flush;
     assign exe_csr_addr = csr_waddr;
-    assign csr_wdata = inst_csrrw ? src1 :
-                       inst_csrrs ? (csr_data | src1) :
-                       inst_csrrc ? (csr_data & ~src1) :
+    assign csr_wdata = inst_csrrw ? src1_base :
+                       inst_csrrs ? (csr_data | src1_base) :
+                       inst_csrrc ? (csr_data & ~src1_base) :
                        inst_csrrwi ? csr_imm :
                        inst_csrrsi ? (csr_data | csr_imm) :
                        inst_csrrci ? (csr_data & ~csr_imm) :
@@ -473,14 +477,14 @@ module exe_stage(
     assign is_bgeu= br_jmp_opcode[0];
     // 1. 预计算减法和标志位 (FPGA 会将其映射到进位链)
     logic [32:0] sub_res;
-    assign sub_res = {1'b0, src1} - {1'b0, src2};
+    assign sub_res = {1'b0, src1_base} - {1'b0, src2_base};
 
     logic eq, lt, ltu;
-    assign eq  = (src1 == src2); // 部分综合器对 == 0 优化更好，但直接比较通常也能进位链优化
+    assign eq  = (src1_base == src2_base); // 部分综合器对 == 0 优化更好，但直接比较通常也能进位链优化
     assign ltu = sub_res[32];    // 无符号小于即看减法的借位
 
     // 有符号小于：如果符号不同，则 src1负数时为真；如果符号相同，看减法结果
-    assign lt  = (src1[31] != src2[31]) ? src1[31] : ltu;
+    assign lt  = (src1_base[31] != src2_base[31]) ? src1_base[31] : ltu;
 
     // 2. 并行选择逻辑 (代替 case(1'b1))
     // 这种写法在 FPGA 中会被优化为单层 LUT 逻辑
@@ -503,7 +507,7 @@ module exe_stage(
     // JALR 的掩码操作直接在加法后进行位截断，保持路径简洁
     logic [31:0] jalr_sum;
     logic [31:0] pc_jalr;
-    assign jalr_sum = src1 + br_jmp_imm;
+    assign jalr_sum = src1_base + br_jmp_imm;
     assign pc_jalr = { jalr_sum[31:1], 1'b0 };
     assign br_target = is_jalr ? pc_jalr : br_jmp_target;
 
@@ -539,7 +543,29 @@ module exe_stage(
     assign exe_reg_fpu_wen = es_valid && reg_fpu_wen && !es_flush;
     assign exe_load_pending = es_valid && !es_flush && exe_result_sel[0] &&
                               (regfile_wen || reg_fpu_wen);
+    `ifdef LW_LIVE_BYPASS_ENABLE
+    assign exe_lw_live_ok = es_to_ms_valid && ms_allowin && !es_flush &&
+                            inst_lw && regfile_wen && (rd_addr != 5'b0);
+    `else
+    assign exe_lw_live_ok = 1'b0;
+    `endif
     assign exe_result_pending = es_valid && !es_flush && !es_ready_go;
+
+    `ifdef LW_LIVE_BYPASS_ENABLE
+    `ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (rst_n && es_valid && !es_flush &&
+            ((src1_fwd == 2'b11) || (src2_fwd == 2'b11))) begin
+            // The zero-bubble path is valid only for the current fixed
+            // one-cycle memory response with no downstream hold of EX.
+            assert (is_alu && !is_fpu && !is_mul && !is_mem && !is_csr &&
+                    !is_br_jmp && !is_bitman && mem_lw_live_valid &&
+                    ms_allowin)
+                else $fatal(1, "live LW forwarding contract violated");
+        end
+    end
+    `endif
+    `endif
 
     //输出到下一级
     assign es_to_ms_bus = {

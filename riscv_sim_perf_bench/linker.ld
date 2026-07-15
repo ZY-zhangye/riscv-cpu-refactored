@@ -9,7 +9,7 @@ ENTRY(_start)
 MEMORY
 {
   INSTR (rx) : ORIGIN = 0x00000000, LENGTH = 0x800
-  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0x800
+  DATA  (rw) : ORIGIN = 0x60000000, LENGTH = 0x10000
 }
 
 SECTIONS
@@ -58,5 +58,12 @@ SECTIONS
     . = ALIGN(16);
     . = . + 0x100;
     __stack_top = .;
+  } > DATA
+
+  ASSERT(__stack_top <= 0x60000800, "DATA sections overlap performance mailbox")
+
+  .perf_results 0x60000800 (NOLOAD) :
+  {
+    KEEP(*(.perf_results))
   } > DATA
 }

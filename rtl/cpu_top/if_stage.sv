@@ -1,122 +1,235 @@
 `include "defines.svh"
+
 module if_stage (
-    input logic clk,
-    input logic rst_n,
-    //取指端口
-    output logic [`ADDR_WIDTH-1:0] pc_out,
-    output logic inst_ren,
-    input logic [`DATA_WIDTH-1:0] inst_in,
-    //与译码阶段的数据接口
-    input logic ds_allowin,
-    output logic fs_to_ds_valid,
-    output logic [`FS_DS_WIDTH-1:0] fs_to_ds_bus,
-    //分支跳转接口
-    input logic br_taken,
-    input logic [`ADDR_WIDTH-1:0] br_target,
-    //分支预测器更新接口
-    input logic bp_update_valid,
-    input logic [`ADDR_WIDTH-1:0] bp_update_pc,
-    input logic bp_update_taken,
-    input logic [`ADDR_WIDTH-1:0] bp_update_target,
-    input logic bp_update_is_jalr,
-    //异常包接口
-    output logic [`EXC_WIDTH-1:0] fs_exc_bus,
-    //异常跳转接口
-    input logic exception_flag,
-    input logic [`ADDR_WIDTH-1:0] exception_addr
+    input  logic                         clk,
+    input  logic                         rst_n,
+    // One-cycle synchronous instruction-memory request/response.
+    output logic [`ADDR_WIDTH-1:0]       pc_out,
+    output logic                         inst_ren,
+    input  logic [`DATA_WIDTH-1:0]       inst_in,
+    // Decode interface.
+    input  logic                         ds_allowin,
+    output logic                         fs_to_ds_valid,
+    output logic [`FS_DS_WIDTH-1:0]      fs_to_ds_bus,
+    // Resolved redirect interface. br_taken is the misprediction redirect.
+    input  logic                         br_taken,
+    input  logic [`ADDR_WIDTH-1:0]       br_target,
+    // Resolved predictor update interface.
+    input  logic                         bp_update_valid,
+    input  logic [`ADDR_WIDTH-1:0]       bp_update_pc,
+    input  logic                         bp_update_taken,
+    input  logic [`ADDR_WIDTH-1:0]       bp_update_target,
+    input  logic                         bp_update_is_jalr,
+    // Exception metadata and redirect.
+    output logic [`EXC_WIDTH-1:0]        fs_exc_bus,
+    input  logic                         exception_flag,
+    input  logic [`ADDR_WIDTH-1:0]       exception_addr
 );
 
-    logic [`ADDR_WIDTH-1:0] seq_pc;
-    logic [`ADDR_WIDTH-1:0] next_pc;
-    logic [`ADDR_WIDTH-1:0] fs_out_pc;
-    logic [`DATA_WIDTH-1:0] fs_out_inst;
-    logic [31:0] fs_pc;
-    logic br_taken_reg;
-    logic [31:0] br_target_reg;
+    localparam integer BP_INDEX_WIDTH = 7;
+    localparam integer BP_ENTRIES = 1 << BP_INDEX_WIDTH;
+    localparam integer BP_TAG_WIDTH = `ADDR_WIDTH - BP_INDEX_WIDTH - 2;
+    localparam integer BP_ENTRY_WIDTH = BP_TAG_WIDTH + 2 + `ADDR_WIDTH;
 
-    localparam BP_INDEX_WIDTH = 4;
-    localparam BP_ENTRIES = 1 << BP_INDEX_WIDTH;
-    localparam BP_TAG_WIDTH = `ADDR_WIDTH - BP_INDEX_WIDTH - 2;
+    logic if_active;
+    logic req_valid;
+    logic [`ADDR_WIDTH-1:0] req_pc;
 
-    logic bp_valid [BP_ENTRIES-1:0];
-    logic bp_taken [BP_ENTRIES-1:0];
-    logic [BP_TAG_WIDTH-1:0] bp_tag [BP_ENTRIES-1:0];
-    logic [`ADDR_WIDTH-1:0] bp_target [BP_ENTRIES-1:0];
+    logic redirect_pending;
+    logic [`ADDR_WIDTH-1:0] redirect_pc_r;
+    logic redirect_now;
 
-    logic [BP_INDEX_WIDTH-1:0] bp_lookup_index;
-    logic [BP_TAG_WIDTH-1:0] bp_lookup_tag;
+    logic response_fire;
+    logic request_fire;
+    logic [`ADDR_WIDTH-1:0] request_pc;
+    logic [`ADDR_WIDTH-1:0] predicted_next_pc;
+
+    logic [BP_ENTRIES-1:0] bp_valid_lookup;
+    logic [BP_ENTRIES-1:0] bp_valid_update;
+
+    // The payload arrays are intentionally not reset. Validity is held in the
+    // separately reset bitmaps so Vivado can infer distributed RAM.
+    (* ram_style = "distributed" *)
+    logic [BP_ENTRY_WIDTH-1:0] bp_lookup_mem [0:BP_ENTRIES-1];
+    (* ram_style = "distributed" *)
+    logic [BP_ENTRY_WIDTH-1:0] bp_update_mem [0:BP_ENTRIES-1];
+
+    logic bp_q_valid;
+    logic [BP_ENTRY_WIDTH-1:0] bp_q_entry;
+    logic [BP_TAG_WIDTH-1:0] bp_q_tag;
+    logic [1:0] bp_q_counter;
+    logic [`ADDR_WIDTH-1:0] bp_q_target;
     logic bp_hit;
     logic bp_pred_taken;
     logic [`ADDR_WIDTH-1:0] bp_pred_target;
 
-    assign bp_lookup_index = fs_out_pc[BP_INDEX_WIDTH+1:2];
-    assign bp_lookup_tag = fs_out_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
-    assign bp_hit = bp_valid[bp_lookup_index] && (bp_tag[bp_lookup_index] == bp_lookup_tag);
-    assign bp_pred_taken = bp_hit && bp_taken[bp_lookup_index];
-    assign bp_pred_target = bp_target[bp_lookup_index];
+    logic bp_update_valid_r;
+    logic [`ADDR_WIDTH-1:0] bp_update_pc_r;
+    logic bp_update_taken_r;
+    logic [`ADDR_WIDTH-1:0] bp_update_target_r;
+    logic [BP_INDEX_WIDTH-1:0] bp_update_index;
+    logic [BP_TAG_WIDTH-1:0] bp_update_tag;
+    logic [BP_ENTRY_WIDTH-1:0] bp_update_entry;
+    logic [BP_TAG_WIDTH-1:0] bp_update_entry_tag;
+    logic [1:0] bp_update_entry_counter;
+    logic bp_update_tag_match;
+    logic [1:0] bp_update_counter_next;
+    logic [BP_ENTRY_WIDTH-1:0] bp_update_entry_next;
 
-    assign seq_pc = fs_out_pc + 4;
-    assign next_pc = exception_flag ? exception_addr :
-                     br_taken_reg ? br_target_reg :
-                     bp_pred_taken ? bp_pred_target :
-                     seq_pc;
-    logic fs_valid;
-    logic fs_ready_go;
-    logic fs_allowin;
-    assign fs_ready_go = 1'b1;
-    assign fs_allowin = !fs_valid || fs_ready_go && ds_allowin;
-    assign fs_to_ds_valid = fs_valid && fs_ready_go;
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            fs_valid <= 1'b0;
-        end else if (fs_allowin) begin
-            fs_valid <= 1'b1;
-        end
-        if (!rst_n) begin
-            fs_pc <= `PC_START - 4;
-        end else if (fs_allowin) begin
-            fs_pc <= next_pc;
-        end
-    end
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            br_taken_reg <= 1'b0;
-            br_target_reg <= 32'b0;
-        end else if (fs_allowin) begin
-            br_taken_reg <= br_taken;
-            br_target_reg <= br_target;
-        end
-    end
+    logic [BP_INDEX_WIDTH-1:0] bp_request_index;
+    logic bp_lookup_update_collision;
 
-    always_ff @(posedge clk) begin
-        integer i;
-        if (!rst_n) begin
-            for (i = 0; i < BP_ENTRIES; i = i + 1) begin
-                bp_valid[i] <= 1'b0;
-                bp_taken[i] <= 1'b0;
-                bp_tag[i] <= '0;
-                bp_target[i] <= '0;
+    function automatic logic [1:0] bp_counter_update(
+        input logic [1:0] current,
+        input logic       taken
+    );
+        begin
+            if (taken) begin
+                bp_counter_update = (current == 2'b11) ?
+                                    current : current + 1'b1;
+            end else begin
+                bp_counter_update = (current == 2'b00) ?
+                                    current : current - 1'b1;
             end
-        end else if (bp_update_valid && !bp_update_is_jalr) begin
-            bp_valid[bp_update_pc[BP_INDEX_WIDTH+1:2]] <= 1'b1;
-            bp_taken[bp_update_pc[BP_INDEX_WIDTH+1:2]] <= bp_update_taken;
-            bp_tag[bp_update_pc[BP_INDEX_WIDTH+1:2]] <= bp_update_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
-            bp_target[bp_update_pc[BP_INDEX_WIDTH+1:2]] <= bp_update_target;
+        end
+    endfunction
+
+    assign redirect_now = exception_flag || br_taken;
+
+    assign {bp_q_tag, bp_q_counter, bp_q_target} = bp_q_entry;
+    assign bp_hit = bp_q_valid &&
+                    (bp_q_tag == req_pc[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2]);
+    assign bp_pred_taken = bp_hit && bp_q_counter[1];
+    assign bp_pred_target = bp_hit ? bp_q_target : '0;
+    assign predicted_next_pc = bp_pred_taken ? bp_q_target : req_pc + 32'd4;
+
+    // A response may be replaced by its successor on the same edge. When
+    // Decode stalls, no new request is launched and both IROM and BTB outputs
+    // remain aligned with req_pc.
+    assign response_fire = req_valid && ds_allowin && !redirect_now;
+    assign request_fire = rst_n && if_active && !redirect_now &&
+                          (!req_valid || response_fire);
+    assign request_pc = redirect_pending ? redirect_pc_r :
+                        req_valid ? predicted_next_pc : `PC_START;
+
+    assign pc_out = request_pc;
+    assign inst_ren = request_fire;
+    assign fs_to_ds_valid = req_valid && !redirect_now;
+    assign fs_to_ds_bus = {inst_in, req_pc, bp_pred_taken, bp_pred_target};
+
+    // The redirect itself kills the current response immediately. Its target
+    // is registered independently of Decode backpressure and requested on the
+    // following cycle, cutting the EX-to-IROM address path.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            if_active <= 1'b0;
+            req_valid <= 1'b0;
+            req_pc <= '0;
+            redirect_pending <= 1'b0;
+            redirect_pc_r <= '0;
+        end else begin
+            if_active <= 1'b1;
+
+            if (exception_flag) begin
+                redirect_pending <= 1'b1;
+                redirect_pc_r <= exception_addr;
+            end else if (br_taken) begin
+                redirect_pending <= 1'b1;
+                redirect_pc_r <= br_target;
+            end else if (request_fire && redirect_pending) begin
+                redirect_pending <= 1'b0;
+            end
+
+            if (redirect_now) begin
+                req_valid <= 1'b0;
+            end else if (request_fire) begin
+                req_valid <= 1'b1;
+                req_pc <= request_pc;
+            end else if (response_fire) begin
+                req_valid <= 1'b0;
+            end
         end
     end
 
-    assign pc_out = next_pc;
-    assign fs_out_inst = (br_taken || br_taken_reg || exception_flag) ? `NOP_INST : inst_in; // 分支指令在分支预测失败时用NOP占位
-    assign inst_ren = fs_allowin;
-    assign fs_out_pc = fs_pc;
-    assign fs_to_ds_bus = {fs_out_inst, fs_out_pc, (bp_pred_taken && !br_taken && !br_taken_reg && !exception_flag), bp_pred_target};
+    // Register predictor training at the IF boundary. This keeps the resolved
+    // EX result off the table write path while preserving one update per cycle.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            bp_update_valid_r <= 1'b0;
+            bp_update_pc_r <= '0;
+            bp_update_taken_r <= 1'b0;
+            bp_update_target_r <= '0;
+        end else begin
+            bp_update_valid_r <= bp_update_valid && !bp_update_is_jalr;
+            if (bp_update_valid && !bp_update_is_jalr) begin
+                bp_update_pc_r <= bp_update_pc;
+                bp_update_taken_r <= bp_update_taken;
+                bp_update_target_r <= bp_update_target;
+            end
+        end
+    end
 
-    /*logic exception_iam;
-    assign exception_iam = fs_to_ds_valid && fs_out_pc[1:0] != 2'b00;*/
-    logic [6:0] exception_code;
-    assign exception_code = /*exception_iam ? 7'b010_0000 : */7'b000_0000; 
-    logic [`MTVAL_WIDTH-1:0] exception_mtval;
-    assign exception_mtval = /*exception_iam ? fs_out_pc : */32'b0;
-    assign fs_exc_bus = {exception_code, exception_mtval};
+    assign bp_update_index =
+        bp_update_pc_r[BP_INDEX_WIDTH+1:2];
+    assign bp_update_tag =
+        bp_update_pc_r[`ADDR_WIDTH-1:BP_INDEX_WIDTH+2];
+    assign bp_update_entry = bp_update_mem[bp_update_index];
+    assign {bp_update_entry_tag, bp_update_entry_counter} =
+        bp_update_entry[BP_ENTRY_WIDTH-1 -: BP_TAG_WIDTH+2];
+    assign bp_update_tag_match = bp_valid_update[bp_update_index] &&
+                                 (bp_update_entry_tag == bp_update_tag);
+    assign bp_update_counter_next = bp_update_tag_match ?
+        bp_counter_update(bp_update_entry_counter, bp_update_taken_r) :
+        (bp_update_taken_r ? 2'b10 : 2'b01);
+    assign bp_update_entry_next = {
+        bp_update_tag,
+        bp_update_counter_next,
+        bp_update_target_r
+    };
+
+    assign bp_request_index = request_pc[BP_INDEX_WIDTH+1:2];
+    assign bp_lookup_update_collision = bp_update_valid_r && request_fire &&
+                                        (bp_update_index == bp_request_index);
+
+    // Only validity state is reset. The query table and update shadow are
+    // written together so back-to-back updates observe the newest counter.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            bp_valid_lookup <= '0;
+            bp_valid_update <= '0;
+        end else if (bp_update_valid_r) begin
+            bp_valid_lookup[bp_update_index] <= 1'b1;
+            bp_valid_update[bp_update_index] <= 1'b1;
+        end
+    end
+
+    always_ff @(posedge clk) begin : bp_lookup_ram
+        if (rst_n && bp_update_valid_r) begin
+            bp_lookup_mem[bp_update_index] <= bp_update_entry_next;
+        end
+
+        if (!rst_n) begin
+            bp_q_valid <= 1'b0;
+            bp_q_entry <= '0;
+        end else if (request_fire) begin
+            if (bp_lookup_update_collision) begin
+                bp_q_valid <= 1'b1;
+                bp_q_entry <= bp_update_entry_next;
+            end else begin
+                bp_q_valid <= bp_valid_lookup[bp_request_index];
+                bp_q_entry <= bp_lookup_mem[bp_request_index];
+            end
+        end else if (redirect_now) begin
+            bp_q_valid <= 1'b0;
+        end
+    end
+
+    always_ff @(posedge clk) begin : bp_update_shadow
+        if (rst_n && bp_update_valid_r) begin
+            bp_update_mem[bp_update_index] <= bp_update_entry_next;
+        end
+    end
+
+    assign fs_exc_bus = {`EXC_WIDTH{1'b0}};
 
 endmodule

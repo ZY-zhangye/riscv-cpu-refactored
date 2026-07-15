@@ -71,6 +71,7 @@ module cpu_top (
     logic [11:0] exe_csr_addr;
     logic exe_csr_wen;
     logic exe_load_pending;
+    logic exe_lw_live_ok;
     logic exe_result_pending;
     logic [4:0] mem_dest_addr;
     logic mem_regfile_wen;
@@ -84,6 +85,8 @@ module cpu_top (
     logic [`ES_MS_WIDTH-1:0] es_to_ms_bus;
     logic es_flush;
     logic [31:0] mem_result;
+    logic mem_lw_live_valid;
+    logic [31:0] mem_lw_live_data;
     logic [31:0] reg_fpu_data3;
     logic [`EXE_EXC_BUS - 1:0] exe_exc_bus;
 
@@ -154,6 +157,7 @@ module cpu_top (
         .exe_csr_addr(exe_csr_addr),
         .exe_csr_wen(exe_csr_wen),
         .exe_load_pending(exe_load_pending),
+        .exe_lw_live_ok(exe_lw_live_ok),
         .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
         .mem_dest_addr(mem_dest_addr),
@@ -187,6 +191,7 @@ module cpu_top (
         .exe_csr_addr(exe_csr_addr),
         .exe_csr_wen(exe_csr_wen),
         .exe_load_pending(exe_load_pending),
+        .exe_lw_live_ok(exe_lw_live_ok),
         .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
         .ds_exc_bus(ds_exc_bus),
@@ -201,6 +206,8 @@ module cpu_top (
         .bp_update_target(bp_update_target),
         .bp_update_is_jalr(bp_update_is_jalr),
         .mem_result(mem_result),
+        .mem_lw_live_valid(mem_lw_live_valid),
+        .mem_lw_live_data(mem_lw_live_data),
         .reg_fpu_data3(reg_fpu_data3),
         .exe_exc_bus(exe_exc_bus)
     );
@@ -220,6 +227,8 @@ module cpu_top (
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
         .mem_result(mem_result),
+        .mem_lw_live_valid(mem_lw_live_valid),
+        .mem_lw_live_data(mem_lw_live_data),
         .ms_valid(ms_valid),
         .exception_flag(exception_flag),
         .exe_exc_bus(exe_exc_bus),

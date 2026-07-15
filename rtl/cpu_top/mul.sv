@@ -10,6 +10,8 @@ module mul (
     input logic [3:0] mul_op,
     input logic src1_signed,
     input logic src2_signed,
+    input logic result_ready,
+    input logic kill,
     output logic [31:0] mul_result,
     output logic mul_stall
 );
@@ -18,9 +20,7 @@ module mul (
     // --------------------
     // 乘法路径
     // --------------------
-    logic signed [32:0] mul_src1_ext, mul_src2_ext;
-    logic signed [65:0] mul_result_ext;
-    logic [`MUL_CYCLE-1:0]         mul_valid_shift;
+    logic [31:0]        mul_product;
     logic               mul_start;
     logic               mul_done;
     logic               mul_busy;
@@ -37,6 +37,7 @@ module mul (
     logic        div_start;
     logic        mul_op_div;
     logic        div_done;
+    logic        div_discard_pending;
     logic        s1,s2;
     
     // AXI流接口信号 - 除数输入
@@ -60,9 +61,6 @@ module mul (
     assign div_src1 = src1_signed && mul_src1[31] ? ~mul_src1 + 1'b1 : mul_src1;
     assign div_src2 = src2_signed && mul_src2[31] ? ~mul_src2 + 1'b1 : mul_src2;
 
-    assign mul_src1_ext = src1_signed ? {mul_src1[31], mul_src1} : {1'b0, mul_src1};
-    assign mul_src2_ext = src2_signed ? {mul_src2[31], mul_src2} : {1'b0, mul_src2};
-
     assign div_0 = (div_src2 == 32'b0);
     assign div_1 = src1_signed && src2_signed &&
                    (mul_src1 == 32'h8000_0000) &&
@@ -71,11 +69,11 @@ module mul (
     assign s1 = src1_signed && src2_signed && (mul_src1[31] ^ mul_src2[31]);
     assign s2 = src1_signed && mul_src1[31];
 
-    assign mul_start = is_mul && mul_op_mul && !mul_busy;
-    assign mul_done = mul_valid_shift[`MUL_CYCLE-1];
+    assign mul_start = is_mul && mul_op_mul;
 
     assign div_start = is_multicycle && is_mul && mul_op_div &&
-                       (div_state == 2'b00) && !div_0 && !div_1;
+                       (div_state == 2'b00) && !div_discard_pending &&
+                       !kill && !div_0 && !div_1;
     
     // AXI流握手信号 - 仅在两个输入都ready时才valid
     assign s_axis_divisor_tvalid  = div_start;
@@ -85,35 +83,35 @@ module mul (
     
     assign div_done = (div_state == 2'b11) || (div_state == 2'b10);
 
-    assign mul_stall = is_mul && is_multicycle &&
+    assign mul_stall = !kill && is_mul &&
                        ((mul_op_mul && !mul_done) ||
                         (mul_op_div && !div_done));
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            mul_valid_shift <= {`MUL_CYCLE{1'b0}};
-            mul_busy <= 1'b0;
-        end else if (mul_op_mul) begin
-            mul_valid_shift <= {mul_valid_shift[`MUL_CYCLE-2:0], mul_start};
-
-            if (mul_start) begin
-                mul_busy <= 1'b1;
-            end else if (mul_done) begin
-                mul_busy <= 1'b0;
-            end
-        end else begin
-            mul_valid_shift <= {`MUL_CYCLE{1'b0}};
-            mul_busy <= 1'b0;
-        end
-    end
+    mul_pipeline #(
+        .HIGH_PIPE_STAGES(`MUL_HIGH_CYCLE)
+    ) u_mul_pipeline (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(mul_start),
+        .result_ready(result_ready),
+        .kill(kill),
+        .src1(mul_src1),
+        .src2(mul_src2),
+        .src1_signed(src1_signed),
+        .src2_signed(src2_signed),
+        .high_result(mul_op[2]),
+        .busy(mul_busy),
+        .done(mul_done),
+        .result(mul_product)
+    );
 
     always_comb begin
         unique case (1'b1)
             mul_op[3]: begin
-                mul_result = mul_result_ext[31:0];
+                mul_result = mul_product;
             end
             mul_op[2]: begin
-                mul_result = mul_result_ext[63:32];
+                mul_result = mul_product;
             end
             mul_op[1]: begin
                 // DIV: DEBUG仿真divider输出{remainder, quotient}，工程IP输出{quotient, remainder}
@@ -145,23 +143,24 @@ module mul (
         endcase
     end
 
-`ifdef DEBUG_EN
-    // DEBUG仿真使用组合乘法，避免依赖Vivado multiplier IP。
-    assign mul_result_ext = mul_src1_ext * mul_src2_ext;
-`else
-    multiplier mul_inst (
-        .CLK(clk),
-        .A(mul_src1_ext),
-        .B(mul_src2_ext),
-        .P(mul_result_ext),
-        .CE(is_mul)
-    );
-`endif
-
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             div_state <= 2'b00;
+            div_discard_pending <= 1'b0;
+        end else if (kill) begin
+            div_state <= 2'b00;
+            // The synthesis Divider Generator has no reset. If a request was
+            // already accepted, wait for and discard its eventual response.
+            div_discard_pending <=
+                (div_discard_pending || (div_state == 2'b01)) &&
+                !m_axis_dout_tvalid;
+        end else if (div_discard_pending) begin
+            div_state <= 2'b00;
+            if (m_axis_dout_tvalid) begin
+                div_discard_pending <= 1'b0;
+            end
         end else begin
+            div_discard_pending <= 1'b0;
             unique case (div_state)
                 2'b00: begin
                     // 等待除法请求，检查特殊情况

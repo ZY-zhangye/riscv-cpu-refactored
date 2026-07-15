@@ -20,6 +20,8 @@ module mem_stage (
     output logic mem_regfile_wen,
     output logic mem_reg_fpu_wen,
     output logic [31:0] mem_result,
+    output logic mem_lw_live_valid,
+    output logic [31:0] mem_lw_live_data,
     //异常信息接口
     input logic exception_flag,
     input logic [`EXE_EXC_BUS-1:0] exe_exc_bus,
@@ -143,6 +145,13 @@ assign load_lh  = (load_inst == `LH);
 assign load_lw  = (load_inst == `LW);
 assign load_lbu = (load_inst == `LBU);
 assign load_lhu = (load_inst == `LHU);
+`ifdef LW_LIVE_BYPASS_ENABLE
+assign mem_lw_live_valid = ms_valid && !ms_flush && load_lw;
+assign mem_lw_live_data = dmem_rdata;
+`else
+assign mem_lw_live_valid = 1'b0;
+assign mem_lw_live_data = 32'b0;
+`endif
 
 logic [7:0]  load_byte;
 logic [15:0] load_half;

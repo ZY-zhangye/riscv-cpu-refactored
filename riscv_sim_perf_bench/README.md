@@ -34,6 +34,21 @@
 
 > 说明：默认输出深度为 1024 行，不足部分补 `00000000`。可在 `Makefile` 里修改 `DEPTH`。
 
+## RTL 性能回归
+
+在仓库根目录执行：
+
+```powershell
+.\run_perf_bench.ps1
+```
+
+脚本会通过 WSL 工具链重新构建裸机镜像，从源码编译当前 RTL，并运行
+`test/tb_top.sv`。结果写入 `results/perf_bench.log`。
+
+默认关闭 UART 文本输出，测试程序会把指标写入数据 RAM 的
+`0x60000800` 邮箱；testbench 读取并打印 ALU、BRANCH、MEMORY 和 OVERALL
+的 `cycles`、`instret` 与 `CPI(x1000)`，同时校验 `sink` 防止错误执行被误判为性能提升。
+
 ## 仿真时间与说服力平衡建议
 
 当前默认规模由以下宏控制（`benchmark.c`）：

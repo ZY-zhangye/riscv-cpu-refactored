@@ -2,6 +2,7 @@ RISCV_GCC ?= riscv64-unknown-elf-gcc
 RISCV_OBJCOPY ?= riscv64-unknown-elf-objcopy
 RISCV_OBJDUMP ?= riscv64-unknown-elf-objdump
 DEPTH ?= 1024
+BENCH_UART_OUTPUT ?= 0
 
 TARGET := sim_perf_bench
 BUILD_DIR := build
@@ -19,8 +20,9 @@ INST_COE := $(OUT_DIR)/inst.coe
 DATA_COE := $(OUT_DIR)/data.coe
 
 CFLAGS := -O2 -Wall -Wextra -ffunction-sections -fdata-sections \
-		  -march=rv32i_zicsr -mabi=ilp32 -nostartfiles
-LDFLAGS := -Wl,-Tlinker.ld,--gc-sections
+		  -march=rv32i_zicsr -mabi=ilp32 -nostdlib \
+		  -DBENCH_UART_OUTPUT=$(BENCH_UART_OUTPUT)
+LDFLAGS := -Wl,-Tlinker.ld,--gc-sections -lgcc
 
 .PHONY: all clean
 
@@ -33,7 +35,7 @@ $(ELF): $(SRC_C) $(SRC_S) linker.ld | $(BUILD_DIR)
 	$(RISCV_GCC) $(CFLAGS) $(SRC_C) $(SRC_S) $(LDFLAGS) -o $@
 
 $(DUMP): $(ELF) | $(OUT_DIR)
-	$(RISCV_OBJDUMP) -D $< > $@
+	$(RISCV_OBJDUMP) -D $< | sed '$${/^$$/d;}' > $@
 
 $(INST_BIN): $(ELF) | $(BUILD_DIR)
 	$(RISCV_OBJCOPY) --only-section=.text -O binary $< $@

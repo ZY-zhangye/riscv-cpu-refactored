@@ -38,6 +38,7 @@ module id_stage (
     input logic [11:0] exe_csr_addr,
     input logic exe_csr_wen,
     input logic exe_load_pending,
+    input logic exe_lw_live_ok,
     input logic exe_result_pending,
     input logic es_valid,
     //数据前递接口--访存阶段--仅前递地址，数据选择统一在exe_stage完成
@@ -610,13 +611,34 @@ module id_stage (
     logic [`SRC_PACKET_WIDTH-1:0] src_packet;
     logic [31:0] reg_src1, reg_src2;
     logic [1:0] src1_fwd, src2_fwd;
+    logic ordinary_int_alu_consumer;
+    logic live_lw_rs1;
+    logic live_lw_rs2;
+    `ifdef LW_LIVE_BYPASS_ENABLE
+    assign ordinary_int_alu_consumer = ds_valid && !ds_flush &&
+                                       is_alu_inst && (is_op_reg || is_op_imm) &&
+                                       !is_fpu_inst && !is_mul_inst && !is_mem_inst &&
+                                       !is_csr_inst && !is_br_jmp_inst && !is_bitman_inst;
+    assign live_lw_rs1 = exe_lw_live_ok && ordinary_int_alu_consumer &&
+                         (is_op_reg || is_op_imm) && (rs1_addr != 5'b0) &&
+                         (rs1_addr == exe_dest_addr) && exe_regfile_wen;
+    assign live_lw_rs2 = exe_lw_live_ok && ordinary_int_alu_consumer &&
+                         is_op_reg && (rs2_addr != 5'b0) &&
+                         (rs2_addr == exe_dest_addr) && exe_regfile_wen;
+    `else
+    assign ordinary_int_alu_consumer = 1'b0;
+    assign live_lw_rs1 = 1'b0;
+    assign live_lw_rs2 = 1'b0;
+    `endif
     assign src1_fwd = (inst_lui || inst_auipc) ? 2'b00 :
                       (rs1_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
+                      (live_lw_rs1 ? 2'b11 :
+                       (exe_regfile_wen && (exe_dest_addr == rs1_addr) && es_valid) ? 2'b01 :
                        (mem_regfile_wen && (mem_dest_addr == rs1_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00;
     assign src2_fwd = (alu_src2_imm_sel || inst_bitman_imm_inst || (inst_bitman_any && !inst_bitman_rs2_inst)) ? 2'b00 :
                       (rs2_addr != 5'b0) ?
-                      ((exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
+                      (live_lw_rs2 ? 2'b11 :
+                       (exe_regfile_wen && (exe_dest_addr == rs2_addr) && es_valid) ? 2'b01 :
                        (mem_regfile_wen && (mem_dest_addr == rs2_addr) && ms_valid) ? 2'b10 : 2'b00) : 2'b00; //仅当第二个源操作数不是立即数时才进行前递
     assign reg_src1 = (inst_flw || inst_fsw) ? src1_fpu : 
                       inst_lui   ? 32'b0 :
@@ -661,6 +683,8 @@ module id_stage (
     logic exe_frs2_hazard;
     logic exe_frs3_hazard;
     logic exe_csr_hazard;
+    logic unbypassed_exe_rs1_hazard;
+    logic unbypassed_exe_rs2_hazard;
     assign exe_forward_pending = exe_load_pending || exe_result_pending;
     assign exe_rs1_hazard = need_rs1 && (rs1_addr != 5'b0) &&
                             (rs1_addr == exe_dest_addr) &&
@@ -672,12 +696,14 @@ module id_stage (
     assign exe_frs2_hazard = (fpu_src2_fwd == 2'b01);
     assign exe_frs3_hazard = (fpu_src3_fwd == 2'b01);
     assign exe_csr_hazard = csr_rdata_fwd && exe_csr_wen;
+    assign unbypassed_exe_rs1_hazard = exe_rs1_hazard && !live_lw_rs1;
+    assign unbypassed_exe_rs2_hazard = exe_rs2_hazard && !live_lw_rs2;
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;
         end else begin
             exe_load_use_hazard = exe_forward_pending &&
-                                  (exe_rs1_hazard || exe_rs2_hazard ||
+                                  (unbypassed_exe_rs1_hazard || unbypassed_exe_rs2_hazard ||
                                    exe_frs1_hazard || exe_frs2_hazard ||
                                    exe_frs3_hazard || exe_csr_hazard);
         end
