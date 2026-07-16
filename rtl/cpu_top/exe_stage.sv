@@ -17,6 +17,7 @@ module exe_stage(
     input logic [31:0] mem_result,
     input logic mem_lw_live_valid,
     input logic [31:0] mem_lw_live_data,
+    input logic [31:0] stack_forward_data,
     //reg_fpu数据3接口，仅在部分情况使用
     input logic [31:0] reg_fpu_data3,
     //DMEM接口
@@ -32,7 +33,11 @@ module exe_stage(
     output logic exe_csr_wen,
     output logic exe_load_pending,
     output logic exe_lw_live_ok,
+    output logic exe_stack_lw_hit,
+    output logic exe_store_pending,
     output logic exe_result_pending,
+    output logic stack_store_valid,
+    output logic stack_store_allocate,
     output logic es_valid,
     //异常接口
     input logic [`EXC_WIDTH-1:0] ds_exc_bus,
@@ -195,7 +200,10 @@ module exe_stage(
     logic [31:0] mem_imm;
     logic [4:0] mem_op;
     logic is_store;
-    assign {mem_imm, mem_op, is_store} = mem_packet;
+    logic stack_base_reg;
+    logic stack_load_hit;
+    assign {mem_imm, mem_op, is_store, stack_base_reg, stack_load_hit} =
+        mem_packet;
     //CSR_PACKET解包
     logic [31:0] csr_rdata;
     logic [31:0] csr_imm;
@@ -227,7 +235,10 @@ module exe_stage(
     logic [31:0] reg_src2;
     logic [1:0] src1_fwd;
     logic [1:0] src2_fwd;
-    assign {reg_src1, reg_src2, src1_fwd, src2_fwd} = src_packet;
+    logic stack_src1_fwd;
+    logic stack_src2_fwd;
+    assign {reg_src1, reg_src2, src1_fwd, src2_fwd,
+            stack_src1_fwd, stack_src2_fwd} = src_packet;
 
     //普通前递值保持与live LW数据隔离；live数据只进入整数ALU。
     logic [31:0] src1_base, src2_base;
@@ -248,11 +259,13 @@ module exe_stage(
         endcase
     end
     `ifdef LW_LIVE_BYPASS_ENABLE
-    assign alu_src1 = (src1_fwd == 2'b11) ? mem_lw_live_data : src1_base;
-    assign alu_src2 = (src2_fwd == 2'b11) ? mem_lw_live_data : src2_base;
+    assign alu_src1 = stack_src1_fwd ? stack_forward_data :
+                      (src1_fwd == 2'b11) ? mem_lw_live_data : src1_base;
+    assign alu_src2 = stack_src2_fwd ? stack_forward_data :
+                      (src2_fwd == 2'b11) ? mem_lw_live_data : src2_base;
     `else
-    assign alu_src1 = src1_base;
-    assign alu_src2 = src2_base;
+    assign alu_src1 = stack_src1_fwd ? stack_forward_data : src1_base;
+    assign alu_src2 = stack_src2_fwd ? stack_forward_data : src2_base;
     `endif
     assign csr_data = csr_rdata_fwd ? csr_wdata_reg : csr_rdata;
 
@@ -450,6 +463,23 @@ module exe_stage(
         end
     end
     assign dmem_en = es_valid && |mem_op && !es_flush;
+
+    // Buffer lookup is performed one stage earlier in ID. EX only exports the
+    // registered hit bit and accepted-store snoop controls, avoiding an
+    // EX-address -> tag-compare -> ID-allowin combinational path.
+    logic stack_dram_addr;
+    logic mem_stage_accept;
+    assign stack_dram_addr =
+        (dmem_addr[31:18] == 14'b1000_0000_0001_00);
+    assign mem_stage_accept = es_to_ms_valid && ms_allowin && !es_flush;
+    assign exe_stack_lw_hit = mem_stage_accept && inst_lw && stack_load_hit &&
+                              regfile_wen && (rd_addr != 5'b0);
+    assign exe_store_pending = es_valid && !es_flush && is_store &&
+                               (dmem_wen != 4'b1111);
+    assign stack_store_valid = mem_stage_accept && is_store && stack_dram_addr;
+    assign stack_store_allocate = stack_store_valid && inst_sw &&
+                                  stack_base_reg && stack_dram_addr &&
+                                  (dmem_addr[1:0] == 2'b00);
 
     //CSR访问
     logic inst_csrrw, inst_csrrs, inst_csrrc, inst_csrrwi, inst_csrrsi, inst_csrrci;

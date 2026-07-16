@@ -39,8 +39,13 @@ module id_stage (
     input logic exe_csr_wen,
     input logic exe_load_pending,
     input logic exe_lw_live_ok,
+    input logic exe_stack_lw_hit,
+    input logic exe_store_pending,
     input logic exe_result_pending,
     input logic es_valid,
+    output logic stack_query_valid,
+    output logic [31:0] stack_query_addr,
+    input logic stack_query_hit,
     //数据前递接口--访存阶段--仅前递地址，数据选择统一在exe_stage完成
     input logic [4:0] mem_dest_addr,
     input logic mem_regfile_wen,
@@ -537,10 +542,26 @@ module id_stage (
     logic [31:0] mem_imm;
     logic [4:0] mem_op;
     logic is_store_inst;
+    logic stack_base_reg;
+    logic stack_load_hit;
+    logic stack_base_ready;
     assign is_store_inst = is_store || inst_fsw || inst_flw;
+    assign stack_base_reg = (rs1_addr == 5'd2) || (rs1_addr == 5'd8);
     assign mem_imm = {32{IMS_valid}} & imm_s_ext | {32{IMI_valid}} & imm_i_ext;
     assign mem_op = {(inst_lb || inst_sb) , (inst_lh || inst_sh) , (inst_lw || inst_sw || inst_flw || inst_fsw),inst_lbu, inst_lhu};
-    assign mem_packet = {mem_imm, mem_op, is_store_inst};
+    assign stack_query_addr = src1 + imm_i_ext;
+    assign stack_base_ready =
+        !((exe_regfile_wen && es_valid && (exe_dest_addr == rs1_addr)) ||
+          (mem_regfile_wen && ms_valid && (mem_dest_addr == rs1_addr)));
+    assign stack_query_valid = ds_valid && !ds_flush && inst_lw &&
+                               stack_base_reg && stack_base_ready &&
+                               !exe_store_pending &&
+                               (stack_query_addr[31:18] ==
+                                14'b1000_0000_0001_00) &&
+                               (stack_query_addr[1:0] == 2'b00);
+    assign stack_load_hit = stack_query_valid && stack_query_hit;
+    assign mem_packet = {mem_imm, mem_op, is_store_inst, stack_base_reg,
+                         stack_load_hit};
 
     //CSR_PACKET打包
     logic [`CSR_PACKET_WIDTH-1:0] csr_packet;
@@ -616,11 +637,13 @@ module id_stage (
     logic ordinary_int_alu_consumer;
     logic live_lw_rs1;
     logic live_lw_rs2;
-    `ifdef LW_LIVE_BYPASS_ENABLE
+    logic stack_lw_rs1;
+    logic stack_lw_rs2;
     assign ordinary_int_alu_consumer = ds_valid && !ds_flush &&
                                        is_alu_inst && (is_op_reg || is_op_imm) &&
                                        !is_fpu_inst && !is_mul_inst && !is_mem_inst &&
                                        !is_csr_inst && !is_br_jmp_inst && !is_bitman_inst;
+    `ifdef LW_LIVE_BYPASS_ENABLE
     assign live_lw_rs1 = exe_lw_live_ok && ordinary_int_alu_consumer &&
                          (is_op_reg || is_op_imm) && (rs1_addr != 5'b0) &&
                          (rs1_addr == exe_dest_addr) && exe_regfile_wen;
@@ -628,10 +651,15 @@ module id_stage (
                          is_op_reg && (rs2_addr != 5'b0) &&
                          (rs2_addr == exe_dest_addr) && exe_regfile_wen;
     `else
-    assign ordinary_int_alu_consumer = 1'b0;
     assign live_lw_rs1 = 1'b0;
     assign live_lw_rs2 = 1'b0;
     `endif
+    assign stack_lw_rs1 = exe_stack_lw_hit && ordinary_int_alu_consumer &&
+                          (rs1_addr != 5'b0) &&
+                          (rs1_addr == exe_dest_addr) && exe_regfile_wen;
+    assign stack_lw_rs2 = exe_stack_lw_hit && ordinary_int_alu_consumer &&
+                          is_op_reg && (rs2_addr != 5'b0) &&
+                          (rs2_addr == exe_dest_addr) && exe_regfile_wen;
     assign src1_fwd = (inst_lui || inst_auipc) ? 2'b00 :
                       (rs1_addr != 5'b0) ?
                       (live_lw_rs1 ? 2'b11 :
@@ -647,7 +675,8 @@ module id_stage (
                       inst_auipc ? id_pc : src1;
     assign reg_src2 = inst_bitman_imm_inst ? {27'b0, id_inst[24:20]} :
                       alu_src2_imm_sel ? ({32{IMI_valid}} & imm_i_ext) | ({32{IMU_valid}} & imm_u_ext) : src2;
-    assign src_packet = {reg_src1, reg_src2, src1_fwd, src2_fwd};
+    assign src_packet = {reg_src1, reg_src2, src1_fwd, src2_fwd,
+                         stack_lw_rs1, stack_lw_rs2};
 
     //输出到下一级
     `ifdef Z_BITMAIN_ENABLE
@@ -698,8 +727,10 @@ module id_stage (
     assign exe_frs2_hazard = (fpu_src2_fwd == 2'b01);
     assign exe_frs3_hazard = (fpu_src3_fwd == 2'b01);
     assign exe_csr_hazard = csr_rdata_fwd && exe_csr_wen;
-    assign unbypassed_exe_rs1_hazard = exe_rs1_hazard && !live_lw_rs1;
-    assign unbypassed_exe_rs2_hazard = exe_rs2_hazard && !live_lw_rs2;
+    assign unbypassed_exe_rs1_hazard = exe_rs1_hazard &&
+                                       !live_lw_rs1 && !stack_lw_rs1;
+    assign unbypassed_exe_rs2_hazard = exe_rs2_hazard &&
+                                       !live_lw_rs2 && !stack_lw_rs2;
     always_comb begin
         if (!rst_n) begin
             exe_load_use_hazard = 1'b0;

@@ -10,6 +10,7 @@ rtl/cpu_top/mul.sv
 rtl/cpu_top/reg_fpu.sv
 rtl/cpu_top/regfile_csr.sv
 rtl/cpu_top/regfiles.sv
+rtl/cpu_top/stack_value_buffer.sv
 rtl/cpu_top/wb_stage.sv
 vivado-project/jyd2025-reference/sources/board_l3c/seg7.sv
 vivado-project/jyd2025-reference/sources/board_l3c/display_seg.sv

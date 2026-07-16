@@ -72,7 +72,17 @@ module cpu_top (
     logic exe_csr_wen;
     logic exe_load_pending;
     logic exe_lw_live_ok;
+    logic exe_stack_lw_hit;
+    logic exe_store_pending;
     logic exe_result_pending;
+    logic stack_query_valid;
+    logic [31:0] stack_query_addr;
+    logic stack_query_hit;
+    logic [31:0] stack_query_data;
+    logic stack_capture_valid;
+    logic [31:0] stack_forward_data;
+    logic stack_store_valid;
+    logic stack_store_allocate;
     logic [4:0] mem_dest_addr;
     logic mem_regfile_wen;
     logic mem_reg_fpu_wen;
@@ -158,8 +168,13 @@ module cpu_top (
         .exe_csr_wen(exe_csr_wen),
         .exe_load_pending(exe_load_pending),
         .exe_lw_live_ok(exe_lw_live_ok),
+        .exe_stack_lw_hit(exe_stack_lw_hit),
+        .exe_store_pending(exe_store_pending),
         .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
+        .stack_query_valid(stack_query_valid),
+        .stack_query_addr(stack_query_addr),
+        .stack_query_hit(stack_query_hit),
         .mem_dest_addr(mem_dest_addr),
         .mem_regfile_wen(mem_regfile_wen),
         .mem_reg_fpu_wen(mem_reg_fpu_wen),
@@ -192,6 +207,8 @@ module cpu_top (
         .exe_csr_wen(exe_csr_wen),
         .exe_load_pending(exe_load_pending),
         .exe_lw_live_ok(exe_lw_live_ok),
+        .exe_stack_lw_hit(exe_stack_lw_hit),
+        .exe_store_pending(exe_store_pending),
         .exe_result_pending(exe_result_pending),
         .es_valid(es_valid),
         .ds_exc_bus(ds_exc_bus),
@@ -208,8 +225,30 @@ module cpu_top (
         .mem_result(mem_result),
         .mem_lw_live_valid(mem_lw_live_valid),
         .mem_lw_live_data(mem_lw_live_data),
+        .stack_forward_data(stack_forward_data),
         .reg_fpu_data3(reg_fpu_data3),
+        .stack_store_valid(stack_store_valid),
+        .stack_store_allocate(stack_store_allocate),
         .exe_exc_bus(exe_exc_bus)
+    );
+
+    stack_value_buffer u_stack_value_buffer (
+        .clk(clk),
+        .rst_n(rst_n),
+        .query_valid(stack_query_valid),
+        .query_addr(stack_query_addr),
+        .query_hit(stack_query_hit),
+        .query_data(stack_query_data),
+        .capture_en(exe_stack_lw_hit),
+        .capture_addr(dmem_addr),
+        .capture_flush(exception_flag || br_redirect),
+        .captured_valid(stack_capture_valid),
+        .captured_data(stack_forward_data),
+        .store_valid(stack_store_valid),
+        .store_allocate(stack_store_allocate),
+        .store_addr(dmem_addr),
+        .store_wstrb(dmem_wen),
+        .store_wdata(dmem_wdata)
     );
 
     mem_stage u_mem_stage (

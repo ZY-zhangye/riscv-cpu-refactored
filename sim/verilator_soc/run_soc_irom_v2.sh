@@ -77,7 +77,7 @@ cd "${ROOT_DIR}"
     -Wno-LATCH \
     -Wno-MULTIDRIVEN \
     -f sim/verilator_soc/soc_irom_v2.f \
-    sim/verilator_soc/wait_for_enter.cpp
+    "${ROOT_DIR}/sim/verilator_soc/wait_for_enter.cpp"
 
 echo "[SOC] IROM words: ${IROM_WORDS}"
 exec "${BUILD_DIR}/obj_dir/Vtb_soc_irom_v2" \
