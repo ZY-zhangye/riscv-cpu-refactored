@@ -79,7 +79,8 @@ module mem_stage (
             es_flush_skid <= 1'b0;
         end else begin
             ms_skid_valid <= ms_skid_valid_next;
-            ms_allowin_r <= !ms_skid_valid_next;
+            // 对EX返回的allowin严格寄存一拍；一拍偏差由MEM skid保存。
+            ms_allowin_r <= ms_core_allowin;
 
             if (ms_core_allowin) begin
                 if (ms_skid_valid) begin

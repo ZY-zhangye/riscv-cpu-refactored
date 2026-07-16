@@ -115,7 +115,9 @@ module exe_stage(
             skid_reg_fpu_data3 <= '0;
         end else begin
             skid_valid <= es_skid_valid_next;
-            es_allowin_r <= !es_skid_valid_next;
+            // 对ID返回的allowin严格寄存一拍。由skid寄存器吸收
+            // core_allowin拉低后、滞后ready额外放行的一个输入。
+            es_allowin_r <= es_core_allowin;
 
             if (es_core_allowin) begin
                 if (skid_valid) begin

@@ -168,7 +168,7 @@ module soc_inst_ram #(
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
-    logic [31:0] mem [0:WORDS-1];
+    logic [31:0] mem [0:WORDS-1] /* verilator public_flat_rw */;
 
     always_ff @(posedge clk) begin
         if (en) begin
@@ -192,7 +192,7 @@ module soc_data_ram #(
 );
 `ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
-    logic [31:0] mem [0:WORDS-1];
+    logic [31:0] mem [0:WORDS-1] /* verilator public_flat_rw */;
 
     assign rdata = en ? mem[addr[INDEX_WIDTH+1:2]] : 32'd0;
 

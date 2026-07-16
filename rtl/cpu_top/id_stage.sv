@@ -101,7 +101,9 @@ module id_stage (
             ds_flush_skid <= 1'b0;
         end else begin
             ds_skid_valid <= ds_skid_valid_next;
-            ds_allowin_r <= !ds_skid_valid_next;
+            // 对IF返回的allowin严格寄存一拍。若本拍core_allowin已经
+            // 拉低但上一拍allowin仍放行，下面的skid寄存器保存多接收的输入。
+            ds_allowin_r <= ds_core_allowin;
 
             if (ds_core_allowin) begin
                 if (ds_skid_valid) begin

@@ -97,6 +97,7 @@ vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.s
 
 - `doc/design_porting_summary.md`
 - `doc/c_software_porting_reference.md`
+- `doc/performance_optimization_analysis.md`
 - `doc/z_extensions_summary.md`
 - `doc/figures/` 下的流水线与数据通路图
 
