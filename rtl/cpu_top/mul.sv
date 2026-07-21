@@ -147,9 +147,11 @@ module mul (
         if (!rst_n) begin
             div_state <= 2'b00;
             div_discard_pending <= 1'b0;
+            div_result <= 64'b0;
+            m_axis_dout_tdata_reg <= 64'b0;
         end else if (kill) begin
             div_state <= 2'b00;
-            // The synthesis Divider Generator has no reset. If a request was
+            // A pipeline flush does not reset the divider. If a request was
             // already accepted, wait for and discard its eventual response.
             div_discard_pending <=
                 (div_discard_pending || (div_state == 2'b01)) &&
@@ -206,9 +208,7 @@ module mul (
 
     divider div_inst (
         .aclk(clk),
-`ifdef DEBUG_EN
         .aresetn(rst_n),
-`endif
         .s_axis_divisor_tvalid(s_axis_divisor_tvalid),    
         .s_axis_divisor_tready(s_axis_divisor_tready),    
         .s_axis_divisor_tdata(s_axis_divisor_tdata),      

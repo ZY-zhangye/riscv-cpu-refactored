@@ -8,15 +8,16 @@
 
 1. 四 byte-lane DRAM 已放弃。200 MHz post-route WNS 为 `-0.674 ns`，等效 Fmax 约 176.2 MHz，未达到 185/195 MHz 停止线。
 2. 16 项窄栈值缓冲已实现。实际 `irom-v2` 减少 73,540,860 拍，周期下降 14.96%。
-3. 栈缓冲版本在 175 MHz 下最佳 post-route WNS 为 `-0.282 ns`，等效 Fmax 约 166.8 MHz；即使按该频率运行，相对原 175 MHz 基线仍有约 12.1% 的净吞吐提升。
-4. 暂不进入 load 响应捕获简化。当前应先决定接受约 167 MHz 的高 IPC 配置，还是继续针对原有 EX skid/DRAM 控制路径恢复 175 MHz。
+3. 栈缓冲版本的默认 post-route WNS 为 `-0.282 ns`；服务器高 QoR route 可改善到 `-0.077 ns`，继续 post-route physopt 后为 `-0.054 ns`，等效 Fmax 约 173.4 MHz。按该频率运行，相对原 175 MHz 无栈缓冲基线仍有约 16.5% 的净吞吐提升。
+4. load 响应独立寄存试验已经完成并放弃。限制消费者时能以 `+0.054 ns` 收敛 175 MHz，但 `irom-v2` 增加 31,950,572 拍；扩展 MUL/branch 前递又分别使 WNS 退化到 `-0.349 ns`/`-0.439 ns`，不能同时保住 IPC 和主频。
+5. 当前最佳方案仍是保留 418,184,261 拍的高 IPC RTL，并使用高 QoR 实现策略。距离 175 MHz 只剩约 54 ps，应继续针对 EX payload CE 和 DRAM `WEA` 做局部切断，不再扩大 live load 数据扇出。
 
 以下访存试验已经证明不值得继续，相关未提交代码已从工作区删除：
 
 - 将完整访存请求和响应路径流水化：主频只能达到约 203.8 MHz，但每次访存净增两拍，无法抵消该负载上的 IPC 损失。
 - 从新加拍的存储器响应直接组合前递到 EX：重新形成长数据路径，不能在 175 MHz 下收敛。
 
-当前应保留标准的“一拍 load-use stall + 注册后的 MEM 到 EX 前递”。
+当前应保留标准的“一拍 load-use stall + 通用 MEM 到 EX 前递”，以及已经验证的窄栈值缓冲快速路径。
 
 `allowin` 注册化的整机主频收益仍需重新综合确认。若主频没有改善，该改动至少已经通过功能和 IPC 回归，不应再叠加额外的级间拍数。
 
@@ -150,9 +151,10 @@ Vivado 2023.2、`xc7k325tffg900-2` 上的模块级 post-route 探针结果为：
 | 同频吞吐提升 | 17.59% |
 | 剩余 load-use stall | 26,816,293 |
 | 缓冲自身资源 | 52 LUT / 48 FF（post-route 层次报告） |
-| 175 MHz post-route WNS | -0.282 ns |
-| 等效 Fmax | 约 166.8 MHz |
-| 166.8 MHz 对原 175 MHz 净吞吐 | +12.1% |
+| 175 MHz 默认 post-route WNS | -0.282 ns |
+| 175 MHz 高 QoR + post-route physopt WNS | -0.054 ns |
+| 高 QoR 等效 Fmax | 约 173.4 MHz |
+| 173.4 MHz 对原 175 MHz 净吞吐 | +16.5% |
 
 最终 LED 为 `0x078b7323`、SEG 为 `0x37802389`，与基线程序结果一致。
 
@@ -198,17 +200,48 @@ Vivado 2023.2、`xc7k325tffg900-2` 上的模块级 post-route 探针结果为：
 - 单发核性能测试至少减少 30M 周期。
 - 完整 post-route 时序不差于方案 A 的基线。
 
-## 6. 可选后续：简化 load 响应捕获
+## 6. load 响应捕获试验
 
-若方案 A 后最差路径仍终止于 EX 前递或 WB 捕获寄存器，可以把 load 数据从通用 skid/握手数据 MUX 中拆出，在同一个响应边沿无条件捕获。该寄存器必须替换旧捕获路径，不能在其前面再增加一级。
+本轮已把 load 数据从通用 skid/握手数据 MUX 中拆出，在响应边沿无条件捕获原始 32 位 `dmem_rdata`，并把 `LB/LH/LBU/LHU` 的字节选择和符号扩展移动到 WB。试验满足以下结构约束：
 
-可考虑：
+- 原始响应寄存器无 CE，BRAM 返回不再经过 load 格式化后进入通用 EX/WB 数据捕获。
+- `LW -> 普通整数 ALU` 从响应寄存器 Q 前递。
+- 其他消费者由 ID 中的注册 load 描述符等待 WB；MEM load valid/type 不组合返回 ID。
+- EX skid 使用单独 hold 数据，避免响应寄存器被后续周期覆盖。
+- load 响应只在消费者的最终操作数 MUX 选择，不进入通用 `src_base`、地址或 JALR 路径。
 
-- 原始 `LW` 数据与 valid/目的寄存器元数据分开寄存。
-- WB 和标准一拍 stall 后的 MEM 到 EX 前递共用该数据寄存器 Q。
-- 必要时让少量 `LB/LH/LBU/LHU` 使用更慢的格式化路径；静态 341 条 load 中有 328 条是 `LW`。
+### 6.1 175 MHz 时序结果
 
-该改动的正确性范围大于 BRAM 物理组织调整，只应在方案 A 完整 route 后进行。
+| 配置 | 175 MHz post-route WNS | 结论 |
+| --- | ---: | --- |
+| 当前高 IPC RTL，默认 route | -0.282 ns | 未收敛 |
+| 当前高 IPC RTL，高 QoR route | -0.077 ns | 接近收敛 |
+| 当前高 IPC RTL，post-route physopt | -0.054 ns | 等效约 173.4 MHz |
+| 宽 payload 全局禁止 CE 提取 | -0.034 ns | 仍未收敛，最差转到 DRAM WEA |
+| 注册 load 响应，仅 ALU 快速消费 | **+0.054 ns** | 175 MHz 收敛 |
+| 注册响应 + MUL + tracker shadow | -0.349 ns | MUL/EX 数据布局退化 |
+| 注册响应 + MUL + branch-rs2 | -0.439 ns | EX/redirect/CE 路径退化 |
+
+### 6.2 实际 IPC 代价
+
+仅允许普通 ALU 快速消费的收敛版本完成了 SoC Verilator `irom-v2` 仿真并到达预期 LED 终点：
+
+| 指标 | 原高 IPC RTL | 175 MHz 收敛试验 |
+| --- | ---: | ---: |
+| CPU 周期 | 418,184,261 | 450,134,833 |
+| load-use stall | 26,816,293 | 58,766,865 |
+| 增加周期 | - | 31,950,572 |
+| 估算运行时间 | 2.412 s @ 173.4 MHz | 2.572 s @ 175 MHz |
+
+新增周期可由两个 80³ 内核中的三类模式解释，每类约 10.24M 次：
+
+1. `LW -> MUL`。
+2. `LW -> 独立 ADDI -> branch`。
+3. `LW rd -> ADDI rd -> SW rd`；第三类实际是旧 load tracker 未被更年轻同 `rd` 生产者遮蔽造成的假相关。
+
+tracker shadow 修复本身风险低，但仅恢复约 10.24M 拍；继续把响应 Q 接入 MUL 或 branch 最终 MUX 会破坏 route。要继续该方向，必须在消费者进入 EX 主槽/skid 槽时把响应解析进本地 operand 寄存器，不能使用跨模块 live Q MUX。
+
+因此该试验 RTL 已回退，不保留在主分支。
 
 ## 7. 暂不投入的方向
 

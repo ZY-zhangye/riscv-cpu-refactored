@@ -8,9 +8,9 @@ set UM_INSTS=mul mulh mulhu mulhsu div divu rem remu
 
 REM === currently implemented Z-bitman instructions ===
 set ZBA_INSTS=sh1add sh2add sh3add
-set ZBB_INSTS=andn orn xnor min max minu maxu sext_b sext_h zext_h orc_b rev8
+set ZBB_INSTS=andn orn xnor min max minu maxu sext_b sext_h zext_h orc_b rev8 cpop
 set ZBKB_INSTS=brev8 pack packh zip unzip
-set ZBS_INSTS=bclr bclri bext bexti binv binvi bset bseti
+set ZBS_INSTS=bclr bclri bext bexti binv binvi bset
 
 set MODE=%~1
 if "%MODE%"=="" set MODE=all

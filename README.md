@@ -2,7 +2,7 @@
 
 这是一个面向毕业设计与体系结构实验的 RV32 RISC-V CPU 工程。仓库包含 CPU 核心 RTL、SoC 外设封装、仿真测试平台、测试 hex 文件以及设计文档。
 
-当前 `main` 分支保留无 cache 的基础版本，适合作为后续流水线、外设、双发射或 cache 设计的共同起点。
+当前 `main` 分支为第十届集创赛的最终收官版本：保留可阅读的 RTL、验证材料、竞赛文档和已综合版本归档；不提交可再生成的 Vivado 工程目录、仿真波形或本地构建缓存。
 
 ## 项目结构
 
@@ -13,6 +13,8 @@ rtl/
 test/                   SystemVerilog 测试平台
 hex/                    仿真使用的指令与数据镜像
 doc/                    设计文档、框图、移植说明与扩展说明
+ip/rv32m_mul_div/        可独立复用的 RV32M 乘除法 RTL IP
+release/                 比赛时已综合版本的只读归档
 riscv_sim_perf_bench/   简单性能测试程序与生成结果
 claude_work/            架构图与阶段性设计材料
 my_cpu_mmio.h           FPGA 软件工程使用的 MMIO/CSR 头文件
@@ -29,7 +31,7 @@ coremark测试结果.png    FPGA 实现上的 CoreMark 测试截图
 - `mem_stage.sv`：访存阶段
 - `wb_stage.sv`：写回阶段
 - `regfiles.sv`、`regfile_csr.sv`、`reg_fpu.sv`：通用寄存器、CSR 与浮点相关寄存器
-- `mul.sv`、`divider.sv`、`fpu.sv`：运算单元
+- `mul.sv`、`mul_pipeline.sv`、`divider.sv`、`fpu.sv`：运算单元
 - `defines.svh`：核心参数、总线宽度与宏定义
 
 当前 `main` 分支的五级流水线已经将级间 `allowin` 反压路径注册化：IF->ID、ID->EXE、EXE->MEM、MEM->WB 边界均通过上游可见的打一拍 `allowin` 配合 1-entry skid buffer 传递数据。该结构拆断了原先跨多级的组合 ready 链；下游突发停顿时，上游允许多送入的一拍会进入边界暂存寄存器，下一拍起反压逐级生效。
@@ -72,6 +74,24 @@ vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.s
 
 最近一次流水线级间握手改造后，已完成纯编译、`base` 回归和 `all` 回归验证。
 
+## 独立 RV32M IP
+
+最终版本将乘法流水、除法接口模型和 RV32M 控制器独立整理到
+[`ip/rv32m_mul_div/`](ip/rv32m_mul_div/)。该 IP 不依赖 CPU 的宏文件，
+可以直接复用；通过参数选择两拍或三拍高位乘法，以及行为模型与
+Vivado Divider Generator 的除法结果字序。接口、特殊情况和冲刷排空
+语义见该目录的 [README](ip/rv32m_mul_div/README.md)。
+
+CPU 当前仍使用 `rtl/cpu_top/` 中的同源实现，以保持本版本已验证的
+SoC 集成行为不变。
+
+## 集创赛最终归档
+
+比赛时综合出的完整版本以单一压缩包形式保存在
+[`release/CICC1005400.zip`](release/CICC1005400.zip)。仓库不展开或跟踪
+Vivado 工程目录，以避免将可再生成的工程缓存、实现中间件和本地日志
+混入最终源码版本；归档内容及使用约束见 [release/README.md](release/README.md)。
+
 ## FPGA 软件支持
 
 根目录的 `my_cpu_mmio.h` 来自另一工作区中的 FPGA 实现，可直接作为裸机 C 程序的软件侧硬件抽象头文件。它包含：
@@ -98,6 +118,9 @@ vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.s
 - `doc/design_porting_summary.md`
 - `doc/c_software_porting_reference.md`
 - `doc/performance_optimization_analysis.md`
+- `doc/competition_cpu_report.md`
+- `doc/verification_report.md`
+- `doc/evaluation_report.md`
 - `doc/z_extensions_summary.md`
 - `doc/figures/` 下的流水线与数据通路图
 
