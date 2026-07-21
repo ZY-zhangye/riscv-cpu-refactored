@@ -2,10 +2,14 @@
 work/
 transcript
 results/
+*.wlf
 
 # Local build and Vivado generated artifacts
 build/
 vivado-project/
+
+# Large editable source assets; published PNG/PPTX files remain under doc/.
+doc/*.psd
 
 # Claude Code local settings
 .claude/

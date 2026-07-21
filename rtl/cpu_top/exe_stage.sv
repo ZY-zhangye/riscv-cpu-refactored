@@ -277,7 +277,7 @@ module exe_stage(
         logic bm_min, bm_max, bm_minu, bm_maxu;
         logic bm_sextb, bm_sexth, bm_zexth;
         logic bm_orcb, bm_rev8, bm_brev8, bm_pack, bm_packh, bm_zip, bm_unzip;
-        logic bm_bclr, bm_bclri, bm_bext, bm_bexti, bm_binv, bm_binvi, bm_bset, bm_bseti;
+        logic bm_bclr, bm_bclri, bm_bext, bm_bexti, bm_binv, bm_binvi, bm_bset, bm_cpop;
         logic [4:0] bit_idx;
         logic [31:0] bit_mask;
 
@@ -289,7 +289,7 @@ module exe_stage(
             bm_orcb, bm_rev8, bm_brev8,
             bm_pack, bm_packh, bm_zip, bm_unzip,
             bm_bclr, bm_bclri, bm_bext, bm_bexti,
-            bm_binv, bm_binvi, bm_bset, bm_bseti
+            bm_binv, bm_binvi, bm_bset, inst_cpop
         } = bitman_op;
         assign bit_idx = src2_base[4:0];
         assign bit_mask = 32'b1 << bit_idx;
@@ -309,6 +309,15 @@ module exe_stage(
             for (int i = 0; i < 16; i++) begin
                 unzip32[i] = data[2*i];
                 unzip32[i+16] = data[2*i+1];
+            end
+        endfunction
+
+        function automatic [31:0] cpop32(input logic [31:0] x);
+            integer i;
+            begin
+                cpop32 = 0;
+                for (i = 0; i < 32; i = i + 1)
+                    cpop32 = cpop32 + x[i];
             end
         endfunction
 
@@ -347,7 +356,8 @@ module exe_stage(
                 bm_bclr, bm_bclri: bitman_result = src1_base & ~bit_mask;
                 bm_bext, bm_bexti: bitman_result = {31'b0, src1_base[bit_idx]};
                 bm_binv, bm_binvi: bitman_result = src1_base ^ bit_mask;
-                bm_bset, bm_bseti: bitman_result = src1_base | bit_mask;
+                bm_bset: bitman_result = src1_base | bit_mask;
+                inst_cpop: bitman_result = cpop32(src1_base);
                 default: bitman_result = 32'b0;
             endcase
         end

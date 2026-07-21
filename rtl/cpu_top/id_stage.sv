@@ -233,7 +233,7 @@ module id_stage (
     logic inst_min, inst_max, inst_minu, inst_maxu;
     logic inst_sextb, inst_sexth, inst_zexth;
     logic inst_orcb, inst_rev8, inst_brev8, inst_pack, inst_packh, inst_zip, inst_unzip;
-    logic inst_bclr, inst_bclri, inst_bext, inst_bexti, inst_binv, inst_binvi, inst_bset, inst_bseti;
+    logic inst_bclr, inst_bclri, inst_bext, inst_bexti, inst_binv, inst_binvi, inst_bset, inst_cpop;
     logic inst_bitman_any;
     logic inst_bitman_imm_inst;
     logic inst_bitman_rs2_inst;
@@ -272,7 +272,7 @@ module id_stage (
     assign inst_binv  = is_bitman && f3_001 && (id_inst[31:25] == 7'b0110100);
     assign inst_binvi = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0110100);
     assign inst_bset  = is_bitman && f3_001 && (id_inst[31:25] == 7'b0010100);
-    assign inst_bseti = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0010100);
+    assign inst_cpop = is_bitman_imm && f3_001 && (id_inst[31:25] == 7'b0110000);
 
     assign inst_bitman_any = inst_sh1add || inst_sh2add || inst_sh3add ||
                              inst_andn || inst_orn || inst_xnor ||
@@ -281,8 +281,8 @@ module id_stage (
                              inst_orcb || inst_rev8 || inst_brev8 ||
                              inst_pack || inst_packh || inst_zip || inst_unzip ||
                              inst_bclr || inst_bclri || inst_bext || inst_bexti ||
-                             inst_binv || inst_binvi || inst_bset || inst_bseti;
-    assign inst_bitman_imm_inst = inst_bclri || inst_bexti || inst_binvi || inst_bseti;
+                             inst_binv || inst_binvi || inst_bset  || inst_cpop;
+    assign inst_bitman_imm_inst = inst_bclri || inst_bexti || inst_binvi ;
     assign inst_bitman_rs2_inst = inst_sh1add || inst_sh2add || inst_sh3add ||
                                   inst_andn || inst_orn || inst_xnor ||
                                   inst_min || inst_max || inst_minu || inst_maxu ||
@@ -296,7 +296,7 @@ module id_stage (
         inst_orcb, inst_rev8, inst_brev8,
         inst_pack, inst_packh, inst_zip, inst_unzip,
         inst_bclr, inst_bclri, inst_bext, inst_bexti,
-        inst_binv, inst_binvi, inst_bset, inst_bseti
+        inst_binv, inst_binvi, inst_bset, inst_cpop
     };
     assign bitman_packet = bitman_op;
     `else
