@@ -535,5 +535,15 @@
     "rtl/my_cpu/PLIC.sv": "5c7fee1e2aecb406ca213ac669237947217921bdb68558695ce20bd2f7a9f1de",
     "rtl/my_cpu/timer.sv": "a3516d7658f5cb41d9c8f3b3f71f7748a1310ff391024f27d236753229b047fa",
     "rtl/my_cpu/UART.sv": "2ee6142bd0724a65e5725ea732a516e73afa950f364db2119fdef53608cc719e"
+  },
+  "workspace_cleanup": {
+    "date": "2026-10-02T21:47:07",
+    "isa_passed": 77,
+    "isa_total": 77,
+    "regression_log_sha256": "5076ef240d557845c14689452f0f7c334e95450f8381e72550fe54bee81ed208",
+    "core_rtl_changed": false,
+    "main_simulator": "QuestaSim",
+    "auxiliary_simulation": "sim/verilator",
+    "verilator_validation": "source list and relative paths checked; functional simulation not rerun"
   }
 }

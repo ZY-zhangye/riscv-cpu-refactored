@@ -1,15 +1,23 @@
-# Questa/ModelSim simulation artifacts
+# Simulation and build products
 work/
-transcript
 results/
-*.wlf
-
-# Local build and Vivado generated artifacts
 build/
+transcript
+modelsim.ini
+*.wlf
+*.vcd
+*.vstf
+*.log
+*.jou
+__pycache__/
+
+# Regenerable benchmark products; HEX/COE test inputs remain tracked
+/riscv_sim_perf_bench/build/
+/riscv_sim_perf_bench/out/*.dump
+/board_tests/**/output/*.dump
+/board_tests/**/output/*.map
+/hex/riscv-tests/convert_endian
+
+# Local FPGA projects and editor settings
 vivado-project/
-
-# Large editable source assets; published PNG/PPTX files remain under doc/.
-doc/*.psd
-
-# Claude Code local settings
 .claude/

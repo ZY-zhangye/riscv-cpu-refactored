@@ -1,151 +1,58 @@
 # RISC-V CPU Refactored
 
-这是一个面向毕业设计与体系结构实验的 RV32 RISC-V CPU 工程。仓库包含 CPU 核心 RTL、SoC 外设封装、仿真测试平台、测试 hex 文件以及设计文档。
+RV32 RISC-V CPU / SoC 源码开发与验证工程。当前核心为五级顺序流水线，包含寄存器化反压、级间 skid buffer、分支预测、栈值缓冲、整数乘除法和部分 Z 扩展；SoC 提供 UART、timer、PLIC 和 MMIO。
 
-当前 `main` 分支为第十届集创赛的最终收官版本：保留可阅读的 RTL、验证材料、竞赛文档和已综合版本归档；不提交可再生成的 Vivado 工程目录、仿真波形或本地构建缓存。
+日常开发以 QuestaSim 和根目录 `run_all.bat` 内的指令回归为主。
 
-## Linux 接续开发
+开发分支为 `dev/linux-bringup`，目标是在 Zynq-7020 PL 中的自研 RISC-V 软核上运行带 Sv32 的最小 Linux，并执行 initramfs 中的 `/init`。ARM PS 可提供 DDR 初始化和镜像加载支持。具体设计顺序与验收条件见 [Linux 路线](doc/LINUX_ROADMAP.md)。
 
-后续开发沿用本仓库，在 `W:\riscv-cpu-refactored` 从 `main` 切出 `dev/linux-bringup`。`main` 保留集创赛收官基线，开发改动提交到独立分支。
+## 目录
 
-目标是在 **Zynq-7020 PL 内的自研 RV32 软核**上启动带 Sv32 MMU 的最小 Linux，使用串口控制台和 initramfs，执行用户态 `/init`。ARM PS 可负责 DDR 初始化和镜像加载；在 ARM 上运行 Linux 不算完成软核目标。
+| 路径 | 用途 |
+| --- | --- |
+| `rtl/cpu_top/` | CPU 流水线、执行单元、寄存器与 CSR |
+| `rtl/my_cpu/` | SoC 集成和外设 |
+| `ip/rv32m_mul_div/` | 可独立复用的 RV32M RTL IP 与接口说明 |
+| `test/` | Questa 指令、流水线和外设测试台 |
+| `hex/` | 测试镜像、索引和格式转换源码 |
+| `sim/verilator/` | 单独保存的辅助 Verilator 仿真及专用板级参考 RTL |
+| `board_tests/` | CoreMark 源码、平台启动代码及测试镜像 |
+| `riscv_sim_perf_bench/` | 性能测试程序、构建规则和仿真镜像 |
+| `doc/` | 开发设计说明、Linux 路线与验证记录 |
+| `my_cpu_mmio.h` | 裸机软件 MMIO / CSR 接口参考，使用前核对当前 RTL |
 
-保持顺序单发基架构，按依赖顺序推进：
+不保留竞赛提交材料、展示资源、发布压缩包和旧工程的超频工具。构建库、日志、波形、ELF/BIN 与反汇编产物不进入版本控制；测试需要的 HEX/COE 镜像保留。
 
-1. 固定回归，补精确异常、CSR 权限检查与真实退休计数。
-2. 建立支持等待和错误返回的统一内存地址空间。
-3. 补 RV32IMA、Zicsr、Zifencei，以及原子操作和内存顺序语义。
-4. 实现 M/S/U 特权级、异常与中断委托、PMP 和 SBI 固件。
-5. 实现 Sv32、页表遍历、TLB、页故障与 `SFENCE.VMA`。
-6. 基于新接口接入 cache，验证 MMIO、页表和指令写入可见性。
-7. 通过 AXI 接 PS DDR，完成 Zynq-7020 的时钟、复位和板级适配。
-8. 构建设备树、内核和 initramfs，串口验证 `/init`、timer 和系统调用。
+## 主要仿真：Questa 回归
 
-双发、乱序和 FPU 放在 Linux 稳定后的独立性能实验中。详细设计缺口与逐阶段验收见 [Linux 演进路线](doc/LINUX_ROADMAP.md)，此次工作区验证见 [接续开发基线](doc/LINUX_BASELINE.md)。
+QuestaSim 的 `vlib`、`vlog`、`vsim` 需在 PATH 中。在仓库根目录执行：
 
-## 项目结构
-
-```text
-rtl/
-  cpu_top/              五级流水线 CPU 核心
-  my_cpu/               SoC 顶层、总线桥、UART、PLIC、timer、IO 等外设
-test/                   SystemVerilog 测试平台
-hex/                    仿真使用的指令与数据镜像
-doc/                    设计文档、框图、移植说明与扩展说明
-ip/rv32m_mul_div/        可独立复用的 RV32M 乘除法 RTL IP
-release/                 比赛时已综合版本的只读归档
-riscv_sim_perf_bench/   简单性能测试程序与生成结果
-claude_work/            架构图与阶段性设计材料
-my_cpu_mmio.h           FPGA 软件工程使用的 MMIO/CSR 头文件
-coremark测试结果.png    FPGA 实现上的 CoreMark 测试截图
-```
-
-## CPU 核心
-
-`rtl/cpu_top` 中的 CPU 核心采用经典五级流水线组织：
-
-- `if_stage.sv`：取指阶段
-- `id_stage.sv`：译码与寄存器读取
-- `exe_stage.sv`：执行阶段，包含整数执行路径与乘除法控制
-- `mem_stage.sv`：访存阶段
-- `wb_stage.sv`：写回阶段
-- `regfiles.sv`、`regfile_csr.sv`、`reg_fpu.sv`：通用寄存器、CSR 与浮点相关寄存器
-- `mul.sv`、`mul_pipeline.sv`、`divider.sv`、`fpu.sv`：运算单元
-- `defines.svh`：核心参数、总线宽度与宏定义
-
-当前 `main` 分支的五级流水线已经将级间 `allowin` 反压路径注册化：IF->ID、ID->EXE、EXE->MEM、MEM->WB 边界均通过上游可见的打一拍 `allowin` 配合 1-entry skid buffer 传递数据。该结构拆断了原先跨多级的组合 ready 链；下游突发停顿时，上游允许多送入的一拍会进入边界暂存寄存器，下一拍起反压逐级生效。
-
-ID 阶段的冒险判断同步改为显式依赖 EXE 输出的 pending/load-use 信息。ID->EXE 边界会缓存必要的前递快照，包括 MEM/WB 前递结果、CSR 写数据以及 FPU 三源操作数，避免指令在 skid buffer 中停留期间被 ID 侧地址变化污染。
-
-## SoC 与外设
-
-`rtl/my_cpu` 提供 CPU 外围系统封装，主要包括：
-
-- `my_cpu.sv`：SoC 顶层
-- `bridge.sv`：CPU 与外设/存储器之间的访问桥接
-- `UART.sv`：串口模块
-- `PLIC.sv`：平台级中断控制器
-- `timer.sv`：定时器模块
-- `IO.sv`：基础 IO 映射
-
-## 仿真入口
-
-根目录 `markdown.md` 中记录了一个基础编译命令：
-
-```text
-vlog -sv +incdir+rtl/cpu_top +incdir+rtl/my_cpu rtl/cpu_top/*.sv rtl/cpu_top/*.svh rtl/my_cpu/*.svh rtl/my_cpu/*.sv test/*.sv
-```
-
-常用测试平台位于 `test/`：
-
-- `tb_cpu_top.sv`：CPU 核心测试
-- `tb_my_cpu.sv`、`tb_top.sv`：SoC 层级测试
-- `tb_UART.sv`、`tb_PLIC.sv`、`tb_timer.sv`：外设测试
-
-仿真输入镜像位于 `hex/`，其中 `hex/riscv-tests/` 保存了多组 RISC-V 指令测试用例。
-
-常用回归命令：
-
-```text
-.\run_all.bat base
+```powershell
+vlib work
 .\run_all.bat all
 ```
 
-最近一次流水线级间握手改造后，已完成纯编译、`base` 回归和 `all` 回归验证。
+已有 work 库时可省略 `vlib`。`run_all.bat` 支持 `base`、`z`、`zba`、`zbb`、`zbkb`、`zbs` 与 `all`；默认 77 个用例。脚本有结尾暂停，非交互调用可使用 `cmd /c 'echo.|run_all.bat all'`。
 
-## 独立 RV32M IP
+原脚本临时覆写 `hex/riscv-tests/rv32-p-riscv.hex`，运行前保存、结束后恢复该文件，避免把测试选择产生的变化提交。结果保存在 `results/`。定向用例与专用除法测试的编译方式见 [验证基线](doc/LINUX_BASELINE.md)。
 
-最终版本将乘法流水、除法接口模型和 RV32M 控制器独立整理到
-[`ip/rv32m_mul_div/`](ip/rv32m_mul_div/)。该 IP 不依赖 CPU 的宏文件，
-可以直接复用；通过参数选择两拍或三拍高位乘法，以及行为模型与
-Vivado Divider Generator 的除法结果字序。接口、特殊情况和冲刷排空
-语义见该目录的 [README](ip/rv32m_mul_div/README.md)。
+`run_if_sync_btb.ps1` 使用 Icarus Verilog 跑取指定向测试；`run_perf_bench.ps1` 需要 Questa、WSL 和 RISC-V 裸机工具链，默认工具链目录需按本机安装调整。Verilator 作为辅助仿真单独放在 `sim/verilator/`，不纳入日常 Questa 回归，入口和依赖见其 [README](sim/verilator/README.md)。
 
-CPU 当前仍使用 `rtl/cpu_top/` 中的同源实现，以保持本版本已验证的
-SoC 集成行为不变。
+## 当前验证与设计边界
 
-## 集创赛最终归档
+QuestaSim 2024.1 的基线为 77 项指令回归和 8 项定向测试通过，详情见 [验证记录](doc/LINUX_BASELINE.md)。测试镜像目录还包含尚未实现扩展的用例，不能用文件数量宣称支持完整 ISA。
 
-比赛时综合出的完整版本以单一压缩包形式保存在
-[`release/CICC1005400.zip`](release/CICC1005400.zip)。仓库不展开或跟踪
-Vivado 工程目录，以避免将可再生成的工程缓存、实现中间件和本地日志
-混入最终源码版本；归档内容及使用约束见 [release/README.md](release/README.md)。
+当前为无 cache 的 M 模式基础核；FPU 是占位实现，退休计数仍需改进。尚不具备已验证的 A 扩展、M/S/U 特权体系与 Sv32。DEBUG_EN 仿真路径通过不等于厂商 IP、FPGA 时序或 Zynq 板级验证通过。
 
-## FPGA 软件支持
+## 后续开发顺序
 
-根目录的 `my_cpu_mmio.h` 来自另一工作区中的 FPGA 实现，可直接作为裸机 C 程序的软件侧硬件抽象头文件。它包含：
+1. 精确异常、合法性与权限检查、真实退休计数和回归。
+2. 支持等待、错误返回及统一地址空间的内存接口。
+3. RV32IMA、Zicsr、Zifencei 与内存顺序。
+4. M/S/U 特权级、委托、PMP 和 SBI。
+5. Sv32、页表遍历、TLB 和页故障。
+6. cache、MMIO 属性、指令与页表可见性。
+7. Zynq-7020 AXI / PS DDR、时钟与复位适配。
+8. 设备树、最小内核、initramfs 和用户态 `/init`。
 
-- 基础 `mmio_read32` / `mmio_write32` 访问函数
-- DRAM、benchmark 数据区和启动地址定义
-- UART、timer、LED、PLIC 地址映射与控制位定义
-- 机器模式 CSR 编号与 `read_csr` / `write_csr` 宏
-- 自定义性能计数 CSR：cycle、instret、branch、branch miss、load-use stall、execute stall、exception 等
-- PLIC 与 UART polling 的轻量辅助函数
-
-该头文件适合放入裸机软件或 benchmark 工程中，用于和本 CPU/SoC 的 FPGA 地址映射保持一致。
-
-## FPGA CoreMark 测试
-
-以下截图记录了另一工作区中 FPGA 实现运行 CoreMark 的测试结果：
-
-![CoreMark 测试结果](coremark测试结果.png)
-
-## 文档
-
-推荐先阅读以下文档：
-
-- `doc/design_porting_summary.md`
-- `doc/c_software_porting_reference.md`
-- `doc/performance_optimization_analysis.md`
-- `doc/competition_cpu_report.md`
-- `doc/verification_report.md`
-- `doc/evaluation_report.md`
-- `doc/z_extensions_summary.md`
-- `doc/figures/` 下的流水线与数据通路图
-
-## 分支说明
-
-- `main`：无 cache 基础版本。
-- `cache`：cache 相关设计与后续改造分支。
-- `codex/dual-issue-design`：从无 cache 基线出发的双发射设计初始化分支。
-- `dev/linux-bringup`：从 `main` 接续最小 Linux 所需的架构与平台工作。
+双发、乱序和 FPU 在 Linux 稳定运行后作为独立性能实验开展。各阶段的具体设计与验收见 [LINUX_ROADMAP.md](doc/LINUX_ROADMAP.md)。
