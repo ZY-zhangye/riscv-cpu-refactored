@@ -4,6 +4,25 @@
 
 当前 `main` 分支为第十届集创赛的最终收官版本：保留可阅读的 RTL、验证材料、竞赛文档和已综合版本归档；不提交可再生成的 Vivado 工程目录、仿真波形或本地构建缓存。
 
+## Linux 接续开发
+
+后续开发沿用本仓库，在 `W:\riscv-cpu-refactored` 从 `main` 切出 `dev/linux-bringup`。`main` 保留集创赛收官基线，开发改动提交到独立分支。
+
+目标是在 **Zynq-7020 PL 内的自研 RV32 软核**上启动带 Sv32 MMU 的最小 Linux，使用串口控制台和 initramfs，执行用户态 `/init`。ARM PS 可负责 DDR 初始化和镜像加载；在 ARM 上运行 Linux 不算完成软核目标。
+
+保持顺序单发基架构，按依赖顺序推进：
+
+1. 固定回归，补精确异常、CSR 权限检查与真实退休计数。
+2. 建立支持等待和错误返回的统一内存地址空间。
+3. 补 RV32IMA、Zicsr、Zifencei，以及原子操作和内存顺序语义。
+4. 实现 M/S/U 特权级、异常与中断委托、PMP 和 SBI 固件。
+5. 实现 Sv32、页表遍历、TLB、页故障与 `SFENCE.VMA`。
+6. 基于新接口接入 cache，验证 MMIO、页表和指令写入可见性。
+7. 通过 AXI 接 PS DDR，完成 Zynq-7020 的时钟、复位和板级适配。
+8. 构建设备树、内核和 initramfs，串口验证 `/init`、timer 和系统调用。
+
+双发、乱序和 FPU 放在 Linux 稳定后的独立性能实验中。详细设计缺口与逐阶段验收见 [Linux 演进路线](doc/LINUX_ROADMAP.md)，此次工作区验证见 [接续开发基线](doc/LINUX_BASELINE.md)。
+
 ## 项目结构
 
 ```text
@@ -129,3 +148,4 @@ Vivado 工程目录，以避免将可再生成的工程缓存、实现中间件�
 - `main`：无 cache 基础版本。
 - `cache`：cache 相关设计与后续改造分支。
 - `codex/dual-issue-design`：从无 cache 基线出发的双发射设计初始化分支。
+- `dev/linux-bringup`：从 `main` 接续最小 Linux 所需的架构与平台工作。
