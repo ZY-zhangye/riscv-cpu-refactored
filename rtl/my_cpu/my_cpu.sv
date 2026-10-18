@@ -1,7 +1,11 @@
 `include "defines.svh"
 `include "my_cpu_defines.svh"
 
-module my_cpu (
+module my_cpu #(
+    parameter bit BOARD_MEMORY = 1'b0,
+    parameter INST_INIT_FILE = "",
+    parameter DATA_INIT_FILE = ""
+) (
     input  logic        clk,
     input  logic        rst_n,
     input  logic        clk_uart,
@@ -84,14 +88,19 @@ module my_cpu (
     assign debug_inst_pc = imem_addr;
     `endif
 
-    soc_inst_ram u_inst_ram (
+    soc_inst_ram #(
+        .INIT_FILE(INST_INIT_FILE)
+    ) u_inst_ram (
         .clk(clk),
         .addr(imem_addr),
         .en(imem_en),
         .rdata(imem_rdata)
     );
 
-    soc_data_ram u_data_ram (
+    soc_data_ram #(
+        .SYNCHRONOUS_READ(BOARD_MEMORY),
+        .INIT_FILE(DATA_INIT_FILE)
+    ) u_data_ram (
         .clk(clk),
         .addr(ram_addr),
         .en(ram_en),
@@ -100,7 +109,9 @@ module my_cpu (
         .rdata(ram_rdata)
     );
 
-    bridge u_bridge (
+    bridge #(
+        .RAM_SYNCHRONOUS_READ(BOARD_MEMORY)
+    ) u_bridge (
         .clk(clk),
         .rst_n(rst_n),
         .cpu_dmem_en(cpu_dmem_en),
@@ -159,29 +170,33 @@ module my_cpu (
 endmodule
 
 module soc_inst_ram #(
-    parameter int WORDS = 4096
+    parameter int WORDS = 4096,
+    parameter INIT_FILE = ""
 ) (
     input  logic        clk,
     input  logic [31:0] addr,
     input  logic        en,
     output logic [31:0] rdata
 );
-`ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
+    (* ram_style = "block" *)
     logic [31:0] mem [0:WORDS-1] /* verilator public_flat_rw */;
+
+    initial begin
+        if (INIT_FILE != "") $readmemh(INIT_FILE, mem);
+    end
 
     always_ff @(posedge clk) begin
         if (en) begin
             rdata <= mem[addr[INDEX_WIDTH+1:2]];
         end
     end
-`else
-    // 非DEBUG工程模式下预留给后续替换为真实指令存储器/IP。
-`endif
 endmodule
 
 module soc_data_ram #(
-    parameter int WORDS = 65536
+    parameter int WORDS = 65536,
+    parameter bit SYNCHRONOUS_READ = 1'b0,
+    parameter INIT_FILE = ""
 ) (
     input  logic        clk,
     input  logic [31:0] addr,
@@ -190,11 +205,25 @@ module soc_data_ram #(
     input  logic [31:0] wdata,
     output logic [31:0] rdata
 );
-`ifdef DEBUG_EN
     localparam int INDEX_WIDTH = $clog2(WORDS);
+    // Board builds use a synchronous, byte-write-enabled BRAM. The default
+    // asynchronous model preserves the existing instruction regression timing.
+    (* ram_style = SYNCHRONOUS_READ ? "block" : "distributed" *)
     logic [31:0] mem [0:WORDS-1] /* verilator public_flat_rw */;
 
-    assign rdata = en ? mem[addr[INDEX_WIDTH+1:2]] : 32'd0;
+    initial begin
+        if (INIT_FILE != "") $readmemh(INIT_FILE, mem);
+    end
+
+    generate
+        if (SYNCHRONOUS_READ) begin : g_sync_read
+            always_ff @(posedge clk) begin
+                if (en) rdata <= mem[addr[INDEX_WIDTH+1:2]];
+            end
+        end else begin : g_async_read
+            assign rdata = en ? mem[addr[INDEX_WIDTH+1:2]] : 32'd0;
+        end
+    endgenerate
 
     always_ff @(posedge clk) begin
         if (en) begin
@@ -212,7 +241,4 @@ module soc_data_ram #(
             end
         end
     end
-`else
-    // 非DEBUG工程模式下预留给后续替换为真实数据存储器/IP。
-`endif
 endmodule

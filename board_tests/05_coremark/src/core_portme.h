@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include "../../platform/my_cpu_mmio.h"
+#include "../../platform/board_runtime.h"
 
 /* ---- Platform capabilities ---- */
 #define HAS_FLOAT          0
@@ -21,13 +22,14 @@ typedef unsigned char  ee_u8;
 typedef ee_u32         ee_ptr_int;
 typedef ee_u32         ee_size_t;
 
-/* ---- Timing via 175MHz hardware timer ---- */
+/* Exact CPU clock / divider; prescaling extends the 32-bit timing window. */
+#define COREMARK_TIMER_DIVIDER ((BOARD_CPU_HZ / 1000000u) ? (BOARD_CPU_HZ / 1000000u) : 1u)
 typedef ee_u32 CORE_TICKS;
 #define CORETIMETYPE             ee_u32
 #define GETMYTIME(_t)            (*(_t) = mmio_read32(TIMER_VALUE))
 #define MYTIMEDIFF(fin, ini)     ((ini) - (fin))
-#define TIMER_RES_DIVIDER        1
-#define NSECS_PER_SEC            175000000u
+#define TIMER_RES_DIVIDER        COREMARK_TIMER_DIVIDER
+#define NSECS_PER_SEC            BOARD_CPU_HZ
 #define EE_TICKS_PER_SEC         (NSECS_PER_SEC / TIMER_RES_DIVIDER)
 #define SAMPLE_TIME_IMPLEMENTATION 1
 
@@ -41,9 +43,14 @@ typedef ee_u32 CORE_TICKS;
 #define MAIN_HAS_NORETURN  1
 
 #define COMPILER_VERSION "GCC " __VERSION__
-#define COMPILER_FLAGS    "-O2 -march=rv32im_zicsr -mabi=ilp32"
+#ifndef BOARD_COMPILER_FLAGS
+#define BOARD_COMPILER_FLAGS "-Os -march=rv32im_zicsr -mabi=ilp32"
+#endif
+#define COMPILER_FLAGS    BOARD_COMPILER_FLAGS
 #define MEM_LOCATION      "STATIC"
+#ifndef ITERATIONS
 #define ITERATIONS        0
+#endif
 
 #if !defined(PROFILE_RUN) && !defined(PERFORMANCE_RUN) \
     && !defined(VALIDATION_RUN)

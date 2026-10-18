@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-10-18T21:25:35.9673010+08:00",
+  "bitstream_sha256": "e54c1900dfd46192d3420c7d33409db9ff96f67ad293f3adb3fe076308596109",
+  "target_requested": "",
+  "success_marker": [
+    "BOARD_PROGRAM_SUCCESS bitstream=W:/riscv-cpu-refactored/build/hello_zynq/campaign_10mhz_20261018/coremark_160MHz/hellozynq.bit target=localhost:3121/xilinx_tcf/Digilent/<serial>"
+  ],
+  "vivado_log": "W:\\riscv-cpu-refactored\\build\\hello_zynq\\campaign_10mhz_20261018\\coremark_160MHz\\vivado_program_20261018_212456_239.log",
+  "physical_grade_verified": false
+}

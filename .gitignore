@@ -10,6 +10,7 @@ modelsim.ini
 *.log
 *.jou
 __pycache__/
+/.Xil/
 
 # Regenerable benchmark products; HEX/COE test inputs remain tracked
 /riscv_sim_perf_bench/build/

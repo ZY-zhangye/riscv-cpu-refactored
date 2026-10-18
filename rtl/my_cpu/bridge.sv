@@ -1,6 +1,8 @@
 `include "my_cpu_defines.svh"
 
-module bridge (
+module bridge #(
+    parameter bit RAM_SYNCHRONOUS_READ = 1'b0
+) (
     input  logic        clk,
     input  logic        rst_n,
 
@@ -55,8 +57,6 @@ module bridge (
     logic plic_region_sel;
     logic [1:0] read_target_r;
     logic [31:0] ram_rdata_r;
-    logic [31:0] io_rdata_r;
-    logic [31:0] plic_rdata_r;
 
     assign cpu_write = cpu_dmem_en && (cpu_dmem_wen != 4'b0000);
     assign cpu_read = cpu_dmem_en && (cpu_dmem_wen == 4'b0000);
@@ -95,7 +95,7 @@ module bridge (
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             read_target_r <= TARGET_NONE;
-        end else if (cpu_dmem_en) begin
+        end else if (cpu_read) begin
             unique case (1'b1)
                 ram_sel:         read_target_r <= TARGET_RAM;
                 io_region_sel:   read_target_r <= TARGET_IO;
@@ -107,29 +107,26 @@ module bridge (
         end
     end
 
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            ram_rdata_r <= 32'd0;
-            io_rdata_r <= 32'd0;
-            plic_rdata_r <= 32'd0;
-        end else if (cpu_read) begin
-            if (ram_sel) begin
-                ram_rdata_r <= ram_rdata;
-            end
-            if (io_region_sel) begin
-                io_rdata_r <= io_rdata;
-            end
-            if (plic_region_sel) begin
-                plic_rdata_r <= plic_rdata;
+    generate
+        if (!RAM_SYNCHRONOUS_READ) begin : g_async_ram_response
+            always_ff @(posedge clk) begin
+                if (!rst_n) begin
+                    ram_rdata_r <= 32'd0;
+                end else if (cpu_read && ram_sel) begin
+                    ram_rdata_r <= ram_rdata;
+                end
             end
         end
-    end
+    endgenerate
 
     always_comb begin
         unique case (read_target_r)
-            TARGET_RAM:  cpu_dmem_rdata = ram_rdata_r;
-            TARGET_IO:   cpu_dmem_rdata = io_rdata_r;
-            TARGET_PLIC: cpu_dmem_rdata = plic_rdata_r;
+            TARGET_RAM:  cpu_dmem_rdata = RAM_SYNCHRONOUS_READ ? ram_rdata : ram_rdata_r;
+            // IO and PLIC already register their read response on the request
+            // edge. Select that response directly during MEM, without sampling
+            // their previous transaction in another register on the same edge.
+            TARGET_IO:   cpu_dmem_rdata = io_rdata;
+            TARGET_PLIC: cpu_dmem_rdata = plic_rdata;
             default:     cpu_dmem_rdata = 32'd0;
         endcase
     end
