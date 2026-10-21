@@ -1,0 +1,287 @@
+suite,test,status,detail
+rv32mi-p,rv32mi-p-breakpoint,FAIL,gp=0x00000005 testnum=2
+rv32mi-p,rv32mi-p-csr,PASS,
+rv32mi-p,rv32mi-p-illegal,FAIL,gp=0x00000005 testnum=2
+rv32mi-p,rv32mi-p-instret_overflow,PASS,
+rv32mi-p,rv32mi-p-lh-misaligned,PASS,
+rv32mi-p,rv32mi-p-lw-misaligned,PASS,
+rv32mi-p,rv32mi-p-ma_addr,FAIL,gp=0x0000002d testnum=22
+rv32mi-p,rv32mi-p-ma_fetch,PASS,
+rv32mi-p,rv32mi-p-mcsr,FAIL,gp=0x00000005 testnum=2
+rv32mi-p,rv32mi-p-pmpaddr,PASS,
+rv32mi-p,rv32mi-p-sbreak,PASS,
+rv32mi-p,rv32mi-p-scall,PASS,
+rv32mi-p,rv32mi-p-sh-misaligned,PASS,
+rv32mi-p,rv32mi-p-shamt,FAIL,gp=0x00000007 testnum=3
+rv32mi-p,rv32mi-p-sw-misaligned,PASS,
+rv32mi-p,rv32mi-p-zicntr,PASS,
+rv32si-p,rv32si-p-csr,FAIL,gp=0x0000002d testnum=22
+rv32si-p,rv32si-p-dirty,FAIL,gp=0x00000007 testnum=3
+rv32si-p,rv32si-p-ma_fetch,FAIL,gp=0x0000053b testnum=669
+rv32si-p,rv32si-p-sbreak,FAIL,gp=0x0000053b testnum=669
+rv32si-p,rv32si-p-scall,PASS,
+rv32si-p,rv32si-p-wfi,PASS,
+rv32ua-p,rv32ua-p-amoadd_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amoand_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amomax_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amomaxu_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amomin_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amominu_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amoor_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amoswap_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-amoxor_w,FAIL,gp=0x00000005 testnum=2
+rv32ua-p,rv32ua-p-lrsc,TIMEOUT,last_wb_pc=800001a4
+rv32ua-v,rv32ua-v-amoadd_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amoand_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amomax_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amomaxu_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amomin_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amominu_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amoor_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amoswap_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-amoxor_w,FAIL,gp=0x00000000 testnum=0
+rv32ua-v,rv32ua-v-lrsc,FAIL,gp=0x00000000 testnum=0
+rv32uc-p,rv32uc-p-rvc,FAIL,gp=0x0000053b testnum=669
+rv32uc-v,rv32uc-v-rvc,FAIL,gp=0x00000000 testnum=0
+rv32ud-p,rv32ud-p-fadd,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fclass,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fcmp,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fcvt,FAIL,gp=0x00000019 testnum=12
+rv32ud-p,rv32ud-p-fcvt_w,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fdiv,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fmadd,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-fmin,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-ldst,FAIL,gp=0x00000005 testnum=2
+rv32ud-p,rv32ud-p-recoding,FAIL,gp=0x00000005 testnum=2
+rv32ud-v,rv32ud-v-fadd,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fclass,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fcmp,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fcvt,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fcvt_w,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fdiv,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fmadd,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-fmin,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-ldst,FAIL,gp=0x00000000 testnum=0
+rv32ud-v,rv32ud-v-recoding,FAIL,gp=0x00000000 testnum=0
+rv32uf-p,rv32uf-p-fadd,FAIL,gp=0x00000007 testnum=3
+rv32uf-p,rv32uf-p-fclass,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-fcmp,FAIL,gp=0x00000015 testnum=10
+rv32uf-p,rv32uf-p-fcvt,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-fcvt_w,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-fdiv,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-fmadd,FAIL,gp=0x00000007 testnum=3
+rv32uf-p,rv32uf-p-fmin,FAIL,gp=0x00000029 testnum=20
+rv32uf-p,rv32uf-p-ldst,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-move,FAIL,gp=0x00000005 testnum=2
+rv32uf-p,rv32uf-p-recoding,FAIL,gp=0x00000005 testnum=2
+rv32uf-v,rv32uf-v-fadd,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fclass,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fcmp,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fcvt,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fcvt_w,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fdiv,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fmadd,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-fmin,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-ldst,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-move,FAIL,gp=0x00000000 testnum=0
+rv32uf-v,rv32uf-v-recoding,FAIL,gp=0x00000000 testnum=0
+rv32ui-p,rv32ui-p-add,PASS,
+rv32ui-p,rv32ui-p-addi,PASS,
+rv32ui-p,rv32ui-p-and,PASS,
+rv32ui-p,rv32ui-p-andi,PASS,
+rv32ui-p,rv32ui-p-auipc,PASS,
+rv32ui-p,rv32ui-p-beq,PASS,
+rv32ui-p,rv32ui-p-bge,PASS,
+rv32ui-p,rv32ui-p-bgeu,PASS,
+rv32ui-p,rv32ui-p-blt,PASS,
+rv32ui-p,rv32ui-p-bltu,PASS,
+rv32ui-p,rv32ui-p-bne,PASS,
+rv32ui-p,rv32ui-p-fence_i,FAIL,gp=0x00000005 testnum=2
+rv32ui-p,rv32ui-p-jal,PASS,
+rv32ui-p,rv32ui-p-jalr,PASS,
+rv32ui-p,rv32ui-p-lb,PASS,
+rv32ui-p,rv32ui-p-lbu,PASS,
+rv32ui-p,rv32ui-p-ld_st,TIMEOUT,last_wb_pc=80000ddc
+rv32ui-p,rv32ui-p-lh,PASS,
+rv32ui-p,rv32ui-p-lhu,PASS,
+rv32ui-p,rv32ui-p-lui,PASS,
+rv32ui-p,rv32ui-p-lw,PASS,
+rv32ui-p,rv32ui-p-ma_data,FAIL,gp=0x00000539 testnum=668
+rv32ui-p,rv32ui-p-or,PASS,
+rv32ui-p,rv32ui-p-ori,PASS,
+rv32ui-p,rv32ui-p-sb,PASS,
+rv32ui-p,rv32ui-p-sh,PASS,
+rv32ui-p,rv32ui-p-simple,PASS,
+rv32ui-p,rv32ui-p-sll,PASS,
+rv32ui-p,rv32ui-p-slli,PASS,
+rv32ui-p,rv32ui-p-slt,PASS,
+rv32ui-p,rv32ui-p-slti,PASS,
+rv32ui-p,rv32ui-p-sltiu,PASS,
+rv32ui-p,rv32ui-p-sltu,PASS,
+rv32ui-p,rv32ui-p-sra,PASS,
+rv32ui-p,rv32ui-p-srai,PASS,
+rv32ui-p,rv32ui-p-srl,PASS,
+rv32ui-p,rv32ui-p-srli,PASS,
+rv32ui-p,rv32ui-p-st_ld,PASS,
+rv32ui-p,rv32ui-p-sub,PASS,
+rv32ui-p,rv32ui-p-sw,PASS,
+rv32ui-p,rv32ui-p-xor,PASS,
+rv32ui-p,rv32ui-p-xori,PASS,
+rv32ui-v,rv32ui-v-add,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-addi,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-and,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-andi,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-auipc,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-beq,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-bge,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-bgeu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-blt,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-bltu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-bne,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-fence_i,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-jal,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-jalr,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lb,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lbu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-ld_st,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lh,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lhu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lui,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-lw,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-ma_data,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-or,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-ori,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sb,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sh,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-simple,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sll,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-slli,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-slt,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-slti,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sltiu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sltu,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sra,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-srai,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-srl,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-srli,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-st_ld,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sub,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-sw,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-xor,FAIL,gp=0x00000000 testnum=0
+rv32ui-v,rv32ui-v-xori,FAIL,gp=0x00000000 testnum=0
+rv32um-p,rv32um-p-div,PASS,
+rv32um-p,rv32um-p-divu,PASS,
+rv32um-p,rv32um-p-mul,PASS,
+rv32um-p,rv32um-p-mulh,PASS,
+rv32um-p,rv32um-p-mulhsu,PASS,
+rv32um-p,rv32um-p-mulhu,PASS,
+rv32um-p,rv32um-p-rem,PASS,
+rv32um-p,rv32um-p-remu,PASS,
+rv32um-v,rv32um-v-div,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-divu,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-mul,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-mulh,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-mulhsu,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-mulhu,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-rem,FAIL,gp=0x00000000 testnum=0
+rv32um-v,rv32um-v-remu,FAIL,gp=0x00000000 testnum=0
+rv32uzba-p,rv32uzba-p-sh1add,PASS,
+rv32uzba-p,rv32uzba-p-sh2add,PASS,
+rv32uzba-p,rv32uzba-p-sh3add,PASS,
+rv32uzba-v,rv32uzba-v-sh1add,FAIL,gp=0x00000000 testnum=0
+rv32uzba-v,rv32uzba-v-sh2add,FAIL,gp=0x00000000 testnum=0
+rv32uzba-v,rv32uzba-v-sh3add,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-p,rv32uzbb-p-andn,PASS,
+rv32uzbb-p,rv32uzbb-p-clz,FAIL,gp=0x00000005 testnum=2
+rv32uzbb-p,rv32uzbb-p-cpop,PASS,
+rv32uzbb-p,rv32uzbb-p-ctz,FAIL,gp=0x00000005 testnum=2
+rv32uzbb-p,rv32uzbb-p-max,PASS,
+rv32uzbb-p,rv32uzbb-p-maxu,PASS,
+rv32uzbb-p,rv32uzbb-p-min,PASS,
+rv32uzbb-p,rv32uzbb-p-minu,PASS,
+rv32uzbb-p,rv32uzbb-p-orc_b,PASS,
+rv32uzbb-p,rv32uzbb-p-orn,PASS,
+rv32uzbb-p,rv32uzbb-p-rev8,PASS,
+rv32uzbb-p,rv32uzbb-p-rol,FAIL,gp=0x00000005 testnum=2
+rv32uzbb-p,rv32uzbb-p-ror,FAIL,gp=0x00000005 testnum=2
+rv32uzbb-p,rv32uzbb-p-rori,FAIL,gp=0x00000005 testnum=2
+rv32uzbb-p,rv32uzbb-p-sext_b,PASS,
+rv32uzbb-p,rv32uzbb-p-sext_h,PASS,
+rv32uzbb-p,rv32uzbb-p-xnor,PASS,
+rv32uzbb-p,rv32uzbb-p-zext_h,PASS,
+rv32uzbb-v,rv32uzbb-v-andn,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-clz,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-cpop,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-ctz,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-max,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-maxu,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-min,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-minu,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-orc_b,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-orn,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-rev8,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-rol,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-ror,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-rori,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-sext_b,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-sext_h,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-xnor,FAIL,gp=0x00000000 testnum=0
+rv32uzbb-v,rv32uzbb-v-zext_h,FAIL,gp=0x00000000 testnum=0
+rv32uzbc-p,rv32uzbc-p-clmul,FAIL,gp=0x00000041 testnum=32
+rv32uzbc-p,rv32uzbc-p-clmulh,FAIL,gp=0x00000041 testnum=32
+rv32uzbc-p,rv32uzbc-p-clmulr,FAIL,gp=0x00000041 testnum=32
+rv32uzbc-v,rv32uzbc-v-clmul,FAIL,gp=0x00000000 testnum=0
+rv32uzbc-v,rv32uzbc-v-clmulh,FAIL,gp=0x00000000 testnum=0
+rv32uzbc-v,rv32uzbc-v-clmulr,FAIL,gp=0x00000000 testnum=0
+rv32uzbkb-p,rv32uzbkb-p-brev8,PASS,
+rv32uzbkb-p,rv32uzbkb-p-pack,PASS,
+rv32uzbkb-p,rv32uzbkb-p-packh,PASS,
+rv32uzbkb-p,rv32uzbkb-p-unzip,PASS,
+rv32uzbkb-p,rv32uzbkb-p-zip,PASS,
+rv32uzbkb-v,rv32uzbkb-v-brev8,FAIL,gp=0x00000000 testnum=0
+rv32uzbkb-v,rv32uzbkb-v-pack,FAIL,gp=0x00000000 testnum=0
+rv32uzbkb-v,rv32uzbkb-v-packh,FAIL,gp=0x00000000 testnum=0
+rv32uzbkb-v,rv32uzbkb-v-unzip,FAIL,gp=0x00000000 testnum=0
+rv32uzbkb-v,rv32uzbkb-v-zip,FAIL,gp=0x00000000 testnum=0
+rv32uzbkx-p,rv32uzbkx-p-xperm4,FAIL,gp=0x00000005 testnum=2
+rv32uzbkx-p,rv32uzbkx-p-xperm8,FAIL,gp=0x00000005 testnum=2
+rv32uzbkx-v,rv32uzbkx-v-xperm4,FAIL,gp=0x00000000 testnum=0
+rv32uzbkx-v,rv32uzbkx-v-xperm8,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-p,rv32uzbs-p-bclr,PASS,
+rv32uzbs-p,rv32uzbs-p-bclri,PASS,
+rv32uzbs-p,rv32uzbs-p-bext,PASS,
+rv32uzbs-p,rv32uzbs-p-bexti,PASS,
+rv32uzbs-p,rv32uzbs-p-binv,PASS,
+rv32uzbs-p,rv32uzbs-p-binvi,PASS,
+rv32uzbs-p,rv32uzbs-p-bset,PASS,
+rv32uzbs-p,rv32uzbs-p-bseti,FAIL,gp=0x00000005 testnum=2
+rv32uzbs-v,rv32uzbs-v-bclr,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-bclri,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-bext,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-bexti,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-binv,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-binvi,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-bset,FAIL,gp=0x00000000 testnum=0
+rv32uzbs-v,rv32uzbs-v-bseti,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-p,rv32uzfh-p-fadd,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fclass,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fcmp,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fcvt,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fcvt_w,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fdiv,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fmadd,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-fmin,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-ldst,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-move,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-p,rv32uzfh-p-recoding,FAIL,gp=0x00000005 testnum=2
+rv32uzfh-v,rv32uzfh-v-fadd,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fclass,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fcmp,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fcvt,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fcvt_w,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fdiv,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fmadd,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-fmin,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-ldst,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-move,FAIL,gp=0x00000000 testnum=0
+rv32uzfh-v,rv32uzfh-v-recoding,FAIL,gp=0x00000000 testnum=0

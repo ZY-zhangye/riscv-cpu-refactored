@@ -2,7 +2,7 @@
 
 本分支 `dev/linux-rtl` 只做 RTL 设计与仿真验证，目标是让五级顺序 RV32 核及其 SoC 具备运行带 Sv32 的最小 Linux 所需的硬件能力。当前核心包含寄存器化反压、级间 skid buffer、分支预测、栈值缓冲、整数乘除法和部分 Z 扩展；SoC 提供 UART、timer、PLIC 和 MMIO。
 
-上板工程、板级约束、裸机 C 程序、CoreMark、性能基准和实板证据不在本分支，保留在 `dev/linux-bringup`（2026-10-18 HelloZynq / XC7Z020 上板及 CoreMark 结果均以该分支为准）。设计顺序与验收条件见 [Linux 路线](doc/LINUX_ROADMAP.md)。
+上板工程、板级约束、裸机 C 程序、CoreMark、性能基准和实板证据不在本分支，保留在 `dev/linux-bringup`（2026-10-18 HelloZynq / XC7Z020 上板及 CoreMark 结果均以该分支为准）。设计顺序与验收条件见 [Linux 路线](doc/LINUX_ROADMAP.md)；当前 Questa 纯 RTL 阶段的分阶段执行手册（测试清单、完成标志、边界）见 [RTL_QUESTA_PLAN.md](doc/RTL_QUESTA_PLAN.md)。
 
 ## 目录
 
