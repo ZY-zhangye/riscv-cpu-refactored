@@ -12,7 +12,7 @@ $sim = Join-Path $BuildDir 'tb_board_divider.vvp'
 # behavioural rtl/cpu_top/divider.sv module. mul.sv keeps its DEBUG_EN word order.
 & $iverilog -g2012 -Wall -I (Join-Path $PSScriptRoot 'rtl\cpu_top') `
     -s tb_board_divider -o $sim `
-    (Join-Path $PSScriptRoot 'rtl\board\rv32_divider_hw.sv') `
+    (Join-Path $PSScriptRoot 'rtl\cpu_top\synth\rv32_divider_hw.sv') `
     (Join-Path $PSScriptRoot 'rtl\cpu_top\mul_pipeline.sv') `
     (Join-Path $PSScriptRoot 'rtl\cpu_top\mul.sv') `
     (Join-Path $PSScriptRoot 'test\tb_board_divider.sv')

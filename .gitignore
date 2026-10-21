@@ -12,13 +12,6 @@ modelsim.ini
 __pycache__/
 /.Xil/
 
-# Regenerable benchmark products; HEX/COE test inputs remain tracked
-/riscv_sim_perf_bench/build/
-/riscv_sim_perf_bench/out/*.dump
-/board_tests/**/output/*.dump
-/board_tests/**/output/*.map
-/hex/riscv-tests/convert_endian
-
 # Local FPGA projects and editor settings
 vivado-project/
 .claude/

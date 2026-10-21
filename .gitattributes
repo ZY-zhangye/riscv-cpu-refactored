@@ -1,3 +1,0 @@
-# Preserve the exact exported report/UART bytes used by the evidence hashes.
-# Vendor report padding and line endings are part of the retained artifact.
-doc/board_evidence/** -text -whitespace
